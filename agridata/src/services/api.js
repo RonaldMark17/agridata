@@ -112,10 +112,11 @@ export const organizationsAPI = {
   getAll: () => api.get('/organizations'),
 };
 
-// Users API
+// Users API (FIXED: Added delete method)
 export const usersAPI = {
   getAll: () => api.get('/users'),
   update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`), 
 };
 
 // Activity Logs API

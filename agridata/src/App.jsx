@@ -2,12 +2,14 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 // Context & Security
-import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-// Layout & Core Pages
+// Layout & Authentication
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Register from './pages/Register';
+
+// Core Analytics
 import Dashboard from './pages/Dashboard';
 
 // Farmer Management Module
@@ -25,8 +27,8 @@ import Users from './pages/Users';
 import ActivityLogs from './pages/ActivityLogs';
 
 /**
- * ScrollToTop ensures the window resets to the top on every route change.
- * This is crucial since your Layout has a sticky sidebar and scrollable main area.
+ * ScrollToTop: Tactical helper to reset scroll position on navigation.
+ * Essential for the "Aerospace" dashboard feel.
  */
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -36,16 +38,42 @@ function ScrollToTop() {
   return null;
 }
 
+/**
+ * Internal Guard: Redirects unauthorized sessions to Login
+ */
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) return null; // Component stays silent during auth check
+  
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return children;
+};
+
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      {/* Enable v7 Future Flags to ensure the application remains compatible 
+        with the next generation of React Router.
+      */}
+      <BrowserRouter 
+        future={{ 
+          v7_startTransition: true, 
+          v7_relativeSplatPath: true 
+        }}
+      >
         <ScrollToTop />
         <Routes>
-          {/* Public Authentication Route */}
+          {/* --- PUBLIC AUTHENTICATION ZONE --- */}
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           
-          {/* Authenticated Application Shell */}
+          {/* --- PROTECTED SYSTEM SHELL --- */}
           <Route
             path="/"
             element={
@@ -54,24 +82,27 @@ function App() {
               </ProtectedRoute>
             }
           >
-            {/* Index & Analytics */}
+            {/* Default Landing */}
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             
-            {/* Farmer Module: List, Create, and Edit */}
-            <Route path="farmers" element={<FarmersList />} />
-            <Route path="farmers/new" element={<FarmerForm />} />
-            <Route path="farmers/:id/edit" element={<FarmerForm />} />
+            {/* Farmer Module: Integrated CRUD & Dossier View */}
+            <Route path="farmers">
+              <Route index element={<FarmersList />} />
+              <Route path="new" element={<FarmerForm />} />
+              <Route path=":id" element={<FarmerForm />} /> {/* Read-only Dossier */}
+              <Route path=":id/edit" element={<FarmerForm />} />
+            </Route>
             
-            {/* Research & Wisdom Modules */}
+            {/* Knowledge & Research Initiatives */}
             <Route path="experiences" element={<Experiences />} />
             <Route path="projects" element={<ResearchProjects />} />
             
-            {/* Reference Data */}
+            {/* Territorial & Commodity Registry */}
             <Route path="barangays" element={<Barangays />} />
             <Route path="products" element={<Products />} />
 
-            {/* Admin-Restricted: User Governance */}
+            {/* Restricted: Identity Governance */}
             <Route
               path="users"
               element={
@@ -81,7 +112,7 @@ function App() {
               }
             />
 
-            {/* Audit & Compliance: Restricted Access */}
+            {/* Restricted: System Audit Trail */}
             <Route
               path="logs"
               element={
@@ -92,7 +123,7 @@ function App() {
             />
           </Route>
           
-          {/* Global Catch-all / 404 Redirect */}
+          {/* SECURE FALLBACK: Redirect any invalid URL to Dashboard */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
