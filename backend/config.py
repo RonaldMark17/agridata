@@ -1,13 +1,14 @@
 import os
 from datetime import timedelta
 
+# Get the project base directory
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 class Config:
     """Base configuration"""
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     
     # Database - MySQL/MariaDB Configuration (SQLAlchemy)
-    # Replaces MONGODB_SETTINGS
-    # Standard format: mysql+pymysql://username:password@host:port/database_name
     SQLALCHEMY_TRACK_MODIFICATIONS = False # Suppress overhead warning
     
     # JWT Configuration
@@ -15,10 +16,11 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=12)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     
-    # File Upload
-    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+    # File Upload Configuration
+    # We place uploads in 'static/uploads' so they can be served by Flask easily
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
-    ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'mp3', 'mp4', 'txt'}
+    ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'mp3', 'mp4', 'txt', 'webp'}
     
     # CORS
     CORS_HEADERS = 'Content-Type'
@@ -29,7 +31,11 @@ class Config:
 class DevelopmentConfig(Config):
     """Development configuration"""
     DEBUG = True
-    # Default to local MySQL with user 'root', no password, db 'agridata'
+    
+    # Database Connection String
+    # Format: mysql+pymysql://username:password@host:port/database_name
+    # Defaulting to XAMPP standard (root user, no password)
+    # If you have a password, change to: 'mysql+pymysql://root:YOUR_PASSWORD@localhost/agridata'
     SQLALCHEMY_DATABASE_URI = os.environ.get('DEV_DATABASE_URL') or \
         'mysql+pymysql://root:@localhost/agridata'
 

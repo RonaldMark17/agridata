@@ -1,12 +1,11 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/api';
 
 const api = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // FIXED: Removed 'Content-Type': 'application/json'
+  // Let Axios/Browser detect the content type automatically (JSON vs FormData)
 });
 
 // Request interceptor to add auth token
@@ -34,7 +33,6 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = localStorage.getItem('refresh_token');
-        // Only proceed if we actually have a refresh token
         if (!refreshToken) throw new Error("No refresh token");
 
         const response = await axios.post(`${API_URL}/auth/refresh`, {}, {
@@ -54,7 +52,6 @@ api.interceptors.response.use(
         return Promise.reject(refreshError);
       }
     }
-
     return Promise.reject(error);
   }
 );
@@ -73,28 +70,16 @@ export const dashboardAPI = {
 
 // Farmers API
 export const farmersAPI = {
-  // Get list of farmers with pagination/filters
   getAll: (params) => api.get('/farmers', { params }),
-
-  // Get a single farmer's details (Used for View and Edit)
   getById: (id) => api.get(`/farmers/${id}`),
-
-  // Create a new record
+  
+  // These will now automatically work with FormData because we removed the hardcoded JSON header
   create: (data) => api.post('/farmers', data),
-
-  // Update an existing record
-  // Matches signature: update(id, payload)
   update: (id, data) => api.put(`/farmers/${id}`, data),
-
-  // Delete/Deactivate a record
   delete: (id) => api.delete(`/farmers/${id}`),
 
-  // Add sub-data (Associations)
   addProduct: (farmerId, data) => api.post(`/farmers/${farmerId}/products`, data),
   addChild: (farmerId, data) => api.post(`/farmers/${farmerId}/children`, data),
-
-  // Export data as a downloadable file (CSV/Excel)
-  // Renamed to exportData to avoid 'export' reserved keyword issues
   exportData: () => api.get('/export/farmers', { responseType: 'blob' }),
 };
 

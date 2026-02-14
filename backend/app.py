@@ -6,6 +6,7 @@ from datetime import datetime, date
 import os
 import io
 import csv
+import json  # <--- ADDED: Required to parse the products array from FormData
 from sqlalchemy import or_, func, desc, asc
 
 from config import config
@@ -19,16 +20,24 @@ def create_app(config_name='development'):
     app = Flask(__name__)
     app.config.from_object(config[config_name])
     
+    # Define allowed extensions for image upload
+    app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    # Ensure UPLOAD_FOLDER is set
+    app.config['UPLOAD_FOLDER'] = os.path.join(app.root_path, 'static', 'uploads')
+
     # Initialize extensions (SQLAlchemy)
     db.init_app(app)
     
-    # Allow specific origin for CORS to handle credentials correctly
-    CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}}, supports_credentials=True)
+    # Allow specific origin for CORS (Added 5173 for Vite default, 3000 for React default)
+    CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "http://localhost:5173"]}}, supports_credentials=True)
     jwt = JWTManager(app)
     
-    # Create upload folder
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
+    # Create upload folder immediately
+    try:
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        print(f"📁 Verified Upload folder at: {app.config['UPLOAD_FOLDER']}")
+    except Exception as e:
+        print(f"❌ Error creating upload folder: {e}")
     
     # Helper functions
     def log_activity(action, entity_type=None, entity_id=None, details=None):
@@ -67,12 +76,15 @@ def create_app(config_name='development'):
                 original_filename = secure_filename(file.filename)
                 filename = f"{timestamp}_{original_filename}"
                 
-                # Save file
+                # Save file to disk
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
-                
-                print(f"✅ Image saved: {filename} at {filepath}")
-                return filename
+                try:
+                    file.save(filepath)
+                    print(f"✅ Image saved: {filename} at {filepath}")
+                    return filename
+                except Exception as e:
+                    print(f"❌ Error saving file: {e}")
+                    return None
             else:
                 print(f"❌ Invalid file type: {file.filename}")
         else:
@@ -95,7 +107,7 @@ def create_app(config_name='development'):
         return False
     
     # ============ Static File Serving (Images) ============
-    @app.route('/uploads/<filename>')
+    @app.route('/static/uploads/<filename>')
     def uploaded_file(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
@@ -218,7 +230,7 @@ def create_app(config_name='development'):
     @jwt_required()
     def get_farmers():
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', app.config['ITEMS_PER_PAGE'], type=int)
+        per_page = request.args.get('per_page', app.config.get('ITEMS_PER_PAGE', 20), type=int)
         search = request.args.get('search', '')
         barangay_id = request.args.get('barangay_id')
         
@@ -268,6 +280,7 @@ def create_app(config_name='development'):
         experiences = FarmerExperience.query.filter_by(farmer_id=id).all()
         
         data = farmer.to_dict(include_relations=True)
+        # Manually attach related data if not included in to_dict
         data['products'] = [p.to_dict() for p in products]
         data['children'] = [c.to_dict() for c in children]
         data['experiences'] = [e.to_dict() for e in experiences]
@@ -284,13 +297,6 @@ def create_app(config_name='development'):
             return jsonify({'error': 'Unauthorized'}), 403
         
         try:
-            print("=" * 80)
-            print("🔍 CREATE FARMER REQUEST DEBUG")
-            print("=" * 80)
-            print(f"Content-Type: {request.content_type}")
-            print(f"Request Files: {request.files}")
-            print(f"Request Form: {request.form.to_dict()}")
-            
             # Get form data
             data = request.form.to_dict()
             
@@ -306,21 +312,12 @@ def create_app(config_name='development'):
                         return default
                 return val
 
-            # Handle Image Upload FIRST
+            # --- STEP 1: Handle Image Upload ---
             profile_image_filename = None
             if 'profile_image' in request.files:
                 file = request.files['profile_image']
-
                 if file and file.filename != '':
-                    print(f"📷 Image file received: {file.filename}")
                     profile_image_filename = save_profile_image(file)
-                    print(f"💾 Saved as: {profile_image_filename}")
-                else:
-                    print("ℹ️ profile_image field present but empty")
-            else:
-                print("❌ No profile_image in request.files")
-
-
 
             # Handle Date
             birth_date_val = None
@@ -330,9 +327,7 @@ def create_app(config_name='development'):
                 except (ValueError, TypeError):
                     pass
 
-            # Create Farmer object
-            print(f"🔨 Creating Farmer with profile_image: {profile_image_filename}")
-            
+            # --- STEP 2: Save Farmer to Database ---
             farmer = Farmer(
                 farmer_code=data.get('farmer_code'),
                 first_name=data.get('first_name'),
@@ -341,50 +336,68 @@ def create_app(config_name='development'):
                 suffix=get_val('suffix'),
                 age=get_val('age', int),
                 gender=data.get('gender', 'Male'),
-                profile_image=profile_image_filename,  # THIS IS THE KEY LINE
+                profile_image=profile_image_filename,
                 birth_date=birth_date_val,
-                
                 barangay_id=get_val('barangay_id', int),
                 organization_id=get_val('organization_id', int),
                 data_encoder_id=current_user.id,
-                
                 address=data.get('address'),
                 contact_number=data.get('contact_number'),
-                
                 education_level=data.get('education_level', 'Elementary'),
                 annual_income=get_val('annual_income', float),
                 income_source=data.get('income_source'),
                 number_of_children=get_val('number_of_children', int, 0),
                 children_farming_involvement=data.get('children_farming_involvement') in ['true', True, 1, '1'],
-                
                 primary_occupation=data.get('primary_occupation'),
                 secondary_occupation=data.get('secondary_occupation'),
-                
                 farm_size_hectares=get_val('farm_size_hectares', float, 0),
                 land_ownership=data.get('land_ownership', 'Owner'),
                 years_farming=get_val('years_farming', int)
             )
             
-            print(f"✅ Farmer object created")
-            print(f"   - Name: {farmer.first_name} {farmer.last_name}")
-            print(f"   - Profile Image: {farmer.profile_image}")
-            
             db.session.add(farmer)
-            db.session.commit()
-            
-            print(f"💾 Saved to database with ID: {farmer.id}")
-            print(f"   - Profile Image in DB: {farmer.profile_image}")
-            print("=" * 80)
-            
+            db.session.commit() # Commit first to get farmer.id
+
+            # --- STEP 3: Handle Products (from JSON string) ---
+            products_json = data.get('products')
+            if products_json:
+                try:
+                    products_list = json.loads(products_json)
+                    for prod_data in products_list:
+                        if not prod_data.get('product_name'):
+                            continue
+
+                        # Find or Create the base Product (e.g., "Rice")
+                        prod_name = prod_data['product_name'].strip()
+                        agri_product = AgriculturalProduct.query.filter(
+                            func.lower(AgriculturalProduct.name) == func.lower(prod_name)
+                        ).first()
+
+                        if not agri_product:
+                            agri_product = AgriculturalProduct(name=prod_name, category='Crop')
+                            db.session.add(agri_product)
+                            db.session.commit()
+
+                        # Link to Farmer
+                        farmer_product = FarmerProduct(
+                            farmer_id=farmer.id,
+                            product_id=agri_product.id,
+                            production_volume=prod_data.get('production_volume', 0),
+                            unit=prod_data.get('unit', 'kg'),
+                            is_primary=prod_data.get('is_primary', False)
+                        )
+                        db.session.add(farmer_product)
+                    
+                    db.session.commit()
+                except json.JSONDecodeError:
+                    print("Error decoding products JSON")
+
             log_activity('FARMER_CREATED', 'Farmer', farmer.id, f"Created farmer: {farmer.first_name} {farmer.last_name}")
-            
             return jsonify({'message': 'Farmer created successfully', 'farmer': farmer.to_dict()}), 201
             
         except Exception as e:
             db.session.rollback()
             print(f"❌ CREATE ERROR: {e}")
-            import traceback
-            traceback.print_exc()
             return jsonify({'error': str(e)}), 400
     
     @app.route('/api/farmers/<int:id>', methods=['PUT'])
@@ -399,39 +412,29 @@ def create_app(config_name='development'):
         farmer = Farmer.query.get_or_404(id)
         
         try:
-            print("=" * 80)
-            print(f"🔍 UPDATE FARMER ID={id} REQUEST DEBUG")
-            print("=" * 80)
-            print(f"Content-Type: {request.content_type}")
-            print(f"Request Files: {request.files}")
-            print(f"Request Form: {request.form.to_dict()}")
-            print(f"Current profile_image in DB: {farmer.profile_image}")
-            
-            # Get form data
             data = request.form.to_dict()
 
             # Handle Image Upload
             if 'profile_image' in request.files:
                 file = request.files['profile_image']
-                print(f"📷 New image file received: {file.filename}")
-                
                 new_filename = save_profile_image(file)
-                
                 if new_filename:
-                    # Delete old image if it exists
                     if farmer.profile_image:
-                        print(f"🗑️ Deleting old image: {farmer.profile_image}")
                         delete_profile_image(farmer.profile_image)
-                    
-                    # Set new image
                     farmer.profile_image = new_filename
-                    print(f"✅ Updated profile_image to: {new_filename}")
-            else:
-                print("ℹ️ No new image in request")
 
-            # Update other fields
+            # --- FIXED LOOP ---
+            # Added 'full_name' to excluded_keys to prevent "no setter" error
+            excluded_keys = [
+                'id', 'created_at', 'updated_at', 'data_encoder_id', 'profile_image', 
+                'products', 'children', 'experiences', 
+                'barangay', 'organization', 'data_encoder',
+                'full_name'  # <--- CRITICAL FIX HERE
+            ]
+
             for key, value in data.items():
-                if hasattr(farmer, key) and key not in ['id', 'created_at', 'data_encoder_id', 'profile_image']:
+                # Check if the attribute exists on the model AND is not in our exclude list
+                if hasattr(farmer, key) and key not in excluded_keys:
                     
                     if key == 'birth_date':
                         if value and value != 'null' and value != '':
@@ -449,7 +452,8 @@ def create_app(config_name='development'):
                             except (ValueError, TypeError):
                                 pass
                         else:
-                            if key not in ['barangay_id', 'age']: 
+                            # Only nullify if appropriate (don't nullify age/barangay_id if invalid)
+                            if key not in ['barangay_id', 'age'] or value == '': 
                                 setattr(farmer, key, None)
                     
                     elif key in ['farm_size_hectares', 'annual_income']:
@@ -463,15 +467,47 @@ def create_app(config_name='development'):
                             
                     elif key == 'children_farming_involvement':
                         farmer.children_farming_involvement = value in ['true', True, 1, '1']
-                        
+                    
                     else:
                         setattr(farmer, key, value)
+
+            # --- STEP 3: Handle Products Update (Delete All & Re-add) ---
+            products_json = data.get('products')
+            if products_json:
+                try:
+                    # Clear existing products
+                    FarmerProduct.query.filter_by(farmer_id=farmer.id).delete()
+                    
+                    products_list = json.loads(products_json)
+                    for prod_data in products_list:
+                        if not prod_data.get('product_name'):
+                            continue
+
+                        # Find or Create Agri Product
+                        prod_name = prod_data['product_name'].strip()
+                        agri_product = AgriculturalProduct.query.filter(
+                            func.lower(AgriculturalProduct.name) == func.lower(prod_name)
+                        ).first()
+
+                        if not agri_product:
+                            agri_product = AgriculturalProduct(name=prod_name, category='Crop')
+                            db.session.add(agri_product)
+                            db.session.commit()
+
+                        # Add Association
+                        farmer_product = FarmerProduct(
+                            farmer_id=farmer.id,
+                            product_id=agri_product.id,
+                            production_volume=prod_data.get('production_volume', 0),
+                            unit=prod_data.get('unit', 'kg'),
+                            is_primary=prod_data.get('is_primary', False)
+                        )
+                        db.session.add(farmer_product)
+                        
+                except json.JSONDecodeError:
+                    print("Error decoding products JSON during update")
             
             db.session.commit()
-            
-            print(f"💾 Updated farmer ID={id}")
-            print(f"   - Profile Image after update: {farmer.profile_image}")
-            print("=" * 80)
             
             log_activity('FARMER_UPDATED', 'Farmer', farmer.id, f"Updated farmer: {farmer.first_name} {farmer.last_name}")
             return jsonify({'message': 'Farmer updated successfully', 'farmer': farmer.to_dict()}), 200
@@ -481,7 +517,7 @@ def create_app(config_name='development'):
             print(f"❌ UPDATE ERROR: {e}")
             import traceback
             traceback.print_exc()
-            return jsonify({'error': 'Failed to update record. Please check required fields.'}), 400
+            return jsonify({'error': f'Failed to update record: {str(e)}'}), 400
     
     @app.route('/api/farmers/<int:id>', methods=['DELETE'])
     @jwt_required()
@@ -504,7 +540,7 @@ def create_app(config_name='development'):
         
         return jsonify({'message': 'Farmer deleted successfully'}), 200
     
-    # ============ Farmer Products Routes ============
+    # ============ Farmer Products Routes (Standalone) ============
     
     @app.route('/api/farmers/<int:farmer_id>/products', methods=['POST'])
     @jwt_required()
@@ -567,7 +603,7 @@ def create_app(config_name='development'):
     @jwt_required()
     def get_experiences():
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', app.config['ITEMS_PER_PAGE'], type=int)
+        per_page = request.args.get('per_page', app.config.get('ITEMS_PER_PAGE', 20), type=int)
         
         pagination = FarmerExperience.query.order_by(FarmerExperience.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
         
@@ -614,7 +650,7 @@ def create_app(config_name='development'):
     @jwt_required()
     def get_projects():
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', app.config['ITEMS_PER_PAGE'], type=int)
+        per_page = request.args.get('per_page', app.config.get('ITEMS_PER_PAGE', 20), type=int)
         
         pagination = ResearchProject.query.order_by(ResearchProject.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
         

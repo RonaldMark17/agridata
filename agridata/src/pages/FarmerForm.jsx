@@ -1,676 +1,453 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { farmersAPI, barangaysAPI, organizationsAPI } from '../services/api';
-import { 
-  Save, ArrowLeft, Loader2, User, MapPin, Ruler, GraduationCap, 
-  Briefcase, Phone, Calendar, Building2, Sprout, Camera, X
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { farmersAPI, barangaysAPI } from '../services/api';
+import {
+  Save, X, Upload, Sprout, MapPin, User,
+  Calendar, Phone, DollarSign, Ruler, Trash2,
+  Plus, Loader2, ChevronLeft, AlertCircle
 } from 'lucide-react';
 
-// Get Base URL for images
+// Get Base URL for image previews
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace('/api', '');
-
-// --- Skeleton Component ---
-const FormSkeleton = () => (
-  <div className="max-w-5xl mx-auto space-y-6 pb-12 px-4 md:px-0 animate-pulse">
-    <div className="flex items-center gap-4">
-      <div className="h-10 w-10 bg-slate-200 rounded-xl"></div>
-      <div className="space-y-2">
-        <div className="h-7 w-48 bg-slate-200 rounded-lg"></div>
-        <div className="h-4 w-64 bg-slate-100 rounded-lg"></div>
-      </div>
-    </div>
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm space-y-6">
-            <div className="h-6 w-32 bg-slate-200 rounded"></div>
-            <div className="space-y-4">
-            <div className="h-12 w-full bg-gray-50 rounded-xl"></div>
-            <div className="h-12 w-full bg-gray-50 rounded-xl"></div>
-            </div>
-        </div>
-        ))}
-    </div>
-  </div>
-);
 
 export default function FarmerForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
 
+  // --- State ---
   const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
-  
-  // Reference Data
+  const [initialLoading, setInitialLoading] = useState(isEditMode);
   const [barangays, setBarangays] = useState([]);
-  const [organizations, setOrganizations] = useState([]);
-  
-  // Image State
-  const [previewImage, setPreviewImage] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [existingImageUrl, setExistingImageUrl] = useState(null);
+  const [error, setError] = useState('');
 
+  // Image Preview State
+  const [imagePreview, setImagePreview] = useState(null);
+
+  // Form State
   const [formData, setFormData] = useState({
-    // Identity
     first_name: '',
-    middle_name: '',
     last_name: '',
-    suffix: '',
-    farmer_code: '',
+    middle_name: '',
+    extension_name: '', // e.g., Jr., Sr.
     birth_date: '',
-    age: '',
     gender: 'Male',
-    
-    // Contact & Location
+    civil_status: 'Single',
     barangay_id: '',
     address: '',
     contact_number: '',
-    
-    // Socio-Economic
-    education_level: 'Elementary',
-    primary_occupation: '',
-    secondary_occupation: '',
-    annual_income: '',
-    income_source: '',
-    number_of_children: '0',
-    
-    // Farm Details
-    farm_size_hectares: '',
-    land_ownership: 'Owner',
-    years_farming: '',
-    organization_id: '',
-    children_farming_involvement: false
+    education_level: 'High School Graduate',
+    primary_occupation: 'Farming',
+    years_farming: 0,
+    farm_size_hectares: 0,
+    land_ownership: 'Owner', // Owner, Tenant, etc.
+    annual_income: 0,
+    income_source: 'Farming',
+    profile_image: null, // File object
+    products: [] // Array of { product_name, is_primary, production_volume, unit }
   });
 
+  // --- Initial Data Fetching ---
   useEffect(() => {
-    const init = async () => {
-      try {
-        // Fetch all reference data in parallel
-        const [barangayRes, orgRes] = await Promise.all([
-            barangaysAPI.getAll(),
-            organizationsAPI.getAll()
-        ]);
-        
-        setBarangays(barangayRes.data);
-        setOrganizations(orgRes.data);
-
-        if (isEditMode) {
-            await fetchFarmerDetails();
-        } else {
-            // Generate a temporary code or leave blank
-            setFormData(prev => ({...prev, farmer_code: `FARM-${new Date().getFullYear()}-XXXX`}));
-        }
-      } catch (err) {
-        console.error('Initialization error:', err);
-      } finally {
-        setTimeout(() => setFetching(false), 300);
-      }
-    };
-    init();
+    fetchBarangays();
+    if (isEditMode) {
+      fetchFarmerDetails();
+    }
   }, [id]);
 
-  // Cleanup object URLs when component unmounts or when new file is selected
-  useEffect(() => {
-    return () => {
-      if (previewImage && previewImage.startsWith('blob:')) {
-        URL.revokeObjectURL(previewImage);
-      }
-    };
-  }, [previewImage]);
-
-  const fetchFarmerDetails = async () => {
+  const fetchBarangays = async () => {
     try {
-      const res = await farmersAPI.getById(id);
-      const data = res.data;
-      
-      console.log('📥 Fetched farmer data:', data);
-      console.log('📷 Profile image from backend:', data.profile_image);
-      
-      // Parse backend data to form state
-      setFormData({
-        first_name: data.first_name || '',
-        middle_name: data.middle_name || '',
-        last_name: data.last_name || '',
-        suffix: data.suffix || '',
-        farmer_code: data.farmer_code || '',
-        birth_date: data.birth_date ? data.birth_date.split('T')[0] : '',
-        age: data.age || '',
-        gender: data.gender || 'Male',
-        
-        barangay_id: data.barangay_id || '',
-        address: data.address || '',
-        contact_number: data.contact_number || '',
-        
-        education_level: data.education_level || 'Elementary',
-        primary_occupation: data.primary_occupation || '',
-        secondary_occupation: data.secondary_occupation || '',
-        annual_income: data.annual_income || '',
-        income_source: data.income_source || '',
-        number_of_children: data.number_of_children || '0',
-        
-        farm_size_hectares: data.farm_size_hectares || '',
-        land_ownership: data.land_ownership || 'Owner',
-        years_farming: data.years_farming || '',
-        organization_id: data.organization_id || '',
-        children_farming_involvement: data.children_farming_involvement || false
-      });
-
-      // If backend returns an image URL, set it
-      if (data.profile_image) {
-        const imageUrl = getImageUrl(data.profile_image);
-        console.log('🖼️ Constructed image URL:', imageUrl);
-        setExistingImageUrl(imageUrl);
-        setPreviewImage(imageUrl);
-      }
+      const response = await barangaysAPI.getAll();
+      setBarangays(response.data);
     } catch (err) {
-      console.error('❌ Error loading farmer data:', err);
-      alert("Error loading farmer data");
-      navigate('/farmers');
+      console.error("Failed to load barangays", err);
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : value
-    }));
+  const fetchFarmerDetails = async () => {
+    try {
+      const response = await farmersAPI.getById(id);
+      const data = response.data;
+
+      // Set Image Preview if exists
+      // Safe image URL builder
+      const getImageUrl = (path) => {
+        if (!path) return null;
+
+        if (path.startsWith('http')) return path;
+
+        let cleanPath = path.trim();
+
+        if (cleanPath.startsWith('/')) {
+          cleanPath = cleanPath.slice(1);
+        }
+
+        // remove duplicate folders
+        if (cleanPath.startsWith('uploads/')) {
+          cleanPath = cleanPath.replace(/^uploads\//, '');
+        }
+
+        if (cleanPath.startsWith('static/uploads/')) {
+          cleanPath = cleanPath.replace(/^static\/uploads\//, '');
+        }
+
+        const url = `${API_BASE_URL}/static/uploads/${cleanPath}`
+          .replace(/([^:]\/)\/+/g, "$1");
+
+        return `${url}?t=${Date.now()}`;
+      };
+
+      // Set Image Preview if exists
+      if (data.profile_image) {
+        setImagePreview(getImageUrl(data.profile_image));
+      }
+
+
+      setFormData({
+        ...data,
+        barangay_id: data.barangay?.id || data.barangay_id || '',
+        products: data.products || [],
+        profile_image: null // Reset file input, keep preview
+      });
+    } catch (err) {
+      setError('Could not load farmer details.');
+      console.error(err);
+    } finally {
+      setInitialLoading(false);
+    }
+  };
+
+  // --- Handlers ---
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    
-    console.log('='.repeat(80));
-    console.log('📷 IMAGE CHANGE EVENT');
-    console.log('='.repeat(80));
-    console.log('File selected:', file);
-    
     if (file) {
-      console.log('📄 File details:');
-      console.log('  - Name:', file.name);
-      console.log('  - Type:', file.type);
-      console.log('  - Size:', file.size, 'bytes');
-      
-      // Validate file type
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-      if (!validTypes.includes(file.type)) {
-        console.error('❌ Invalid file type:', file.type);
-        alert('Please select a valid image file (JPEG, PNG, GIF, or WebP)');
-        e.target.value = '';
-        return;
-      }
-      console.log('✅ File type is valid');
-
-      // Validate file size (max 5MB)
-      const maxSize = 5 * 1024 * 1024; // 5MB
-      if (file.size > maxSize) {
-        console.error('❌ File too large:', file.size);
-        alert('Image size must be less than 5MB');
-        e.target.value = '';
-        return;
-      }
-      console.log('✅ File size is valid');
-
-      // Revoke previous blob URL if it exists
-      if (previewImage && previewImage.startsWith('blob:')) {
-        console.log('🗑️ Revoking old blob URL:', previewImage);
-        URL.revokeObjectURL(previewImage);
-      }
-      
-      // Create local preview URL
-      const objectUrl = URL.createObjectURL(file);
-      console.log('🖼️ Created preview URL:', objectUrl);
-      
-      setPreviewImage(objectUrl);
-      setSelectedFile(file);
-      
-      console.log('✅ Image state updated successfully');
-      console.log('='.repeat(80));
-    } else {
-      console.log('⚠️ No file selected');
+      setFormData(prev => ({ ...prev, profile_image: file }));
+      setImagePreview(URL.createObjectURL(file));
     }
   };
 
-  const handleRemoveImage = () => {
-    console.log('🗑️ Removing image...');
-    
-    if (previewImage && previewImage.startsWith('blob:')) {
-      URL.revokeObjectURL(previewImage);
-    }
-    setPreviewImage(null);
-    setSelectedFile(null);
-    setExistingImageUrl(null);
-    
-    // Reset file input
-    const fileInput = document.querySelector('input[type="file"]');
-    if (fileInput) {
-      fileInput.value = '';
-    }
-    
-    console.log('✅ Image removed');
+  // Product/Crop Handlers
+  const addProduct = () => {
+    setFormData(prev => ({
+      ...prev,
+      products: [...prev.products, { product_name: '', is_primary: false, production_volume: 0, unit: 'kg' }]
+    }));
   };
 
+  const removeProduct = (index) => {
+    const newProducts = [...formData.products];
+    newProducts.splice(index, 1);
+    setFormData(prev => ({ ...prev, products: newProducts }));
+  };
+
+  const handleProductChange = (index, field, value) => {
+    const newProducts = [...formData.products];
+    newProducts[index][field] = value;
+    setFormData(prev => ({ ...prev, products: newProducts }));
+  };
+
+  // Submit Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
-    console.log('='.repeat(80));
-    console.log('📤 FORM SUBMISSION');
-    console.log('='.repeat(80));
-    console.log('Is Edit Mode:', isEditMode);
-    console.log('Selected File:', selectedFile);
-    console.log('Form Data:', formData);
+    setError('');
 
     try {
-      // Create FormData object for file upload support
-      const payload = new FormData();
+      // Use FormData for file uploads
+      const data = new FormData();
 
-      // Append standard fields
-      payload.append('first_name', formData.first_name);
-      payload.append('last_name', formData.last_name);
-      payload.append('farmer_code', formData.farmer_code);
-      payload.append('gender', formData.gender);
-      payload.append('age', formData.age ? parseInt(formData.age, 10) : '');
-      
-      // Optional Strings
-      if (formData.middle_name) payload.append('middle_name', formData.middle_name);
-      if (formData.suffix) payload.append('suffix', formData.suffix);
-      if (formData.birth_date) payload.append('birth_date', formData.birth_date);
-      if (formData.address) payload.append('address', formData.address);
-      if (formData.contact_number) payload.append('contact_number', formData.contact_number);
-      
-      // IDs & Numbers
-      if (formData.barangay_id) payload.append('barangay_id', parseInt(formData.barangay_id, 10));
-      if (formData.organization_id) payload.append('organization_id', parseInt(formData.organization_id, 10));
-      payload.append('number_of_children', formData.number_of_children ? parseInt(formData.number_of_children, 10) : 0);
-      if (formData.years_farming) payload.append('years_farming', parseInt(formData.years_farming, 10));
-      
-      // Floats
-      payload.append('farm_size_hectares', formData.farm_size_hectares ? parseFloat(formData.farm_size_hectares) : 0);
-      if (formData.annual_income) payload.append('annual_income', parseFloat(formData.annual_income));
-
-      // Other Strings
-      payload.append('education_level', formData.education_level);
-      payload.append('land_ownership', formData.land_ownership);
-      if (formData.primary_occupation) payload.append('primary_occupation', formData.primary_occupation);
-      if (formData.secondary_occupation) payload.append('secondary_occupation', formData.secondary_occupation);
-      if (formData.income_source) payload.append('income_source', formData.income_source);
-      payload.append('children_farming_involvement', formData.children_farming_involvement);
-
-      // Append File if selected
-      if (selectedFile) {
-        console.log('📎 Appending image file to FormData:');
-        console.log('  - File name:', selectedFile.name);
-        console.log('  - File type:', selectedFile.type);
-        console.log('  - File size:', selectedFile.size, 'bytes');
-        payload.append('profile_image', selectedFile);
-        console.log('✅ Image file appended to payload');
-      } else {
-        console.log('⚠️ No image file to upload');
-      }
-
-      // Log FormData contents
-      console.log('📦 FormData contents:');
-      for (let [key, value] of payload.entries()) {
-        if (value instanceof File) {
-          console.log(`  ${key}: [File] ${value.name} (${value.size} bytes)`);
-        } else {
-          console.log(`  ${key}:`, value);
+      // Append simple fields
+      Object.keys(formData).forEach(key => {
+        if (key === 'products') {
+          // Serialize products array
+          data.append('products', JSON.stringify(formData.products));
+        } else if (key === 'profile_image') {
+          if (formData.profile_image instanceof File) {
+            data.append('profile_image', formData.profile_image);
+          }
+        } else if (formData[key] !== null && formData[key] !== undefined) {
+          data.append(key, formData[key]);
         }
-      }
+      });
 
-      console.log('🚀 Sending request to backend...');
-
-      let response;
       if (isEditMode) {
-        console.log(`📝 UPDATE farmer ID=${id}`);
-        response = await farmersAPI.update(id, payload);
+        await farmersAPI.update(id, data);
       } else {
-        console.log('✨ CREATE new farmer');
-        response = await farmersAPI.create(payload);
+        await farmersAPI.create(data);
       }
-      
-      console.log('✅ Response received:', response.data);
-      console.log('='.repeat(80));
-      
-      // Show success alert
-      alert(`Farmer ${isEditMode ? 'updated' : 'created'} successfully!`);
-      
+
       navigate('/farmers');
     } catch (err) {
-      console.error('='.repeat(80));
-      console.error('❌ SUBMISSION ERROR');
-      console.error('='.repeat(80));
-      console.error('Error object:', err);
-      console.error('Response data:', err.response?.data);
-      console.error('Response status:', err.response?.status);
-      console.error('='.repeat(80));
-      
-      const errorMessage = err.response?.data?.error || "Failed to save record. Please check your inputs.";
-      alert(`Error: ${errorMessage}`);
+      console.error("Submission error:", err);
+      setError(err.response?.data?.message || 'Failed to save farmer profile. Please check your inputs.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper to construct full image URL
-  const getImageUrl = (path) => {
-    if (!path) return null;
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
-    return `${API_BASE_URL}/uploads/${path}`;
-  };
-
-  if (fetching) return <FormSkeleton />;
+  if (initialLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <Loader2 className="animate-spin text-emerald-600" size={40} />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 px-4 md:px-0 animate-in fade-in duration-500">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={() => navigate('/farmers')} 
-          className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:shadow-md transition-all text-slate-500 shadow-sm active:scale-95 group"
-          title="Go back"
-        >
-          <ArrowLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
-        </button>
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
-            {isEditMode ? 'Update Profile' : 'New Farmer Registration'}
-          </h1>
-          <p className="text-sm text-gray-500 font-medium mt-1">
-            {isEditMode ? `Editing record for: ${formData.first_name} ${formData.last_name}` : 'Complete all required fields below.'}
+          <div className="flex items-center gap-2 mb-1">
+            <Link to="/farmers" className="text-slate-400 hover:text-emerald-600 transition-colors">
+              <ChevronLeft size={20} />
+            </Link>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+              {isEditMode ? 'Edit Farmer Profile' : 'New Farmer Registration'}
+            </h1>
+          </div>
+          <p className="text-slate-500 ml-7">
+            {isEditMode ? 'Update existing records and crop data.' : 'Add a new agricultural producer to the database.'}
           </p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* === SECTION 1: IDENTITY === */}
-        <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl"><User size={20} /></div>
-                <h3 className="font-bold text-gray-900">Personal Identity</h3>
-            </div>
-            
-            <div className="space-y-6">
-                
-                {/* --- Profile Photo Upload --- */}
-                <div className="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
-                    <div className="relative group">
-                        <div className="h-32 w-32 rounded-full bg-white border-4 border-white shadow-lg overflow-hidden flex items-center justify-center relative">
-                            {previewImage ? (
-                                <img 
-                                  src={previewImage} 
-                                  alt="Preview" 
-                                  className="h-full w-full object-cover"
-                                  onError={(e) => {
-                                    console.error('❌ Image failed to load:', previewImage);
-                                    e.target.style.display = 'none';
-                                    e.target.parentElement.innerHTML = '<div class="flex items-center justify-center w-full h-full"><svg class="text-slate-300" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div>';
-                                  }}
-                                />
-                            ) : (
-                                <User size={48} className="text-slate-300" />
-                            )}
-                            {/* Overlay on Hover */}
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Camera size={24} className="text-white" />
-                            </div>
-                        </div>
-                        <input 
-                            type="file" 
-                            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" 
-                            onChange={handleImageChange}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                        />
-                        
-                        {/* Remove Button */}
-                        {previewImage && (
-                          <button
-                            type="button"
-                            onClick={handleRemoveImage}
-                            className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 transition-colors z-20"
-                            title="Remove image"
-                          >
-                            <X size={16} />
-                          </button>
-                        )}
-                    </div>
-                    <p className="text-xs font-bold text-slate-400 mt-3">
-                      {selectedFile ? `✅ ${selectedFile.name} selected` : (existingImageUrl ? 'Tap to change photo' : 'Tap to upload photo')}
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-1">JPEG, PNG, GIF or WebP • Max 5MB</p>
-                </div>
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-2">
+          <AlertCircle size={20} />
+          {error}
+        </div>
+      )}
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">First Name *</label>
-                        <input name="first_name" required value={formData.first_name} onChange={handleInputChange} 
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none font-medium" placeholder="First Name" />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Last Name *</label>
-                        <input name="last_name" required value={formData.last_name} onChange={handleInputChange} 
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none font-medium" placeholder="Last Name" />
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Middle Name</label>
-                        <input name="middle_name" value={formData.middle_name} onChange={handleInputChange} 
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none font-medium" placeholder="(Optional)" />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Suffix</label>
-                        <input name="suffix" value={formData.suffix} onChange={handleInputChange} 
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none font-medium" placeholder="Jr, Sr, III" />
-                    </div>
-                </div>
-                
-                <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Farmer Code (ID)</label>
-                    <input name="farmer_code" value={formData.farmer_code} onChange={handleInputChange} 
-                        className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none font-bold text-emerald-700 tracking-wide" />
-                </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
 
-                <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2 col-span-1">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Age *</label>
-                        <input type="number" name="age" required value={formData.age} onChange={handleInputChange} min="1" max="120"
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none font-medium" />
-                    </div>
-                    <div className="space-y-2 col-span-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Gender</label>
-                        <select name="gender" value={formData.gender} onChange={handleInputChange} 
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none font-medium cursor-pointer">
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Date of Birth</label>
-                    <div className="relative">
-                        <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input type="date" name="birth_date" value={formData.birth_date} onChange={handleInputChange} 
-                            className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none font-medium" />
-                    </div>
-                </div>
+        {/* SECTION 1: Identity & Image */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Image Upload Card */}
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
+            <div className="relative group w-40 h-40 mb-4">
+              <div className={`w-full h-full rounded-full overflow-hidden border-4 border-slate-50 shadow-inner flex items-center justify-center bg-slate-100 ${!imagePreview ? 'border-dashed border-slate-300' : ''}`}>
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <User size={48} className="text-slate-300" />
+                )}
+              </div>
+              <label className="absolute inset-0 flex items-center justify-center bg-slate-900/50 text-white opacity-0 group-hover:opacity-100 rounded-full cursor-pointer transition-opacity">
+                <Upload size={24} />
+                <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+              </label>
             </div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Profile Photo</p>
+            <p className="text-xs text-slate-400">Click image to upload</p>
+          </div>
+
+          {/* Basic Info Card */}
+          <div className="md:col-span-2 bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-5">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 pb-2 border-b border-slate-50">
+              <User size={18} className="text-emerald-500" /> Personal Identity
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">First Name</label>
+                <input required type="text" name="first_name" value={formData.first_name} onChange={handleChange}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500 focus:ring-0 rounded-xl text-sm font-semibold transition-all outline-none" placeholder="e.g. Juan" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Last Name</label>
+                <input required type="text" name="last_name" value={formData.last_name} onChange={handleChange}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500 focus:ring-0 rounded-xl text-sm font-semibold transition-all outline-none" placeholder="e.g. Dela Cruz" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Birth Date</label>
+                <input type="date" name="birth_date" value={formData.birth_date} onChange={handleChange}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500 focus:ring-0 rounded-xl text-sm font-semibold text-slate-600 transition-all outline-none" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Gender</label>
+                <select name="gender" value={formData.gender} onChange={handleChange}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500 focus:ring-0 rounded-xl text-sm font-semibold text-slate-600 transition-all outline-none">
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* === SECTION 2: CONTACT & LOCATION === */}
-        <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><MapPin size={20} /></div>
-                <h3 className="font-bold text-gray-900">Contact & Location</h3>
+        {/* SECTION 2: Location & Contact */}
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-5">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 pb-2 border-b border-slate-50">
+            <MapPin size={18} className="text-blue-500" /> Location & Contact
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Barangay</label>
+              <select required name="barangay_id" value={formData.barangay_id} onChange={handleChange}
+                className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-blue-500 focus:ring-0 rounded-xl text-sm font-semibold text-slate-600 transition-all outline-none">
+                <option value="">Select Barangay</option>
+                {barangays.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
             </div>
-            
-            <div className="space-y-5">
-                <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Barangay *</label>
-                    <select name="barangay_id" required value={formData.barangay_id} onChange={handleInputChange} 
-                        className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none font-medium cursor-pointer">
-                        <option value="">Select Barangay...</option>
-                        {barangays.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Street Address / Purok</label>
-                    <textarea name="address" value={formData.address} onChange={handleInputChange} rows="2"
-                        className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none font-medium resize-none" placeholder="House No., Street Name, Purok" />
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Contact Number</label>
-                    <div className="relative">
-                        <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input name="contact_number" value={formData.contact_number} onChange={handleInputChange} 
-                            className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none font-medium" placeholder="09XX-XXX-XXXX" />
-                    </div>
-                </div>
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-xs font-bold text-slate-500 uppercase">Street Address / Purok</label>
+              <input type="text" name="address" value={formData.address} onChange={handleChange}
+                className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-blue-500 focus:ring-0 rounded-xl text-sm font-semibold transition-all outline-none" placeholder="House No., Street, Purok" />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Contact Number</label>
+              <input type="text" name="contact_number" value={formData.contact_number} onChange={handleChange}
+                className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-blue-500 focus:ring-0 rounded-xl text-sm font-semibold transition-all outline-none" placeholder="0912 345 6789" />
+            </div>
+          </div>
         </div>
 
-        {/* === SECTION 3: SOCIO-ECONOMIC === */}
-        <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl"><GraduationCap size={20} /></div>
-                <h3 className="font-bold text-gray-900">Socio-Economic Profile</h3>
+        {/* SECTION 3: Farm & Economic Data */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-5">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 pb-2 border-b border-slate-50">
+              <Ruler size={18} className="text-amber-500" /> Farm Details
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Size (Hectares)</label>
+                <input type="number" step="0.01" name="farm_size_hectares" value={formData.farm_size_hectares} onChange={handleChange}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-amber-500 focus:ring-0 rounded-xl text-sm font-semibold transition-all outline-none" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Years Farming</label>
+                <input type="number" name="years_farming" value={formData.years_farming} onChange={handleChange}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-amber-500 focus:ring-0 rounded-xl text-sm font-semibold transition-all outline-none" />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Land Ownership</label>
+                <select name="land_ownership" value={formData.land_ownership} onChange={handleChange}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-amber-500 focus:ring-0 rounded-xl text-sm font-semibold text-slate-600 transition-all outline-none">
+                  <option value="Owner">Owner</option>
+                  <option value="Tenant">Tenant</option>
+                  <option value="Leaseholder">Leaseholder</option>
+                  <option value="Caretaker">Caretaker</option>
+                </select>
+              </div>
             </div>
-            
-            <div className="space-y-5">
-                <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Education Level *</label>
-                    <select name="education_level" value={formData.education_level} onChange={handleInputChange} 
-                        className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all outline-none font-medium cursor-pointer">
-                        <option value="No Formal Education">No Formal Education</option>
-                        <option value="Elementary">Elementary</option>
-                        <option value="High School">High School</option>
-                        <option value="Vocational">Vocational</option>
-                        <option value="College">College</option>
-                        <option value="Post-Graduate">Post-Graduate</option>
-                    </select>
-                </div>
+          </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Primary Occupation</label>
-                        <div className="relative">
-                            <Briefcase size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input name="primary_occupation" value={formData.primary_occupation} onChange={handleInputChange} 
-                                className="w-full pl-10 pr-3 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none font-medium text-sm" placeholder="e.g. Farming" />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Secondary Occupation</label>
-                        <input name="secondary_occupation" value={formData.secondary_occupation} onChange={handleInputChange} 
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none font-medium text-sm" placeholder="e.g. Carpentry" />
-                    </div>
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-5">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 pb-2 border-b border-slate-50">
+              <DollarSign size={18} className="text-purple-500" /> Socio-Economic
+            </h3>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Education Level</label>
+                <select name="education_level" value={formData.education_level} onChange={handleChange}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-purple-500 focus:ring-0 rounded-xl text-sm font-semibold text-slate-600 transition-all outline-none">
+                  <option value="Elementary">Elementary</option>
+                  <option value="High School Graduate">High School Graduate</option>
+                  <option value="College Undergraduate">College Undergraduate</option>
+                  <option value="College Graduate">College Graduate</option>
+                  <option value="Vocational">Vocational</option>
+                  <option value="None">None</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Annual Income</label>
+                  <input type="number" name="annual_income" value={formData.annual_income} onChange={handleChange}
+                    className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-purple-500 focus:ring-0 rounded-xl text-sm font-semibold transition-all outline-none" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Annual Income (₱)</label>
-                        <input type="number" name="annual_income" value={formData.annual_income} onChange={handleInputChange} min="0" step="0.01"
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none font-medium" placeholder="0.00" />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Income Source</label>
-                        <input name="income_source" value={formData.income_source} onChange={handleInputChange} 
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none font-medium" placeholder="e.g. Farming" />
-                    </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Income Source</label>
+                  <input type="text" name="income_source" value={formData.income_source} onChange={handleChange}
+                    className="w-full px-4 py-3 bg-slate-50 border-transparent focus:bg-white focus:border-purple-500 focus:ring-0 rounded-xl text-sm font-semibold transition-all outline-none" />
                 </div>
-
-                <div className="flex items-center gap-4 pt-2">
-                    <div className="flex-1 space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">No. of Children</label>
-                        <input type="number" name="number_of_children" value={formData.number_of_children} onChange={handleInputChange} min="0"
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none font-medium" />
-                    </div>
-                    <div className="flex-1 pt-6">
-                        <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
-                            <input type="checkbox" name="children_farming_involvement" checked={formData.children_farming_involvement} onChange={handleInputChange} 
-                                className="h-5 w-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
-                            <span className="text-xs font-bold text-slate-600">Children assist in farm?</span>
-                        </label>
-                    </div>
-                </div>
+              </div>
             </div>
+          </div>
         </div>
 
-        {/* === SECTION 4: FARM DETAILS === */}
-        <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl"><Sprout size={20} /></div>
-                <h3 className="font-bold text-gray-900">Farm Information</h3>
-            </div>
-            
-            <div className="space-y-5">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Farm Size (Hectares) *</label>
-                        <div className="relative">
-                            <Ruler size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input type="number" step="0.01" name="farm_size_hectares" required value={formData.farm_size_hectares} onChange={handleInputChange} min="0"
-                                className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all outline-none font-medium" placeholder="0.00" />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Years Farming</label>
-                        <input type="number" name="years_farming" value={formData.years_farming} onChange={handleInputChange} min="0"
-                            className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all outline-none font-medium" />
-                    </div>
-                </div>
+        {/* SECTION 4: Production / Crops */}
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-5">
+          <div className="flex justify-between items-center pb-2 border-b border-slate-50">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Sprout size={18} className="text-emerald-500" /> Production & Crops
+            </h3>
+            <button type="button" onClick={addProduct} className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1">
+              <Plus size={14} /> Add Crop
+            </button>
+          </div>
 
-                <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Land Ownership Status</label>
-                    <select name="land_ownership" value={formData.land_ownership} onChange={handleInputChange} 
-                        className="w-full px-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all outline-none font-medium cursor-pointer">
-                        <option value="Owner">Owner</option>
-                        <option value="Tenant">Tenant</option>
-                        <option value="Tenant">Lessee</option>
-                        <option value="Rent-free with consent">Rent-free with consent</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
+          <div className="space-y-3">
+            {formData.products.length === 0 && (
+              <div className="p-8 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                No crops added yet. Click "Add Crop" to record production.
+              </div>
+            )}
 
-                <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Affiliated Organization</label>
-                    <div className="relative">
-                        <Building2 size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <select name="organization_id" value={formData.organization_id} onChange={handleInputChange} 
-                            className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all outline-none font-medium cursor-pointer">
-                            <option value="">None / Independent</option>
-                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-                        </select>
-                    </div>
+            {formData.products.map((product, index) => (
+              <div key={index} className="flex flex-col md:flex-row gap-3 items-start md:items-end p-4 bg-slate-50 rounded-2xl border border-slate-100 animate-in fade-in slide-in-from-top-2">
+                <div className="flex-1 w-full space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Crop Name</label>
+                  <input type="text" placeholder="e.g. Rice, Corn"
+                    value={product.product_name}
+                    onChange={(e) => handleProductChange(index, 'product_name', e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:border-emerald-500 focus:ring-0 outline-none"
+                  />
                 </div>
-            </div>
-        </div>
-
-        {/* === FORM ACTIONS (Sticky Footer) === */}
-        <div className="lg:col-span-2 sticky bottom-4 z-10">
-            <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl shadow-xl flex items-center justify-between gap-4">
-                <button 
-                    type="button" onClick={() => navigate('/farmers')}
-                    className="px-6 py-3 rounded-xl text-slate-300 font-bold hover:bg-white/10 hover:text-white transition-all active:scale-95"
-                >
-                    Cancel
+                <div className="w-full md:w-32 space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Volume</label>
+                  <input type="number" placeholder="0"
+                    value={product.production_volume}
+                    onChange={(e) => handleProductChange(index, 'production_volume', e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:border-emerald-500 focus:ring-0 outline-none"
+                  />
+                </div>
+                <div className="w-full md:w-24 space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Unit</label>
+                  <select
+                    value={product.unit}
+                    onChange={(e) => handleProductChange(index, 'unit', e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:border-emerald-500 focus:ring-0 outline-none"
+                  >
+                    <option value="kg">kg</option>
+                    <option value="tons">tons</option>
+                    <option value="sacks">sacks</option>
+                    <option value="pcs">pcs</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-3 pb-2 md:pb-0">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox"
+                      checked={product.is_primary}
+                      onChange={(e) => handleProductChange(index, 'is_primary', e.target.checked)}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 border-gray-300"
+                    />
+                    <span className="text-xs font-bold text-slate-500">Primary</span>
+                  </label>
+                </div>
+                <button type="button" onClick={() => removeProduct(index)} className="p-2.5 bg-white border border-red-100 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
+                  <Trash2 size={16} />
                 </button>
-                <button 
-                    type="submit" disabled={loading}
-                    className="px-8 py-3 rounded-xl bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-500/30 hover:bg-emerald-400 hover:-translate-y-0.5 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-70 disabled:pointer-events-none"
-                >
-                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save size={20} />}
-                    {isEditMode ? 'Update Profile' : 'Save Record'}
-                </button>
-            </div>
+              </div>
+            ))}
+          </div>
         </div>
 
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-4 pt-4 pb-20">
+          <button type="button" onClick={() => navigate('/farmers')} className="px-6 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-colors">
+            Cancel
+          </button>
+          <button type="submit" disabled={loading} className="px-8 py-4 bg-emerald-600 text-white font-bold rounded-2xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 hover:-translate-y-1 transition-all flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
+            {loading ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+            {isEditMode ? 'Update Farmer' : 'Save Farmer'}
+          </button>
+        </div>
       </form>
     </div>
   );

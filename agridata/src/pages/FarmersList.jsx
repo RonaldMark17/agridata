@@ -8,8 +8,9 @@ import {
   Phone, GraduationCap, Briefcase, DollarSign, Sprout, Building2, User
 } from 'lucide-react';
 
-// Get Base URL for images (Assumes API is at http://localhost:5001/api)
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace('/api', '');
+// Get Base URL for images
+// Logic: If VITE_API_URL is "http://localhost:5001/api", we want "http://localhost:5001"
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace(/\/api\/?$/, '');
 
 // --- Skeleton Loader Component ---
 const TableSkeleton = () => (
@@ -161,14 +162,39 @@ export default function FarmersList() {
   const formatCurrency = (val) => val ? `₱${Number(val).toLocaleString()}` : 'N/A';
   
   // Helper to construct full image URL
-  const getImageUrl = (path) => {
-    if (!path) return null;
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    // If the path already starts with /, use it directly (assumes it's already /static/uploads/...)
-    if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
-    // Otherwise, construct the full path
-    return `${API_BASE_URL}/uploads/${path}`;
-  };
+// Helper to construct full image URL
+const getImageUrl = (path) => {
+  if (!path) return null;
+
+  // full URL already
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+
+  let cleanPath = path.trim();
+
+  // remove starting slash
+  if (cleanPath.startsWith('/')) {
+    cleanPath = cleanPath.slice(1);
+  }
+
+  // remove duplicate uploads folder
+  if (cleanPath.startsWith('uploads/')) {
+    cleanPath = cleanPath.replace(/^uploads\//, '');
+  }
+
+  // remove static/uploads if backend already sends it
+  if (cleanPath.startsWith('static/uploads/')) {
+    cleanPath = cleanPath.replace(/^static\/uploads\//, '');
+  }
+
+  const url = `${API_BASE_URL}/static/uploads/${cleanPath}`
+    .replace(/([^:]\/)\/+/g, "$1"); // remove double slashes
+
+  return `${url}?t=${Date.now()}`;
+};
+
+
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-in fade-in duration-500">
@@ -279,10 +305,12 @@ export default function FarmersList() {
                               className="h-full w-full object-cover"
                               onError={(e) => {
                                 // Fallback to initials if image fails to load
-                                console.error('Image load error for farmer:', farmer.id);
+                                console.warn('Image load error for farmer:', farmer.id, e.target.src);
                                 e.target.style.display = 'none';
                                 const initials = getInitials(farmer.full_name);
-                                e.target.parentElement.innerHTML = `<span class="text-emerald-700 font-bold text-sm">${initials}</span>`;
+                                if (e.target.parentElement) {
+                                    e.target.parentElement.innerHTML = `<span class="text-emerald-700 font-bold text-sm">${initials}</span>`;
+                                }
                               }}
                             />
                         ) : (
@@ -388,11 +416,12 @@ export default function FarmersList() {
                         alt="Profile" 
                         className="h-full w-full object-cover"
                         onError={(e) => {
-                          // Fallback to initials if image fails to load
-                          console.error('Modal image load error');
+                          console.warn('Modal image load error');
                           e.target.style.display = 'none';
                           const initials = getInitials(selectedFarmer.full_name);
-                          e.target.parentElement.innerHTML = `<span class="text-4xl font-bold text-emerald-700">${initials}</span>`;
+                          if (e.target.parentElement) {
+                              e.target.parentElement.innerHTML = `<span class="text-4xl font-bold text-emerald-700">${initials}</span>`;
+                          }
                         }}
                       />
                   ) : (
