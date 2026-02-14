@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Eye, EyeOff, Sprout, Loader2, Lock, Mail, Activity, ArrowRight, ShieldCheck } from 'lucide-react';
+import ForgotPassword from './ForgotPassword';
 
 export default function Login() {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
+
   const navigate = useNavigate();
   const { login } = useAuth();
 
@@ -40,7 +41,7 @@ export default function Login() {
           src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?q=80&w=2070&auto=format&fit=crop"
           alt="Field Registry"
         />
-        
+
         {/* Dynamic Glow Accents */}
         <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-emerald-500/20 rounded-full blur-[120px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-600/10 rounded-full blur-[100px]" />
@@ -55,7 +56,7 @@ export default function Login() {
               <span className="text-[10px] font-black text-emerald-500 tracking-[0.4em] uppercase">Systems Hub</span>
             </div>
           </div>
-          
+
           <div className="max-w-xl">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-md rounded-full border border-white/10 mb-8 text-emerald-400">
               <ShieldCheck size={14} />
@@ -69,7 +70,7 @@ export default function Login() {
               Synthesizing regional datasets into actionable agricultural insights. Securely manage yields, land metrics, and community demographics.
             </p>
           </div>
-          
+
           <div className="flex items-center justify-between border-t border-white/5 pt-10">
             <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">© 2026 Institutional Registry</div>
             <div className="flex gap-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">
@@ -84,7 +85,7 @@ export default function Login() {
       {/* RIGHT SIDE: Auth Module */}
       <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-24 bg-white relative">
         <div className="mx-auto w-full max-w-sm">
-          
+
           <header className="mb-12">
             <h2 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Welcome Back</h2>
             <p className="text-slate-400 font-medium">Initialize session protocol to continue.</p>
@@ -118,7 +119,8 @@ export default function Login() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center px-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Access Key</label>
-                  <a href="#" className="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700">Lost Key?</a>
+                  
+                  <Link to="/forgot-password" className="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700">Lost Key?</Link>
                 </div>
                 <div className="relative group">
                   <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={18} />

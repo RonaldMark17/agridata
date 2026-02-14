@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
 
 // Core Analytics
 import Dashboard from './pages/Dashboard';
@@ -19,7 +20,9 @@ import FarmerForm from './pages/FarmerForm';
 // Research & Community Modules
 import Experiences from './pages/Experiences';
 import ResearchProjects from './pages/ResearchProjects';
+import SurveyQuestionnaires from './pages/SurveyQuestionnaires'; // <--- ADDED IMPORT
 import Barangays from './pages/Barangays';
+import Organizations from './pages/Organizations'; 
 import Products from './pages/Products';
 
 // Admin & Audit Modules
@@ -72,6 +75,7 @@ function App() {
           {/* --- PUBLIC AUTHENTICATION ZONE --- */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           
           {/* --- PROTECTED SYSTEM SHELL --- */}
           <Route
@@ -97,9 +101,11 @@ function App() {
             {/* Knowledge & Research Initiatives */}
             <Route path="experiences" element={<Experiences />} />
             <Route path="projects" element={<ResearchProjects />} />
+            <Route path="surveys" element={<SurveyQuestionnaires />} /> {/* <--- ADDED ROUTE */}
             
             {/* Territorial & Commodity Registry */}
             <Route path="barangays" element={<Barangays />} />
+            <Route path="organizations" element={<Organizations />} />
             <Route path="products" element={<Products />} />
 
             {/* Restricted: Identity Governance */}

@@ -48,3 +48,17 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #15803d;
 }
+/* src/index.css */
+@layer base {
+  body {
+    @apply transition-colors duration-300;
+  }
+  
+  /* Applies smooth transition to all elements using dark mode colors */
+  * {
+    @apply border-slate-200 dark:border-white/10;
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 300ms;
+  }
+}

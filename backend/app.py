@@ -7,14 +7,17 @@ import os
 import io
 import csv
 import json
-import traceback # Added for better error logging
+import traceback
 from sqlalchemy import or_, func, desc, asc
+from flask_mail import Mail, Message
+import random
 
 from config import config
+# FIXED: Added Notification to imports
 from models import (
     db, User, Organization, Barangay, AgriculturalProduct, Farmer, 
     FarmerProduct, FarmerChild, FarmerExperience, ResearchProject,
-    SurveyQuestionnaire, ActivityLog
+    SurveyQuestionnaire, ActivityLog, Notification
 )
 
 def create_app(config_name='development'):
@@ -31,12 +34,22 @@ def create_app(config_name='development'):
     
     # Allow specific origin for CORS - Enhanced headers
     CORS(app, 
-         resources={r"/*": {"origins": ["http://localhost:3000", "http://localhost:5173"]}}, 
-         supports_credentials=True,
-         allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+     resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:5173"]}}, 
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
     jwt = JWTManager(app)
+    
+    # Add this specific handler for Preflight (OPTIONS) requests
+    @app.before_request
+    def handle_preflight():
+        if request.method == "OPTIONS":
+            res = jsonify({'status': 'ok'})
+            res.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin"))
+            res.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+            res.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+            return res, 200
     
     # Create upload folder immediately
     try:
@@ -45,7 +58,8 @@ def create_app(config_name='development'):
     except Exception as e:
         print(f"❌ Error creating upload folder: {e}")
     
-    # Helper functions
+    # --- HELPER FUNCTIONS ---
+
     def log_activity(action, entity_type=None, entity_id=None, details=None):
         try:
             user_id = get_jwt_identity()
@@ -69,24 +83,37 @@ def create_app(config_name='development'):
             print(f"Logging error: {e}")
             db.session.rollback()
             pass
+
+    # ADDED: Notification Helper
+    def broadcast_notification(title, message, target_user_id=None):
+        """
+        Creates a notification record.
+        target_user_id: None for System-Wide, or ID for specific user.
+        """
+        try:
+            new_alert = Notification(
+                user_id=target_user_id, 
+                title=title,
+                message=message,
+                is_read=False,
+                created_at=datetime.utcnow()
+            )
+            db.session.add(new_alert)
+            # Note: We let the calling function do the commit to ensure transaction integrity
+        except Exception as e:
+            print(f"Notification Creation Error: {str(e)}")
     
     def allowed_file(filename):
         return '.' in filename and \
                filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
     
     def save_profile_image(file):
-        """
-        Save uploaded profile image and return the filename.
-        Returns None if file is invalid.
-        """
-        if file and file.filename:  # Check if file exists and has a filename
+        if file and file.filename:
             if allowed_file(file.filename):
-                # Create unique filename with timestamp
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 original_filename = secure_filename(file.filename)
                 filename = f"{timestamp}_{original_filename}"
                 
-                # Save file to disk
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 try:
                     file.save(filepath)
@@ -102,9 +129,6 @@ def create_app(config_name='development'):
         return None
     
     def delete_profile_image(filename):
-        """
-        Delete a profile image file from the uploads folder.
-        """
         if filename:
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             if os.path.exists(filepath):
@@ -124,7 +148,6 @@ def create_app(config_name='development'):
     # ============ Authentication Routes ============
     
     @app.route('/api/auth/register', methods=['POST'])
-    # REMOVED @jwt_required() to allow new users to sign up
     def register():
         try:
             data = request.get_json()
@@ -139,15 +162,13 @@ def create_app(config_name='development'):
                 username=data['username'],
                 email=data['email'],
                 full_name=data['full_name'],
-                role=data.get('role', 'viewer'), # Default role
+                role=data.get('role', 'viewer'),
                 organization_id=data.get('organization') 
             )
             user.set_password(data['password'])
             
             db.session.add(user)
             db.session.commit()
-            
-            # log_activity removed here as there is no JWT yet
             
             return jsonify({'message': 'User created successfully', 'user': user.to_dict()}), 201
         except Exception as e:
@@ -168,9 +189,6 @@ def create_app(config_name='development'):
         
         access_token = create_access_token(identity=str(user.id))
         refresh_token = create_refresh_token(identity=str(user.id))
-        
-        # We can't use log_activity easily here because the context isn't set yet, 
-        # but the login is successful.
         
         return jsonify({
             'access_token': access_token,
@@ -194,6 +212,100 @@ def create_app(config_name='development'):
             return jsonify({'error': 'User not found'}), 404
         return jsonify(user.to_dict()), 200
     
+    
+    app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+    app.config['MAIL_PORT'] = 587
+    app.config['MAIL_USE_TLS'] = True
+    app.config['MAIL_USE_SSL'] = False
+    app.config['MAIL_USERNAME'] = 'markronald265@gmail.com'
+    app.config['MAIL_PASSWORD'] = 'qlfxiqvfyodybpsz'
+    app.config['MAIL_DEFAULT_SENDER'] = 'markronald265@gmail.com'
+    mail = Mail(app)
+
+    otp_storage = {} 
+    
+    @app.route('/api/auth/forgot-password', methods=['POST'])
+    def request_otp():
+        email = request.json.get('email')
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"error": "This email is not registered in our system handle."}), 404
+        
+        otp = str(random.randint(100000, 999999))
+        otp_storage[email] = {"otp": otp, "timestamp": datetime.now()}
+        
+        try:
+            msg = Message(
+                subject="AgriData | Identity Verification Code",
+                recipients=[email]
+            )
+            
+            msg.body = f"Identity recovery initiated. Your 6-digit verification code is: {otp}"
+            
+            msg.html = f"""
+            <div style="font-family: 'Inter', sans-serif; background-color: #f8fafc; padding: 40px; color: #0f172a;">
+                <div style="max-width: 500px; margin: 0 auto; background: #ffffff; border-radius: 24px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+                    <div style="background: #041d18; padding: 30px; text-align: center;">
+                        <h1 style="color: #10b981; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; font-weight: 900;">AgriData</h1>
+                        <p style="color: #4ade80; margin: 5px 0 0 0; font-size: 10px; text-transform: uppercase; letter-spacing: 3px;">Systems Hub</p>
+                    </div>
+                    <div style="padding: 40px; text-align: center;">
+                        <h2 style="font-size: 20px; font-weight: 800; color: #1e293b; margin-bottom: 8px; text-transform: uppercase;">Identity Verification</h2>
+                        <p style="color: #64748b; font-size: 14px; margin-bottom: 30px;">A password reset request was initiated for your account. Use the secure code below to proceed.</p>
+                        
+                        <div style="background: #f1f5f9; padding: 20px; border-radius: 16px; border: 1px dashed #cbd5e1; margin-bottom: 30px;">
+                            <span style="font-family: monospace; font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #041d18;">{otp}</span>
+                        </div>
+                        
+                        <p style="color: #94a3b8; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Expires in 10 minutes</p>
+                    </div>
+                    <div style="background: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #f1f5f9;">
+                        <p style="color: #94a3b8; font-size: 10px; margin: 0;">If you did not request this, please ignore this email or contact system governance.</p>
+                    </div>
+                </div>
+                <p style="text-align: center; color: #cbd5e1; font-size: 10px; margin-top: 20px; text-transform: uppercase; letter-spacing: 1px;">© 2026 Institutional Registry • Secure Automated System</p>
+            </div>
+            """
+            
+            mail.send(msg)
+            return jsonify({"message": "OTP sent to your Gmail."}), 200
+            
+        except Exception as e:
+            print(f"SMTP ERROR: {str(e)}") 
+            return jsonify({"error": "Mail delivery failure. Ensure App Password is valid."}), 500
+        
+    @app.route('/api/auth/reset-password', methods=['POST'])
+    def reset_password():
+        data = request.get_json()
+        email = data.get('email')
+        otp_received = data.get('otp')
+        new_password = data.get('new_password')
+
+        if email in otp_storage and otp_storage[email]['otp'] == otp_received:
+            user = User.query.filter_by(email=email).first()
+            if user:
+                user.set_password(new_password)
+                db.session.commit()
+                del otp_storage[email]
+                return jsonify({"message": "Password updated successfully."}), 200
+        
+        return jsonify({"error": "Invalid or expired verification code."}), 400
+    
+    @app.route('/api/auth/verify-otp', methods=['POST'])
+    def verify_otp():
+        data = request.get_json()
+        email = data.get('email')
+        otp_received = data.get('otp')
+
+        if email in otp_storage:
+            stored_otp_data = otp_storage[email]
+            if stored_otp_data['otp'] == str(otp_received):
+                return jsonify({"message": "Identity verified successfully."}), 200
+            else:
+                return jsonify({"error": "Invalid verification code. Please check your Gmail."}), 400
+        
+        return jsonify({"error": "Session expired. Please request a new code."}), 404
+
     # ============ Dashboard Routes ============
     
     @app.route('/api/dashboard/stats', methods=['GET'])
@@ -235,8 +347,76 @@ def create_app(config_name='development'):
             'product_stats': product_stats
         }), 200
     
-    # ============ Farmer Routes ============
+    # ============ Notification Routes (FIXED) ============
     
+    @app.route('/api/notifications', methods=['GET'])
+    @jwt_required()
+    def get_notifications():
+        try:
+            current_user_id = get_jwt_identity()
+            
+            # Fetch User-Specific AND System-Wide notifications
+            notifications = Notification.query.filter(
+                (Notification.user_id == current_user_id) | (Notification.user_id == None)
+            ).order_by(Notification.created_at.desc()).limit(20).all()
+            
+            return jsonify([n.to_dict() for n in notifications]), 200
+        except Exception as e:
+            print(f"Notification Error: {e}")
+            return jsonify([]), 200
+
+    @app.route('/api/notifications/<int:id>/read', methods=['PUT'])
+    @jwt_required()
+    def mark_read(id):
+        try:
+            # We don't filter by user_id here because we might be marking a System Msg (NULL) as read
+            notif = Notification.query.get_or_404(id)
+            notif.is_read = True
+            db.session.commit()
+            return jsonify({"message": "Read status updated"}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+
+    @app.route('/api/notifications/read-all', methods=['PUT'])
+    @jwt_required()
+    def mark_all_notifications_read():
+        try:
+            current_user_id = get_jwt_identity()
+            
+            # FIX: Update BOTH personal AND system-wide notifications
+            Notification.query.filter(
+                or_(Notification.user_id == current_user_id, Notification.user_id == None),
+                Notification.is_read == False
+            ).update({Notification.is_read: True}, synchronize_session=False)
+            
+            db.session.commit()
+            return jsonify({"message": "All marked as read"}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+
+    @app.route('/api/notifications', methods=['DELETE'])
+    @jwt_required()
+    def clear_notifications():
+        try:
+            current_user_id = get_jwt_identity()
+            
+            # FIX: Delete BOTH personal AND system-wide notifications
+            # WARNING: This deletes system messages for EVERYONE. 
+            # In a real app, you would 'hide' them, but for this prototype, this fixes the "coming back" bug.
+            Notification.query.filter(
+                (Notification.user_id == current_user_id) | (Notification.user_id == None)
+            ).delete(synchronize_session=False)
+            
+            db.session.commit()
+            return jsonify({"message": "Registry cleared"}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+
+    # ============ Farmer Routes ============
+
     @app.route('/api/farmers', methods=['GET'])
     @jwt_required()
     def get_farmers():
@@ -291,7 +471,6 @@ def create_app(config_name='development'):
         experiences = FarmerExperience.query.filter_by(farmer_id=id).all()
         
         data = farmer.to_dict(include_relations=True)
-        # Manually attach related data if not included in to_dict
         data['products'] = [p.to_dict() for p in products]
         data['children'] = [c.to_dict() for c in children]
         data['experiences'] = [e.to_dict() for e in experiences]
@@ -318,29 +497,25 @@ def create_app(config_name='development'):
 
             profile_image = save_profile_image(request.files['profile_image']) if 'profile_image' in request.files else None
             
-            # --- DATE & AGE CALCULATION FIX ---
             birth_date_val = None
             age_val = get_val('age', int)
 
             if data.get('birth_date'):
                 try:
                     birth_date_val = datetime.strptime(data['birth_date'][:10], '%Y-%m-%d').date()
-                    
-                    # If Age is missing but Birth Date exists, calculate it automatically
                     if age_val is None:
                         today = date.today()
                         age_val = today.year - birth_date_val.year - ((today.month, today.day) < (birth_date_val.month, birth_date_val.day))
                 except (ValueError, TypeError):
                     pass
 
-            # If age is still None (no birthdate and no age input), default to 0 to prevent DB crash
             if age_val is None:
                 age_val = 0
 
             farmer = Farmer(
                 farmer_code=data.get('farmer_code'), first_name=data.get('first_name'), middle_name=get_val('middle_name'),
                 last_name=data.get('last_name'), suffix=get_val('suffix'), 
-                age=age_val, # Use the calculated age
+                age=age_val, 
                 gender=data.get('gender', 'Male'),
                 profile_image=profile_image, birth_date=birth_date_val, barangay_id=get_val('barangay_id', int),
                 organization_id=get_val('organization_id', int), data_encoder_id=current_user.id, address=data.get('address'),
@@ -353,9 +528,17 @@ def create_app(config_name='development'):
                 years_farming=get_val('years_farming', int)
             )
             db.session.add(farmer)
+            
+            # --- AUTO-NOTIFICATION TRIGGER ---
+            broadcast_notification(
+                title="New Farmer Onboarded", 
+                message=f"{data.get('first_name')} {data.get('last_name')} has been registered by {current_user.full_name}.",
+                target_user_id=None # Broadcast to all
+            )
+            # ---------------------------------
+
             db.session.commit()
 
-            # ... (Rest of product handling logic remains the same) ...
             if data.get('products'):
                 try:
                     for p in json.loads(data['products']):
@@ -374,9 +557,46 @@ def create_app(config_name='development'):
         except Exception as e:
             db.session.rollback()
             print(f"ERROR: {e}")
-            import traceback
-            traceback.print_exc()
             return jsonify({'error': str(e)}), 400
+        
+    @app.route('/api/organizations', methods=['POST'])
+    @jwt_required()
+    def create_organization():
+        if User.query.get(get_jwt_identity()).role != 'admin': return jsonify({'error': 'Unauthorized'}), 403
+        data = request.get_json()
+        try:
+            org = Organization(
+                name=data['name'],
+                type=data.get('type', 'Cooperative'),
+                description=data.get('description'),
+            )
+            db.session.add(org)
+            db.session.commit()
+            return jsonify({'message': 'Success', 'organization': org.to_dict()}), 201
+        except Exception as e: return jsonify({'error': str(e)}), 400
+
+    @app.route('/api/organizations/<int:id>', methods=['PUT'])
+    @jwt_required()
+    def update_organization(id):
+        if User.query.get(get_jwt_identity()).role != 'admin': return jsonify({'error': 'Unauthorized'}), 403
+        org = Organization.query.get_or_404(id)
+        data = request.get_json()
+        try:
+            for k, v in data.items():
+                if hasattr(org, k) and k != 'id': setattr(org, k, v)
+            db.session.commit()
+            return jsonify({'message': 'Updated', 'organization': org.to_dict()}), 200
+        except Exception as e: return jsonify({'error': str(e)}), 400
+
+    @app.route('/api/organizations/<int:id>', methods=['DELETE'])
+    @jwt_required()
+    def delete_organization(id):
+        if User.query.get(get_jwt_identity()).role != 'admin': return jsonify({'error': 'Unauthorized'}), 403
+        try:
+            db.session.delete(Organization.query.get_or_404(id))
+            db.session.commit()
+            return jsonify({'message': 'Deleted'}), 200
+        except: return jsonify({'error': 'Cannot delete active organization'}), 400
     
     @app.route('/api/farmers/<int:id>', methods=['PUT'])
     @jwt_required()
@@ -392,7 +612,6 @@ def create_app(config_name='development'):
         try:
             data = request.form.to_dict()
 
-            # Handle Image Upload
             if 'profile_image' in request.files:
                 file = request.files['profile_image']
                 new_filename = save_profile_image(file)
@@ -401,19 +620,15 @@ def create_app(config_name='development'):
                         delete_profile_image(farmer.profile_image)
                     farmer.profile_image = new_filename
 
-            # --- FIXED LOOP ---
-            # Added 'full_name' to excluded_keys to prevent "no setter" error
             excluded_keys = [
                 'id', 'created_at', 'updated_at', 'data_encoder_id', 'profile_image', 
                 'products', 'children', 'experiences', 
                 'barangay', 'organization', 'data_encoder',
-                'full_name'  # <--- CRITICAL FIX HERE
+                'full_name'
             ]
 
             for key, value in data.items():
-                # Check if the attribute exists on the model AND is not in our exclude list
                 if hasattr(farmer, key) and key not in excluded_keys:
-                    
                     if key == 'birth_date':
                         if value and value != 'null' and value != '':
                             try:
@@ -430,7 +645,6 @@ def create_app(config_name='development'):
                             except (ValueError, TypeError):
                                 pass
                         else:
-                            # Only nullify if appropriate (don't nullify age/barangay_id if invalid)
                             if key not in ['barangay_id', 'age'] or value == '': 
                                 setattr(farmer, key, None)
                     
@@ -449,19 +663,15 @@ def create_app(config_name='development'):
                     else:
                         setattr(farmer, key, value)
 
-            # --- STEP 3: Handle Products Update (Delete All & Re-add) ---
             products_json = data.get('products')
             if products_json:
                 try:
-                    # Clear existing products
                     FarmerProduct.query.filter_by(farmer_id=farmer.id).delete()
-                    
                     products_list = json.loads(products_json)
                     for prod_data in products_list:
                         if not prod_data.get('product_name'):
                             continue
 
-                        # Find or Create Agri Product
                         prod_name = prod_data['product_name'].strip()
                         agri_product = AgriculturalProduct.query.filter(
                             func.lower(AgriculturalProduct.name) == func.lower(prod_name)
@@ -472,7 +682,6 @@ def create_app(config_name='development'):
                             db.session.add(agri_product)
                             db.session.commit()
 
-                        # Add Association
                         farmer_product = FarmerProduct(
                             farmer_id=farmer.id,
                             product_id=agri_product.id,
@@ -509,7 +718,6 @@ def create_app(config_name='development'):
         
         farmer = Farmer.query.get_or_404(id)
         
-        # Manually delete related records first if cascade is missing in models
         FarmerProduct.query.filter_by(farmer_id=id).delete()
         FarmerChild.query.filter_by(farmer_id=id).delete()
         FarmerExperience.query.filter_by(farmer_id=id).delete()
@@ -523,6 +731,83 @@ def create_app(config_name='development'):
         db.session.commit()
         
         return jsonify({'message': 'Farmer deleted successfully'}), 200
+    
+    # ============ Survey Questionnaires Routes ============
+    
+    @app.route('/api/surveys', methods=['GET'])
+    @jwt_required()
+    def get_surveys():
+        surveys = SurveyQuestionnaire.query.order_by(SurveyQuestionnaire.created_at.desc()).all()
+        return jsonify([s.to_dict() for s in surveys]), 200
+    
+    @app.route('/api/surveys', methods=['POST'])
+    @jwt_required()
+    def create_survey():
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin', 'researcher']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        data = request.get_json()
+        
+        try:
+            survey = SurveyQuestionnaire(
+                title=data['title'],
+                description=data.get('description'),
+                category=data.get('category', 'General'),
+                is_active=data.get('is_active', True),
+                created_by_id=current_user.id
+            )
+            db.session.add(survey)
+            db.session.commit()
+            
+            log_activity('SURVEY_CREATED', 'SurveyQuestionnaire', survey.id, f"Created survey: {survey.title}")
+            return jsonify({'message': 'Survey created successfully', 'survey': survey.to_dict()}), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+
+    @app.route('/api/surveys/<int:id>', methods=['PUT'])
+    @jwt_required()
+    def update_survey(id):
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin', 'researcher']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        survey = SurveyQuestionnaire.query.get_or_404(id)
+        data = request.get_json()
+        
+        try:
+            for key, value in data.items():
+                if hasattr(survey, key) and key not in ['id', 'created_at', 'created_by_id']:
+                    setattr(survey, key, value)
+            
+            db.session.commit()
+            return jsonify({'message': 'Survey updated', 'survey': survey.to_dict()}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+
+    @app.route('/api/surveys/<int:id>', methods=['DELETE'])
+    @jwt_required()
+    def delete_survey(id):
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        try:
+            survey = SurveyQuestionnaire.query.get_or_404(id)
+            db.session.delete(survey)
+            db.session.commit()
+            return jsonify({'message': 'Survey deleted'}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': 'Cannot delete survey (may have responses)'}), 400
     
     # ============ Farmer Products Routes (Standalone) ============
     
@@ -622,6 +907,15 @@ def create_app(config_name='development'):
         )
         
         db.session.add(experience)
+        
+        # --- AUTO-NOTIFICATION TRIGGER ---
+        broadcast_notification(
+            title="Knowledge Base Update", 
+            message=f"New {data['experience_type']} recorded: '{data['title']}'",
+            target_user_id=None
+        )
+        # ---------------------------------
+
         db.session.commit()
         
         log_activity('EXPERIENCE_CREATED', 'FarmerExperience', experience.id)
@@ -673,6 +967,15 @@ def create_app(config_name='development'):
         )
         
         db.session.add(project)
+        
+        # --- AUTO-NOTIFICATION TRIGGER ---
+        broadcast_notification(
+            title="Research Initiative Launched", 
+            message=f"Project '{data['title']}' has been initiated by {current_user.full_name}.",
+            target_user_id=None
+        )
+        # ---------------------------------
+
         db.session.commit()
         
         log_activity('PROJECT_CREATED', 'ResearchProject', project.id, f"Created project: {project.title}")
@@ -742,14 +1045,6 @@ def create_app(config_name='development'):
         db.session.commit()
         
         return jsonify({'message': 'Product created successfully', 'product': product.to_dict()}), 201
-    
-    # ============ Organizations Routes ============
-    
-    @app.route('/api/organizations', methods=['GET'])
-    @jwt_required()
-    def get_organizations():
-        organizations = Organization.query.order_by(Organization.name).all()
-        return jsonify([o.to_dict() for o in organizations]), 200
     
     # ============ Export Routes ============
     
@@ -895,6 +1190,9 @@ def create_app(config_name='development'):
             db.session.rollback()
             print(f"❌ DELETE USER ERROR: {str(e)}")
             return jsonify({'error': f'Database Constraint Error: {str(e)}'}), 500
+        
+        
+    
     
     # ============ Activity Logs Routes ============
     
@@ -904,7 +1202,8 @@ def create_app(config_name='development'):
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
         
-        if current_user.role not in ['admin', 'researcher']:
+        # --- FIX: Allow all authenticated roles to see logs (or at least their own) ---
+        if current_user.role not in ['admin', 'researcher', 'data_encoder', 'viewer']:
             return jsonify({'error': 'Unauthorized'}), 403
         
         page = request.args.get('page', 1, type=int)

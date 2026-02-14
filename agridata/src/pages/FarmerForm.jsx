@@ -6,6 +6,8 @@ import {
   Calendar, Phone, DollarSign, Ruler, Trash2,
   Plus, Loader2, ChevronLeft, AlertCircle, Fingerprint, Globe, Briefcase, GraduationCap, Building2, Hash
 } from 'lucide-react';
+import FarmerChildren from '../components/FarmerChildren';
+import FarmerProducts from '../components/FarmerProducts';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace('/api', '');
 
@@ -16,35 +18,35 @@ export default function FarmerForm() {
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditMode);
-  
+
   // Data Lists
   const [barangays, setBarangays] = useState([]);
   const [organizations, setOrganizations] = useState([]);
-  
+
   const [error, setError] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
 
   const [formData, setFormData] = useState({
-    farmer_code: '', // Added Critical Field
-    first_name: '', 
-    last_name: '', 
-    middle_name: '', 
-    extension_name: '', // Added Input
-    birth_date: '', 
-    gender: 'Male', 
-    civil_status: 'Single', // Added Input
+    farmer_code: '', 
+    first_name: '',
+    last_name: '',
+    middle_name: '',
+    extension_name: '', 
+    birth_date: '',
+    gender: 'Male',
+    civil_status: 'Single', 
     barangay_id: '',
-    organization_id: '', // Added Input
-    address: '', 
-    contact_number: '', 
+    organization_id: '', 
+    address: '',
+    contact_number: '',
     education_level: 'High School Graduate',
-    primary_occupation: 'Farming', 
-    years_farming: 0, 
+    primary_occupation: 'Farming',
+    years_farming: 0,
     farm_size_hectares: 0,
-    land_ownership: 'Owner', 
-    annual_income: 0, 
+    land_ownership: 'Owner',
+    annual_income: 0,
     income_source: 'Farming',
-    profile_image: null, 
+    profile_image: null,
     products: []
   });
 
@@ -53,7 +55,6 @@ export default function FarmerForm() {
     if (isEditMode) {
       fetchFarmerDetails();
     } else {
-      // Auto-generate a code for new farmers
       generateFarmerCode();
     }
   }, [id]);
@@ -97,10 +98,8 @@ export default function FarmerForm() {
     finally { setInitialLoading(false); }
   };
 
-const handleChange = (e) => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    
-    // Auto-calculate Age when Birth Date changes
     if (name === 'birth_date') {
       const birthDate = new Date(value);
       const today = new Date();
@@ -109,7 +108,6 @@ const handleChange = (e) => {
       if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
         age--;
       }
-      // Update both birth_date and age
       setFormData(prev => ({ ...prev, [name]: value, age: age >= 0 ? age : 0 }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
@@ -124,7 +122,6 @@ const handleChange = (e) => {
     }
   };
 
-  // --- Product Handling ---
   const addProduct = () => {
     setFormData(prev => ({
       ...prev,
@@ -144,14 +141,12 @@ const handleChange = (e) => {
     setFormData(prev => ({ ...prev, products: newProducts }));
   };
 
-  // --- Submission Logic ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     try {
-      // Use FormData for Image Uploads
       const data = new FormData();
       Object.keys(formData).forEach(key => {
         if (key === 'products') {
@@ -172,7 +167,6 @@ const handleChange = (e) => {
       }
       navigate('/farmers');
     } catch (err) {
-      console.error(err);
       setError(err.response?.data?.error || err.response?.data?.message || 'Submission failed.');
     } finally {
       setLoading(false);
@@ -181,39 +175,40 @@ const handleChange = (e) => {
 
   if (initialLoading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Loader2 className="animate-spin text-emerald-600" size={40} />
+      <div className="min-h-[60vh] flex flex-col items-center justify-center dark:bg-[#020c0a] rounded-[3rem]">
+        <Loader2 className="animate-spin text-emerald-600 mb-4" size={40} />
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Accessing Registry...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-emerald-100 pb-20">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 pb-20 transition-colors duration-300">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12 animate-in fade-in duration-700">
-        
+
         {/* HEADER */}
         <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <Link to="/farmers" className="p-2.5 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-emerald-600 transition-all shadow-sm">
+              <Link to="/farmers" className="p-2.5 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-xl text-slate-400 hover:text-emerald-600 transition-all shadow-sm">
                 <ChevronLeft size={20} />
               </Link>
               <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-emerald-600 rounded-lg text-white shadow-lg shadow-emerald-200">
-                   <Fingerprint size={16} />
+                <div className="p-1.5 bg-emerald-600 rounded-lg text-white shadow-lg shadow-emerald-200 dark:shadow-none">
+                  <Fingerprint size={16} />
                 </div>
-                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em]">Identity Protocol</span>
+                <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-[0.3em]">Identity Protocol</span>
               </div>
             </div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase">
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
               {isEditMode ? 'Update Identity' : 'Onboard Profile'}
             </h1>
-            <p className="text-slate-500 font-medium mt-2">Specify agricultural credentials and personal specs for institutional mapping.</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">Specify agricultural credentials and personal specs for institutional mapping.</p>
           </div>
         </header>
 
         {error && (
-          <div className="bg-rose-50 border border-rose-100 text-rose-600 p-6 rounded-[2rem] flex items-center gap-4 shadow-sm animate-in slide-in-from-top-4">
+          <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 p-6 rounded-[2rem] flex items-center gap-4 shadow-sm animate-in slide-in-from-top-4">
             <AlertCircle size={24} />
             <span className="font-bold text-sm tracking-tight uppercase tracking-widest">{error}</span>
           </div>
@@ -224,14 +219,14 @@ const handleChange = (e) => {
           {/* SECTION 1: IDENTITY */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-4 space-y-8">
-              <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
+              <div className="bg-white dark:bg-[#0b241f] p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
                 <div className="relative z-10">
                   <div className="relative group w-44 h-44 mb-6 mx-auto">
-                    <div className={`w-full h-full rounded-[3.5rem] overflow-hidden border-8 border-slate-50 shadow-inner flex items-center justify-center bg-slate-100 transition-all duration-500 group-hover:scale-105 ${!imagePreview ? 'border-dashed border-slate-200' : ''}`}>
+                    <div className={`w-full h-full rounded-[3.5rem] overflow-hidden border-8 border-slate-50 dark:border-[#020c0a] shadow-inner flex items-center justify-center bg-slate-100 dark:bg-[#020c0a] transition-all duration-500 group-hover:scale-105 ${!imagePreview ? 'border-dashed border-slate-200 dark:border-white/10' : ''}`}>
                       {imagePreview ? (
                         <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                       ) : (
-                        <User size={64} className="text-slate-300" />
+                        <User size={64} className="text-slate-300 dark:text-slate-700" />
                       )}
                     </div>
                     <label className="absolute inset-0 flex items-center justify-center bg-slate-900/60 text-white opacity-0 group-hover:opacity-100 rounded-[3.5rem] cursor-pointer transition-all duration-300 backdrop-blur-sm">
@@ -239,33 +234,33 @@ const handleChange = (e) => {
                       <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
                     </label>
                   </div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Biometric Capture</p>
+                  <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Biometric Capture</p>
                 </div>
-                <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-emerald-50 rounded-full blur-3xl opacity-40 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-emerald-50 dark:bg-emerald-900/10 rounded-full blur-3xl opacity-40 group-hover:opacity-100 transition-opacity" />
               </div>
             </div>
 
-            <div className="lg:col-span-8 bg-white p-10 md:p-12 rounded-[3rem] border border-slate-100 shadow-sm space-y-10 relative overflow-hidden">
+            <div className="lg:col-span-8 bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10 relative overflow-hidden">
               <div className="flex items-center gap-3 relative z-10">
-                <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 shadow-inner"><User size={20}/></div>
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Core Specifications</h3>
+                <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-2xl text-slate-400 dark:text-slate-500 shadow-inner"><User size={20} /></div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Core Specifications</h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Reference Code</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Reference Code</label>
                   <div className="relative">
-                    <Hash className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <Hash className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
                     <input required type="text" name="farmer_code" value={formData.farmer_code} onChange={handleChange}
-                      className="w-full pl-14 pr-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold shadow-inner outline-none" />
+                      className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Affiliation</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Affiliation</label>
                   <div className="relative">
-                    <Building2 className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <Building2 className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
                     <select required name="organization_id" value={formData.organization_id} onChange={handleChange}
-                      className="w-full pl-14 pr-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold shadow-inner outline-none appearance-none">
+                      className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
                       <option value="">Select Organization...</option>
                       {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
                     </select>
@@ -273,43 +268,43 @@ const handleChange = (e) => {
                 </div>
 
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Legal First Name</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal First Name</label>
                   <input required type="text" name="first_name" value={formData.first_name} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold shadow-inner outline-none" />
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Legal Last Name</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal Last Name</label>
                   <input required type="text" name="last_name" value={formData.last_name} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold shadow-inner outline-none" />
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Middle Name</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Middle Name</label>
                   <input type="text" name="middle_name" value={formData.middle_name} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold shadow-inner outline-none" />
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Suffix</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Suffix</label>
                   <input type="text" name="extension_name" value={formData.extension_name} onChange={handleChange} placeholder="Jr., Sr., III"
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold shadow-inner outline-none" />
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Birth Date</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Birth Date</label>
                   <input type="date" name="birth_date" value={formData.birth_date} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold shadow-inner outline-none" />
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Gender</label>
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Gender</label>
                     <select name="gender" value={formData.gender} onChange={handleChange}
-                      className="w-full px-4 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold shadow-inner outline-none appearance-none">
+                      className="w-full px-4 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                     </select>
                   </div>
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Civil Status</label>
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Civil Status</label>
                     <select name="civil_status" value={formData.civil_status} onChange={handleChange}
-                      className="w-full px-4 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold shadow-inner outline-none appearance-none">
+                      className="w-full px-4 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
                       <option value="Single">Single</option>
                       <option value="Married">Married</option>
                       <option value="Widowed">Widowed</option>
@@ -322,31 +317,31 @@ const handleChange = (e) => {
           </div>
 
           {/* SECTION 2: GEOGRAPHIC */}
-          <div className="bg-white p-10 md:p-12 rounded-[3rem] border border-slate-100 shadow-sm space-y-10">
+          <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-50 text-blue-500 rounded-2xl shadow-inner"><Globe size={20}/></div>
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Geographic Protocol</h3>
+              <div className="p-3 bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-2xl shadow-inner"><Globe size={20} /></div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Geographic Protocol</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Assigned Barangay</label>
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Assigned Barangay</label>
                 <select required name="barangay_id" value={formData.barangay_id} onChange={handleChange}
-                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold shadow-inner outline-none appearance-none transition-all">
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
                   <option value="">Select Territory...</option>
                   {barangays.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
               <div className="space-y-3 md:col-span-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Terminal Address (Purok/Sitio)</label>
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Terminal Address (Purok/Sitio)</label>
                 <input type="text" name="address" value={formData.address} onChange={handleChange}
-                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold shadow-inner outline-none transition-all" placeholder="Unit, Street, Complex" />
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" placeholder="Unit, Street, Complex" />
               </div>
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Communication Link</label>
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Communication Link</label>
                 <div className="relative">
-                  <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                  <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
                   <input type="text" name="contact_number" value={formData.contact_number} onChange={handleChange}
-                    className="w-full pl-14 pr-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold shadow-inner outline-none transition-all" placeholder="+63 000 000 0000" />
+                    className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" placeholder="+63 000 000 0000" />
                 </div>
               </div>
             </div>
@@ -354,26 +349,26 @@ const handleChange = (e) => {
 
           {/* SECTION 3: METRICS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-white p-10 md:p-12 rounded-[3rem] border border-slate-100 shadow-sm space-y-10">
+            <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-amber-50 text-amber-500 rounded-2xl shadow-inner"><Ruler size={20}/></div>
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Agricultural Metrics</h3>
+                <div className="p-3 bg-amber-50 dark:bg-amber-500/10 text-amber-500 dark:text-amber-400 rounded-2xl shadow-inner"><Ruler size={20} /></div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Agricultural Metrics</h3>
               </div>
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Land Area (HA)</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Land Area (HA)</label>
                   <input type="number" step="0.01" name="farm_size_hectares" value={formData.farm_size_hectares} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold shadow-inner outline-none transition-all" />
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tenure (Yrs)</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Tenure (Yrs)</label>
                   <input type="number" name="years_farming" value={formData.years_farming} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold shadow-inner outline-none transition-all" />
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
                 </div>
                 <div className="col-span-2 space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Land Ownership Model</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Land Ownership Model</label>
                   <select name="land_ownership" value={formData.land_ownership} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold shadow-inner outline-none appearance-none transition-all">
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
                     <option value="Owner">Global Owner</option>
                     <option value="Tenant">Tenant Custodian</option>
                     <option value="Leaseholder">Leaseholder</option>
@@ -383,16 +378,16 @@ const handleChange = (e) => {
               </div>
             </div>
 
-            <div className="bg-white p-10 md:p-12 rounded-[3rem] border border-slate-100 shadow-sm space-y-10">
+            <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-indigo-50 text-indigo-500 rounded-2xl shadow-inner"><DollarSign size={20}/></div>
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Economic Profile</h3>
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 rounded-2xl shadow-inner"><DollarSign size={20} /></div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Economic Profile</h3>
               </div>
               <div className="space-y-8">
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Educational Background</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Educational Background</label>
                   <select name="education_level" value={formData.education_level} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold shadow-inner outline-none appearance-none transition-all">
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
                     <option value="Elementary">Elementary Cycle</option>
                     <option value="High School Graduate">High School Diploma</option>
                     <option value="College Undergraduate">College Undergrad</option>
@@ -403,14 +398,14 @@ const handleChange = (e) => {
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Annual Yield (₱)</label>
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Annual Yield (₱)</label>
                     <input type="number" name="annual_income" value={formData.annual_income} onChange={handleChange}
-                      className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold shadow-inner outline-none transition-all" />
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
                   </div>
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Primary Revenue Source</label>
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Primary Revenue Source</label>
                     <input type="text" name="income_source" value={formData.income_source} onChange={handleChange}
-                      className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold shadow-inner outline-none transition-all" />
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
                   </div>
                 </div>
               </div>
@@ -418,54 +413,54 @@ const handleChange = (e) => {
           </div>
 
           {/* SECTION 4: PRODUCTION */}
-          <div className="bg-white p-10 md:p-12 rounded-[3rem] border border-slate-100 shadow-sm space-y-10">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-6 pb-2 border-b border-slate-50">
+          <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10 transition-all">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-6 pb-2 border-b border-slate-50 dark:border-white/5">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl shadow-inner"><Sprout size={20}/></div>
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Yield Documentation</h3>
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl shadow-inner"><Sprout size={20} /></div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Yield Documentation</h3>
               </div>
-              <button type="button" onClick={addProduct} className="group inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-200 hover:bg-emerald-500 active:scale-95 transition-all">
-                <Plus size={14} className="group-hover:rotate-90 transition-transform"/> Append Commodity
+              <button type="button" onClick={addProduct} className="group inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all">
+                <Plus size={14} className="group-hover:rotate-90 transition-transform" /> Append Commodity
               </button>
             </div>
 
             <div className="space-y-6">
               {formData.products.length === 0 ? (
-                <div className="p-20 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200">
-                  <div className="p-5 bg-white rounded-full inline-flex text-slate-200 mb-6 shadow-sm"><Briefcase size={32}/></div>
-                  <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">No active commodities detected</h4>
-                  <p className="text-xs text-slate-400 mt-2">Initialize yield data by appending a new crop profile.</p>
+                <div className="p-20 text-center bg-slate-50 dark:bg-white/5 rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-white/10">
+                  <div className="p-5 bg-white dark:bg-[#0b241f] rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-6 shadow-sm"><Briefcase size={32} /></div>
+                  <h4 className="text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">No active commodities detected</h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-600 mt-2">Initialize yield data by appending a new crop profile.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-6">
                   {formData.products.map((product, index) => (
-                    <div key={index} className="flex flex-col lg:flex-row gap-6 items-start lg:items-end p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 transition-all hover:bg-white hover:shadow-xl group animate-in slide-in-from-right-4">
+                    <div key={index} className="flex flex-col lg:flex-row gap-6 items-start lg:items-end p-8 bg-slate-50 dark:bg-white/5 rounded-[2.5rem] border border-slate-100 dark:border-white/5 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl group animate-in slide-in-from-right-4">
                       <div className="flex-1 w-full space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Commodity Type</label>
+                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Commodity Type</label>
                         <input type="text" placeholder="e.g. Hybrid Rice" value={product.product_name} onChange={(e) => handleProductChange(index, 'product_name', e.target.value)}
-                          className="w-full px-6 py-3.5 bg-white border-none rounded-2xl text-sm font-bold shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
+                          className="w-full px-6 py-3.5 bg-white dark:bg-white/5 border-none rounded-2xl text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
                       </div>
                       <div className="w-full lg:w-40 space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Volume</label>
+                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Volume</label>
                         <input type="number" placeholder="0" value={product.production_volume} onChange={(e) => handleProductChange(index, 'production_volume', e.target.value)}
-                          className="w-full px-6 py-3.5 bg-white border-none rounded-2xl text-sm font-bold shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
+                          className="w-full px-6 py-3.5 bg-white dark:bg-white/5 border-none rounded-2xl text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
                       </div>
                       <div className="w-full lg:w-32 space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Unit</label>
+                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Unit</label>
                         <select value={product.unit} onChange={(e) => handleProductChange(index, 'unit', e.target.value)}
-                          className="w-full px-6 py-3.5 bg-white border-none rounded-2xl text-sm font-bold shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none">
+                          className="w-full px-6 py-3.5 bg-white dark:bg-white/5 border-none rounded-2xl text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none">
                           <option value="kg">kg</option><option value="tons">tons</option><option value="sacks">sacks</option>
                         </select>
                       </div>
                       <div className="flex items-center gap-6 pb-2">
                         <label className="flex items-center gap-3 cursor-pointer group/check">
-                          <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${product.is_primary ? 'bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200' : 'border-slate-200 bg-white group-hover/check:border-emerald-300'}`}>
+                          <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${product.is_primary ? 'bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200 dark:shadow-none' : 'border-slate-200 dark:border-white/20 bg-white dark:bg-white/5 group-hover/check:border-emerald-300'}`}>
                             {product.is_primary && <Plus size={14} className="text-white rotate-45" />}
                           </div>
                           <input type="checkbox" className="hidden" checked={product.is_primary} onChange={(e) => handleProductChange(index, 'is_primary', e.target.checked)} />
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Primary Yield</span>
+                          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Primary Yield</span>
                         </label>
-                        <button type="button" onClick={() => removeProduct(index)} className="p-3 bg-white border border-rose-100 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm active:scale-90">
+                        <button type="button" onClick={() => removeProduct(index)} className="p-3 bg-white dark:bg-[#041d18] border border-rose-100 dark:border-rose-500/20 text-rose-400 hover:bg-rose-500 dark:hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm active:scale-90">
                           <Trash2 size={18} />
                         </button>
                       </div>
@@ -476,12 +471,21 @@ const handleChange = (e) => {
             </div>
           </div>
 
+          {/* SECTION 5: FAMILY & SUCCESSION (Optimized in external component usually, but keeping context) */}
+          {isEditMode && (
+            <FarmerChildren
+              farmerId={id}
+              children={formData.children || []}
+              onUpdate={fetchFarmerDetails}
+            />
+          )}
+
           {/* ACTION DECK */}
-          <footer className="flex flex-col-reverse sm:flex-row justify-end gap-6 pt-10 border-t border-slate-100">
-            <button type="button" onClick={() => navigate('/farmers')} className="px-10 py-5 bg-white border border-slate-200 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-50 transition-all active:scale-95">
+          <footer className="flex flex-col-reverse sm:flex-row justify-end gap-6 pt-10 border-t border-slate-100 dark:border-white/5">
+            <button type="button" onClick={() => navigate('/farmers')} className="px-10 py-5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95">
               Abort Operation
             </button>
-            <button type="submit" disabled={loading} className="px-12 py-5 bg-emerald-600 text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-2xl shadow-emerald-200 hover:bg-emerald-500 hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
+            <button type="submit" disabled={loading} className="px-12 py-5 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
               <span>{isEditMode ? 'Commit Record Changes' : 'Finalize Identity Enrollment'}</span>
             </button>

@@ -61,6 +61,9 @@ export const authAPI = {
   login: (credentials) => api.post('/auth/login', credentials),
   register: (userData) => api.post('/auth/register', userData),
   getCurrentUser: () => api.get('/auth/me'),
+  requestOTP: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
+  verifyOTP: (data) => api.post('/auth/verify-otp', data),
 };
 
 // Dashboard API
@@ -81,6 +84,11 @@ export const farmersAPI = {
   addProduct: (farmerId, data) => api.post(`/farmers/${farmerId}/products`, data),
   addChild: (farmerId, data) => api.post(`/farmers/${farmerId}/children`, data),
   exportData: () => api.get('/export/farmers', { responseType: 'blob' }),
+  updateChild: (farmerId, childId, data) => 
+        api.put(`/farmers/${farmerId}/children/${childId}`, data),
+
+    deleteChild: (farmerId, childId) => 
+        api.delete(`/farmers/${farmerId}/children/${childId}`),
 };
 
 // Experiences API
@@ -110,6 +118,9 @@ export const productsAPI = {
 // Organizations API
 export const organizationsAPI = {
   getAll: () => api.get('/organizations'),
+    create: (data) => api.post('/organizations', data), // Added
+  update: (id, data) => api.put(`/organizations/${id}`, data), // Added
+  delete: (id) => api.delete(`/organizations/${id}`), // Added
 };
 
 // Users API (FIXED: Added delete method)
@@ -124,4 +135,24 @@ export const activityLogsAPI = {
   getAll: (params) => api.get('/activity-logs', { params }),
 };
 
+export const surveysAPI = {
+  getAll: () => api.get('/surveys'),
+  create: (data) => api.post('/surveys', data),
+  update: (id, data) => api.put(`/surveys/${id}`, data),
+  delete: (id) => api.delete(`/surveys/${id}`),
+};
+
+export const notificationsAPI = {
+  // Fetch all notifications for the current user
+  getAll: () => api.get('/notifications'),
+  
+  // Mark a specific alert as read
+  markAsRead: (id) => api.put(`/notifications/${id}/read`),
+  
+  // Mark all alerts as read for the user
+  markAllRead: () => api.put('/notifications/read-all'),
+  
+  // Wipe the notification history
+  deleteAll: () => api.delete('/notifications')
+};
 export default api;
