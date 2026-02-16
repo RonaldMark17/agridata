@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Info, FileText, Activity, Layers, Filter, AlertCircle, Loader2
 } from 'lucide-react';
 
-// --- Skeleton Component (Dark Mode Compatible) ---
+// --- Skeleton Component ---
 const ProjectSkeleton = () => (
   <div className="space-y-8 animate-pulse">
     {[1, 2, 3].map((i) => (
@@ -319,6 +319,10 @@ export default function ResearchProjects() {
                     <input type="text" required className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} placeholder="Enter formal title..." />
                   </div>
                   <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Project Abstract</label>
+                    <textarea className="w-full px-6 py-5 bg-slate-50 dark:bg-white/5 border-none rounded-3xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-medium dark:text-slate-200 shadow-inner min-h-[100px] outline-none" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Brief summary of the research..." />
+                  </div>
+                  <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Lead Investigator (Full Name)</label>
                     <input type="text" required className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" value={formData.principal_investigator_name} onChange={(e) => setFormData({ ...formData, principal_investigator_name: e.target.value })} placeholder="Who is leading this research?" />
                   </div>
@@ -357,7 +361,7 @@ export default function ResearchProjects() {
                 </div>
 
                 <div className="space-y-3 pb-10">
-                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Abstract & Intent</label>
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Objectives & KPI</label>
                     <textarea className="w-full px-6 py-5 bg-slate-50 dark:bg-white/5 border-none rounded-3xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-medium dark:text-slate-200 shadow-inner min-h-[160px] outline-none" value={formData.objectives} onChange={(e) => setFormData({ ...formData, objectives: e.target.value })} placeholder="Outline key performance indicators..." />
                 </div>
               </form>

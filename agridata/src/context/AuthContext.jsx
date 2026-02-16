@@ -23,11 +23,16 @@ export const AuthProvider = ({ children }) => {
       if (token && savedUser) {
         try {
           setUser(JSON.parse(savedUser));
-          // Verify token is still valid
+          
+          // Verify token validity with backend
           const response = await authAPI.getCurrentUser();
+          
+          // Update user data with latest from server
           setUser(response.data);
           localStorage.setItem('user', JSON.stringify(response.data));
         } catch (error) {
+          // If token invalid or user parse fails, clear everything
+          console.error("Auth Initialization Error:", error);
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           localStorage.removeItem('user');
@@ -41,15 +46,42 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (credentials) => {
+    // 1. Call Login API
     const response = await authAPI.login(credentials);
-    const { access_token, refresh_token, user } = response.data;
+    
+    // 2. Check if OTP is required (Stop here if true)
+    if (response.data.otp_required) {
+        return response.data; // Login.jsx will see this and switch to OTP screen
+    }
 
+    // 3. If No OTP required, log the user in immediately
+    const { access_token, refresh_token, user } = response.data;
+    
     localStorage.setItem('access_token', access_token);
     localStorage.setItem('refresh_token', refresh_token);
     localStorage.setItem('user', JSON.stringify(user));
 
     setUser(user);
-    return user;
+    return response.data;
+  };
+
+  // --- NEW: VERIFY OTP FUNCTION ---
+  const verifyOtp = async (data) => {
+    try {
+        const response = await authAPI.verifyOtp(data);
+        
+        // Backend returns tokens upon successful verification
+        const { access_token, refresh_token, user } = response.data;
+
+        localStorage.setItem('access_token', access_token);
+        localStorage.setItem('refresh_token', refresh_token);
+        localStorage.setItem('user', JSON.stringify(user));
+
+        setUser(user);
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
   };
 
   const logout = () => {
@@ -68,6 +100,7 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     login,
+    verifyOtp, // Exposed for Login.jsx
     logout,
     hasPermission,
   };

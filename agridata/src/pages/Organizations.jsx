@@ -3,17 +3,30 @@ import { organizationsAPI } from '../services/api';
 import { 
   Building2, Plus, Search, MapPin, Globe, 
   Users, Edit2, Trash2, X, Save, Loader2, 
-  Briefcase, Building, AlertCircle
+  Briefcase, Building, AlertCircle, Filter, Download, ArrowUpDown, Eye, PieChart
 } from 'lucide-react';
+
+const ORG_TYPES = ['Cooperative', 'Government', 'NGO', 'Private', 'Association'];
 
 export default function Organizations() {
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Modals
   const [showModal, setShowModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false); // NEW: View Modal
+  
+  // Selection & Forms
   const [editingOrg, setEditingOrg] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedOrg, setSelectedOrg] = useState(null); // NEW: For View Mode
   const [error, setError] = useState('');
+
+  // Filters & Sorting
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('All'); // NEW: Filter by Type
+  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' }); // NEW: Sorting
+  const [isExporting, setIsExporting] = useState(false);
 
   const initialForm = {
     name: '',
@@ -71,6 +84,31 @@ export default function Organizations() {
     }
   };
 
+  // --- NEW FEATURES ---
+
+  const handleExport = () => {
+    setIsExporting(true);
+    const headers = ["Name", "Type", "Location", "Description"];
+    const rows = organizations.map(o => [
+      `"${o.name}"`, o.type, `"${o.location}"`, `"${o.description}"`
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `partners_registry_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => setIsExporting(false), 1000);
+  };
+
+  const handleSort = () => {
+    setSortConfig(prev => ({
+      key: 'name',
+      direction: prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
   const handleEdit = (org) => {
     setEditingOrg(org);
     setFormData({
@@ -82,29 +120,47 @@ export default function Organizations() {
     setShowModal(true);
   };
 
+  const handleView = (org) => {
+    setSelectedOrg(org);
+    setShowViewModal(true);
+  };
+
   const closeModal = () => {
     setShowModal(false);
+    setShowViewModal(false);
     setEditingOrg(null);
+    setSelectedOrg(null);
     setFormData(initialForm);
     setError('');
   };
 
-  const filteredOrgs = organizations.filter(o => 
-    o.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    o.type?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // --- FILTER & SORT LOGIC ---
+  const filteredOrgs = organizations
+    .filter(o => {
+      const matchesSearch = o.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            o.type?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesType = typeFilter === 'All' || o.type === typeFilter;
+      return matchesSearch && matchesType;
+    })
+    .sort((a, b) => {
+      if (sortConfig.direction === 'asc') {
+        return a.name.localeCompare(b.name);
+      }
+      return b.name.localeCompare(a.name);
+    });
 
   const getTypeStyle = (type) => {
     switch(type) {
       case 'Government': return 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20';
       case 'NGO': return 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20';
       case 'Cooperative': return 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20';
+      case 'Private': return 'bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20';
       default: return 'bg-slate-50 text-slate-600 border-slate-100 dark:bg-white/5 dark:text-slate-400 dark:border-white/10';
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-blue-100 transition-colors duration-300 pb-20">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-blue-100 transition-colors duration-300 pb-20 relative">
       <div className="max-w-[1400px] mx-auto space-y-12 animate-in fade-in duration-700">
         
         {/* HEADER */}
@@ -129,17 +185,53 @@ export default function Organizations() {
           </button>
         </header>
 
-        {/* SEARCH BAR */}
-        <div className="px-4">
-          <div className="relative max-w-lg">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
-            <input 
-              type="text" 
-              placeholder="Search partner network..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-16 pr-6 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.5rem] shadow-sm text-sm font-bold dark:text-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
-            />
+        {/* CONTROLS (Search, Filter, Export) */}
+        <div className="px-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8 flex flex-col sm:flex-row gap-4">
+            
+            {/* Search */}
+            <div className="relative flex-[2]">
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
+              <input 
+                type="text" 
+                placeholder="Search partner network..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-16 pr-6 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.5rem] shadow-sm text-sm font-bold dark:text-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+              />
+            </div>
+
+            {/* Type Filter */}
+            <div className="relative flex-1">
+              <Filter className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
+              <select 
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="w-full pl-14 pr-6 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.5rem] shadow-sm text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 outline-none appearance-none cursor-pointer hover:bg-slate-50 dark:hover:bg-white/10 transition-colors"
+              >
+                <option value="All">All Entities</option>
+                {ORG_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+
+            {/* Sort & Export */}
+            <div className="flex gap-2">
+                <button onClick={handleSort} className="p-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.5rem] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm">
+                    <ArrowUpDown size={20} className={sortConfig.direction === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'}/>
+                </button>
+                <button onClick={handleExport} disabled={isExporting} className="p-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.5rem] text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shadow-sm">
+                    {isExporting ? <Loader2 className="animate-spin" size={20}/> : <Download size={20}/>}
+                </button>
+            </div>
+          </div>
+
+          {/* Metric Card */}
+          <div className="lg:col-span-4 bg-blue-50 dark:bg-blue-500/10 rounded-[1.5rem] border border-blue-100 dark:border-blue-500/20 p-4 flex items-center justify-between px-8 transition-colors">
+             <div className="flex items-center gap-3">
+               <PieChart size={20} className="text-blue-600 dark:text-blue-400"/>
+               <span className="text-xs font-black text-blue-900 dark:text-blue-300 uppercase tracking-widest">Total Partners</span>
+             </div>
+             <span className="text-2xl font-black text-blue-600 dark:text-blue-400">{organizations.length}</span>
           </div>
         </div>
 
@@ -147,42 +239,78 @@ export default function Organizations() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 px-4">
           {loading ? (
             [1,2,3].map(i => <div key={i} className="h-64 bg-white dark:bg-[#0b241f] rounded-[2.5rem] animate-pulse border border-slate-100 dark:border-white/5 shadow-sm" />)
-          ) : filteredOrgs.map(org => (
-            <div key={org.id} className="group bg-white dark:bg-[#0b241f] p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl dark:hover:shadow-black/40 transition-all relative overflow-hidden flex flex-col justify-between">
-              
-              <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="flex gap-2">
-                  <button onClick={() => handleEdit(org)} className="p-2 bg-slate-50 dark:bg-white/5 hover:bg-blue-50 dark:hover:bg-blue-500/20 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl transition-colors dark:text-slate-400"><Edit2 size={16}/></button>
-                  <button onClick={() => handleDelete(org.id)} className="p-2 bg-slate-50 dark:bg-white/5 hover:bg-rose-50 dark:hover:bg-rose-500/20 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl transition-colors dark:text-slate-400"><Trash2 size={16}/></button>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-start justify-between mb-6">
-                  <div className={`p-4 rounded-2xl border transition-colors ${getTypeStyle(org.type)}`}>
-                    <Building size={24} />
-                  </div>
-                </div>
-
-                <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight mb-2 uppercase tracking-tight">{org.name}</h3>
-                <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border mb-4 transition-colors ${getTypeStyle(org.type)}`}>
-                  {org.type || 'Organization'}
-                </span>
+          ) : filteredOrgs.length === 0 ? (
+            <div className="col-span-full py-20 text-center text-slate-400 dark:text-slate-600 font-bold uppercase tracking-widest">No organizations match your criteria</div>
+          ) : (
+            filteredOrgs.map(org => (
+              <div key={org.id} className="group bg-white dark:bg-[#0b241f] p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl dark:hover:shadow-black/40 transition-all relative overflow-hidden flex flex-col justify-between h-full">
                 
-                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed line-clamp-3">
-                  {org.description || 'No institutional description available.'}
-                </p>
-              </div>
+                {/* Action Menu (Hover) */}
+                <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+                  <button onClick={() => handleView(org)} className="p-2 bg-slate-50 dark:bg-black/40 backdrop-blur-md hover:text-emerald-500 rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10"><Eye size={16}/></button>
+                  <button onClick={() => handleEdit(org)} className="p-2 bg-slate-50 dark:bg-black/40 backdrop-blur-md hover:text-blue-600 rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10"><Edit2 size={16}/></button>
+                  <button onClick={() => handleDelete(org.id)} className="p-2 bg-slate-50 dark:bg-black/40 backdrop-blur-md hover:text-rose-600 rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10"><Trash2 size={16}/></button>
+                </div>
 
-              <div className="mt-8 pt-6 border-t border-slate-50 dark:border-white/5 flex items-center gap-3 text-xs font-bold text-slate-400 dark:text-slate-500">
-                <MapPin size={14} />
-                <span className="truncate">{org.location || 'Headquarters: Unspecified'}</span>
+                <div>
+                  <div className="flex items-start justify-between mb-6">
+                    <div className={`p-4 rounded-2xl border transition-colors ${getTypeStyle(org.type)}`}>
+                      <Building size={24} />
+                    </div>
+                  </div>
+
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight mb-2 uppercase tracking-tight">{org.name}</h3>
+                  <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border mb-4 transition-colors ${getTypeStyle(org.type)}`}>
+                    {org.type || 'Organization'}
+                  </span>
+                  
+                  <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed line-clamp-3">
+                    {org.description || 'No institutional description available.'}
+                  </p>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-slate-50 dark:border-white/5 flex items-center gap-3 text-xs font-bold text-slate-400 dark:text-slate-500">
+                  <MapPin size={14} />
+                  <span className="truncate">{org.location || 'Headquarters: Unspecified'}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
-        {/* MODAL */}
+        {/* VIEW MODAL (New) */}
+        {showViewModal && selectedOrg && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-8 overflow-hidden">
+                <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={closeModal} />
+                <div className="relative bg-white dark:bg-[#041d18] rounded-[2.5rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in zoom-in-95 duration-500 border dark:border-white/5">
+                    <div className="p-8 border-b border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50/50 dark:bg-black/20">
+                        <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-widest">Entity Profile</h3>
+                        <button onClick={closeModal} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-full text-slate-400 transition-colors"><X size={20}/></button>
+                    </div>
+                    <div className="p-8 space-y-6">
+                        <div className="text-center">
+                            <div className={`mx-auto w-16 h-16 rounded-3xl flex items-center justify-center mb-4 ${getTypeStyle(selectedOrg.type)}`}>
+                                <Building size={32} />
+                            </div>
+                            <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase leading-tight mb-2">{selectedOrg.name}</h2>
+                            <span className="px-3 py-1 bg-slate-100 dark:bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{selectedOrg.type}</span>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-2"><MapPin size={12}/> Location</p>
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedOrg.location || 'N/A'}</p>
+                            </div>
+                            <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">About</p>
+                                <p className="text-sm font-medium text-slate-600 dark:text-slate-400 leading-relaxed">{selectedOrg.description || 'No description provided.'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* EDIT/CREATE MODAL */}
         {showModal && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-8 overflow-hidden">
             <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={closeModal} />
@@ -216,11 +344,7 @@ export default function Organizations() {
                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Entity Type</label>
                     <select value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})}
                       className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none cursor-pointer">
-                      <option value="Cooperative" className="dark:bg-[#041d18]">Cooperative</option>
-                      <option value="Government" className="dark:bg-[#041d18]">Government Agency</option>
-                      <option value="NGO" className="dark:bg-[#041d18]">NGO / Non-Profit</option>
-                      <option value="Private" className="dark:bg-[#041d18]">Private Corporation</option>
-                      <option value="Association" className="dark:bg-[#041d18]">Farmers Association</option>
+                      {ORG_TYPES.map(t => <option key={t} value={t} className="dark:bg-[#041d18]">{t}</option>)}
                     </select>
                   </div>
                   <div className="space-y-3">

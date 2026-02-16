@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { dashboardAPI, activityLogsAPI } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend, Label 
 } from 'recharts';
 import { 
   Users, MapPin, Wheat, FileText, Sprout, Baby, 
-  ArrowUpRight, ArrowDownRight, Activity, Calendar, MoreVertical, 
-  Download, RefreshCw, Clock, ShieldCheck, Terminal, ChevronRight
+  ArrowUpRight, Activity, MoreVertical, Download, RefreshCw, 
+  Clock, Terminal, ChevronRight, Plus, UserPlus, FilePlus, ArrowDownRight
 } from 'lucide-react';
 
 // --- Configuration ---
 const CHART_COLORS = ['#059669', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0'];
 
-// --- Skeleton Component (Institutional Dark Theme) ---
+// --- Skeleton Component ---
 const DashboardSkeleton = () => (
   <div className="space-y-8 p-8 bg-slate-50 dark:bg-[#020c0a] min-h-screen animate-pulse">
     <div className="flex justify-between items-center">
@@ -35,6 +36,7 @@ const DashboardSkeleton = () => (
   </div>
 );
 
+// --- Custom Tooltip ---
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
@@ -53,12 +55,18 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [recentLogs, setRecentLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [systemStatus, setSystemStatus] = useState('online');
+  
+  // FUNCTIONAL STATE
+  const [timeRange, setTimeRange] = useState('all'); // 'all', 'month', 'year'
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [showQuickActions, setShowQuickActions] = useState(false);
 
   // --- Theme Detection ---
   useEffect(() => {
@@ -69,38 +77,50 @@ export default function Dashboard() {
     return () => observer.disconnect();
   }, []);
 
+  // --- Live Clock ---
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // --- Data Orchestration ---
-const loadDashboardData = async () => {
-  try {
-    // Fetch stats first (usually open to everyone)
-    const statsRes = await dashboardAPI.getStats();
-    setStats(statsRes.data);
-
+  const loadDashboardData = async () => {
     try {
-      // Try to fetch logs separately
-      const logsRes = await activityLogsAPI.getAll({ per_page: 5 });
-      setRecentLogs(logsRes.data.logs);
-    } catch (logError) {
-      // If 403 Forbidden, just set empty logs and don't fail the whole dashboard
-      console.warn("User lacks permission for Activity Logs");
-      setRecentLogs([]); 
+      setLoading(true);
+      // Fetch stats with time range parameter
+      const statsRes = await dashboardAPI.getStats({ range: timeRange });
+      setStats(statsRes.data);
+
+      try {
+        const logsRes = await activityLogsAPI.getAll({ per_page: 5 });
+        setRecentLogs(logsRes.data.logs);
+      } catch (logError) {
+        console.warn("User lacks permission for Activity Logs");
+        setRecentLogs([]); 
+      }
+
+      setSystemStatus('online');
+    } catch (error) {
+      console.error('Command Center Sync Error:', error);
+      setSystemStatus('error');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    setSystemStatus('online');
-  } catch (error) {
-    console.error('Command Center Sync Error:', error);
-    setSystemStatus('error');
-  } finally {
-    setLoading(false);
-  }
-};
-
+  // Re-fetch when timeRange changes
   useEffect(() => {
     loadDashboardData();
-    // Protocol: Auto-refresh data every 60 seconds
     const interval = setInterval(loadDashboardData, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [timeRange]);
+
+  const handleBarClick = (data) => {
+    // Navigate to filtered view on chart click
+    if (data && data.barangay) {
+      navigate(`/farmers?search=${data.barangay}`);
+    }
+  };
 
   const handleExport = () => {
     if (!stats) return;
@@ -108,6 +128,7 @@ const loadDashboardData = async () => {
     const csvRows = [
       ["Institution", "AgriData Systems"],
       ["Report", "Dashboard Analysis Summary"],
+      ["Time Range", timeRange.toUpperCase()],
       ["Timestamp", new Date().toLocaleString()],
       [""],
       ["METRIC", "VALUE", "PERCENTAGE"],
@@ -131,16 +152,16 @@ const loadDashboardData = async () => {
   if (loading) return <DashboardSkeleton />;
 
   const statCards = [
-    { label: 'Total Farmers', value: stats?.total_farmers || 0, trend: '+3.2%', up: true, icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10' },
-    { label: 'Barangays', value: stats?.total_barangays || 0, trend: 'Stable', up: true, icon: MapPin, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10' },
-    { label: 'Products', value: stats?.total_products || 0, trend: '+12%', up: true, icon: Wheat, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10' },
-    { label: 'Research Projects', value: stats?.total_projects || 0, trend: '-2', up: false, icon: FileText, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
-    { label: 'Experiences', value: stats?.total_experiences || 0, trend: '+5', up: true, icon: Sprout, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
-    { label: 'Youth in Farming', value: stats?.children_farming || 0, trend: '+0.8%', up: true, icon: Baby, color: 'text-fuchsia-600 dark:text-fuchsia-400', bg: 'bg-fuchsia-50 dark:bg-fuchsia-500/10' },
+    { label: 'Total Farmers', value: stats?.total_farmers || 0, trend: timeRange === 'month' ? '+Last 30d' : 'Total', up: true, icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10' },
+    { label: 'Barangays', value: stats?.total_barangays || 0, trend: 'Active', up: true, icon: MapPin, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10' },
+    { label: 'Products', value: stats?.total_products || 0, trend: 'Registered', up: true, icon: Wheat, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10' },
+    { label: 'Research Projects', value: stats?.total_projects || 0, trend: 'Ongoing', up: true, icon: FileText, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
+    { label: 'Experiences', value: stats?.total_experiences || 0, trend: 'Captured', up: true, icon: Sprout, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+    { label: 'Youth in Farming', value: stats?.children_farming || 0, trend: 'Succession', up: true, icon: Baby, color: 'text-fuchsia-600 dark:text-fuchsia-400', bg: 'bg-fuchsia-50 dark:bg-fuchsia-500/10' },
   ];
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] p-4 md:p-8 font-sans transition-colors duration-300">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] p-4 md:p-8 font-sans transition-colors duration-300 pb-24 relative">
       
       {/* 1. TOP COMMAND BAR */}
       <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 mb-12">
@@ -153,25 +174,44 @@ const loadDashboardData = async () => {
                <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Command Center</h1>
                <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5 ${systemStatus === 'online' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
                  <span className={`w-1.5 h-1.5 rounded-full ${systemStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                 System {systemStatus}
+                 {systemStatus.toUpperCase()}
                </div>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 font-bold text-sm tracking-tight">Real-time agricultural intelligence and demographic oversight.</p>
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-bold text-sm tracking-tight">
+              <span>{currentTime.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</span>
+              <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
+              <span>{currentTime.toLocaleTimeString()}</span>
+            </div>
           </div>
         </div>
         
         <div className="flex items-center gap-3 bg-white dark:bg-[#0b241f] p-2 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm">
+          {/* FUNCTIONAL TIME FILTER */}
+          <div className="flex bg-slate-50 dark:bg-white/5 rounded-xl p-1">
+            {['all', 'month', 'year'].map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${timeRange === range ? 'bg-white dark:bg-[#041d18] text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-8 bg-slate-100 dark:bg-white/5 mx-1" />
+          
           <button onClick={loadDashboardData} className="p-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-all text-slate-400 dark:text-slate-500 hover:text-emerald-600">
             <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
           </button>
-          <div className="w-px h-8 bg-slate-100 dark:bg-white/5 mx-1" />
+          
           <button 
             onClick={handleExport}
             disabled={isExporting}
             className="flex items-center gap-3 px-6 py-3 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-slate-800 dark:hover:bg-emerald-500 transition-all disabled:opacity-50"
           >
             {isExporting ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
-            <span>{isExporting ? 'Processing' : 'Generate Ledger'}</span>
+            <span className="hidden sm:inline">{isExporting ? 'Processing' : 'Generate Ledger'}</span>
           </button>
         </div>
       </header>
@@ -256,7 +296,7 @@ const loadDashboardData = async () => {
           <div className="flex items-center justify-between mb-10">
             <div>
               <h3 className="font-black text-slate-900 dark:text-white text-lg uppercase tracking-tight">Territorial Density</h3>
-              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-1">Farmer distribution by geography</p>
+              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-1">Click bars to filter list</p>
             </div>
             <div className="flex items-center gap-2 text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-100 dark:border-emerald-500/20 tracking-widest">
               <Terminal size={14} className="mr-1"/> LIVE STREAMING
@@ -282,7 +322,14 @@ const loadDashboardData = async () => {
                 />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: isDarkMode ? '#64748b' : '#94a3b8', fontSize: 10, fontWeight: 900 }} />
                 <Tooltip cursor={{ fill: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', radius: 12 }} content={<CustomTooltip />} />
-                <Bar dataKey="count" fill="url(#barGrad)" radius={[10, 10, 10, 10]} barSize={40} />
+                <Bar 
+                  dataKey="count" 
+                  fill="url(#barGrad)" 
+                  radius={[10, 10, 10, 10]} 
+                  barSize={40}
+                  onClick={handleBarClick} // INTERACTIVE CHART
+                  style={{ cursor: 'pointer' }}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -305,7 +352,7 @@ const loadDashboardData = async () => {
           </div>
           
           <div className="space-y-4">
-            {recentLogs.map((log) => (
+            {recentLogs.length > 0 ? recentLogs.map((log) => (
               <div key={log.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/[0.02] rounded-2xl border border-slate-100 dark:border-white/5 hover:bg-white dark:hover:bg-white/[0.05] transition-all group">
                 <div className="flex items-center gap-4 min-w-0">
                    <div className="h-10 w-10 rounded-xl bg-white dark:bg-[#041d18] border dark:border-white/5 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors shadow-sm">
@@ -320,7 +367,9 @@ const loadDashboardData = async () => {
                    #{log.id}
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-10 text-slate-400 text-sm">No recent activity detected.</div>
+            )}
           </div>
         </div>
 
@@ -338,7 +387,7 @@ const loadDashboardData = async () => {
 
           <div className="grid grid-cols-2 gap-4">
              {['Rice', 'Corn', 'Coconut', 'Coffee'].map((crop, i) => (
-               <div key={i} className="p-6 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-3xl border border-emerald-100/50 dark:border-emerald-500/10 flex flex-col gap-3">
+               <div key={i} className="p-6 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-3xl border border-emerald-100/50 dark:border-emerald-500/10 flex flex-col gap-3 hover:scale-105 transition-transform duration-300">
                   <div className="flex items-center justify-between">
                      <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Prevalent</span>
                      <Sprout size={16} className="text-emerald-400" />
@@ -351,7 +400,28 @@ const loadDashboardData = async () => {
              ))}
           </div>
         </div>
-        
+      </div>
+
+      {/* QUICK ACTIONS FAB */}
+      <div className="fixed bottom-8 right-8 z-30 flex flex-col gap-3 items-end">
+        {showQuickActions && (
+          <div className="flex flex-col gap-3 animate-in slide-in-from-bottom-4">
+            <button onClick={() => navigate('/farmers')} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#0b241f] rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Add Farmer</span>
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 rounded-xl"><UserPlus size={18}/></div>
+            </button>
+            <button onClick={() => navigate('/surveys')} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#0b241f] rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">New Survey</span>
+              <div className="p-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 rounded-xl"><FilePlus size={18}/></div>
+            </button>
+          </div>
+        )}
+        <button 
+          onClick={() => setShowQuickActions(!showQuickActions)} 
+          className="p-4 bg-emerald-600 text-white rounded-[1.5rem] shadow-2xl hover:bg-emerald-500 transition-all hover:scale-110 active:scale-95"
+        >
+          {showQuickActions ? <ArrowDownRight size={24} /> : <Plus size={24} />}
+        </button>
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `

@@ -44,7 +44,7 @@ class ProductionConfig(Config):
     DEBUG = False
     # In production, require the environment variable to be set
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'mysql+pymysql://user:password@localhost/agridata_prod'
+        'mysql+pymysql://user:@localhost/agridata_prod'
     
 class TestingConfig(Config):
     """Testing configuration"""

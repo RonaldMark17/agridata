@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { farmersAPI, barangaysAPI, organizationsAPI } from '../services/api';
 import {
   Save, X, Upload, Sprout, MapPin, User,
   Calendar, Phone, DollarSign, Ruler, Trash2,
-  Plus, Loader2, ChevronLeft, AlertCircle, Fingerprint, Globe, Briefcase, GraduationCap, Building2, Hash
+  Plus, Loader2, ChevronLeft, AlertCircle, Fingerprint, Globe, Briefcase, GraduationCap, Building2, Hash, FileText
 } from 'lucide-react';
 import FarmerChildren from '../components/FarmerChildren';
-import FarmerProducts from '../components/FarmerProducts';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace('/api', '');
 
@@ -15,16 +14,18 @@ export default function FarmerForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
+  const fileInputRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditMode);
-
+  
   // Data Lists
   const [barangays, setBarangays] = useState([]);
   const [organizations, setOrganizations] = useState([]);
 
   const [error, setError] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
+  const [isDragging, setIsDragging] = useState(false); // NEW: Drag & Drop State
 
   const [formData, setFormData] = useState({
     farmer_code: '', 
@@ -50,6 +51,9 @@ export default function FarmerForm() {
     products: []
   });
 
+  // NEW: Calculated Age Display
+  const [calculatedAge, setCalculatedAge] = useState(0);
+
   useEffect(() => {
     fetchDropdowns();
     if (isEditMode) {
@@ -58,6 +62,20 @@ export default function FarmerForm() {
       generateFarmerCode();
     }
   }, [id]);
+
+  // NEW: Auto-Calculate Age Effect
+  useEffect(() => {
+    if (formData.birth_date) {
+      const birthDate = new Date(formData.birth_date);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      setCalculatedAge(age >= 0 ? age : 0);
+    }
+  }, [formData.birth_date]);
 
   const generateFarmerCode = () => {
     const random = Math.floor(1000 + Math.random() * 9000);
@@ -100,26 +118,31 @@ export default function FarmerForm() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'birth_date') {
-      const birthDate = new Date(value);
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      setFormData(prev => ({ ...prev, [name]: value, age: age >= 0 ? age : 0 }));
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // NEW: Drag and Drop Handlers
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = () => setIsDragging(false);
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+        processFile(file);
     } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+        alert("Please drop a valid image file.");
     }
   };
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setFormData(prev => ({ ...prev, profile_image: file }));
-      setImagePreview(URL.createObjectURL(file));
-    }
+    if (file) processFile(file);
+  };
+
+  const processFile = (file) => {
+    setFormData(prev => ({ ...prev, profile_image: file }));
+    setImagePreview(URL.createObjectURL(file));
   };
 
   const addProduct = () => {
@@ -146,6 +169,14 @@ export default function FarmerForm() {
     setLoading(true);
     setError('');
 
+    // NEW: Validation Check
+    if (!formData.first_name || !formData.last_name || !formData.barangay_id) {
+        setError("Please fill in all required fields (Name, Surname, Barangay).");
+        setLoading(false);
+        window.scrollTo(0,0);
+        return;
+    }
+
     try {
       const data = new FormData();
       Object.keys(formData).forEach(key => {
@@ -155,6 +186,8 @@ export default function FarmerForm() {
           if (formData.profile_image instanceof File) {
             data.append('profile_image', formData.profile_image);
           }
+        } else if (key === 'age') {
+            data.append('age', calculatedAge); // Send calculated age
         } else if (formData[key] !== null && formData[key] !== undefined) {
           data.append(key, formData[key]);
         }
@@ -168,6 +201,7 @@ export default function FarmerForm() {
       navigate('/farmers');
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Submission failed.');
+      window.scrollTo(0,0);
     } finally {
       setLoading(false);
     }
@@ -219,24 +253,37 @@ export default function FarmerForm() {
           {/* SECTION 1: IDENTITY */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-4 space-y-8">
-              <div className="bg-white dark:bg-[#0b241f] p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
+              {/* IMAGE UPLOAD WITH DRAG & DROP */}
+              <div 
+                className={`bg-white dark:bg-[#0b241f] p-10 rounded-[3rem] border shadow-sm flex flex-col items-center text-center relative overflow-hidden group transition-all duration-300
+                ${isDragging ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 border-dashed' : 'border-slate-100 dark:border-white/5'}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
                 <div className="relative z-10">
-                  <div className="relative group w-44 h-44 mb-6 mx-auto">
-                    <div className={`w-full h-full rounded-[3.5rem] overflow-hidden border-8 border-slate-50 dark:border-[#020c0a] shadow-inner flex items-center justify-center bg-slate-100 dark:bg-[#020c0a] transition-all duration-500 group-hover:scale-105 ${!imagePreview ? 'border-dashed border-slate-200 dark:border-white/10' : ''}`}>
+                  <div className="relative group w-44 h-44 mb-6 mx-auto" onClick={() => fileInputRef.current.click()}>
+                    <div className={`w-full h-full rounded-[3.5rem] overflow-hidden border-8 border-slate-50 dark:border-[#020c0a] shadow-inner flex items-center justify-center bg-slate-100 dark:bg-[#020c0a] transition-all duration-500 group-hover:scale-105 cursor-pointer ${!imagePreview ? 'border-dashed border-slate-200 dark:border-white/10' : ''}`}>
                       {imagePreview ? (
                         <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                       ) : (
                         <User size={64} className="text-slate-300 dark:text-slate-700" />
                       )}
                     </div>
-                    <label className="absolute inset-0 flex items-center justify-center bg-slate-900/60 text-white opacity-0 group-hover:opacity-100 rounded-[3.5rem] cursor-pointer transition-all duration-300 backdrop-blur-sm">
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 text-white opacity-0 group-hover:opacity-100 rounded-[3.5rem] cursor-pointer transition-all duration-300 backdrop-blur-sm pointer-events-none">
                       <Upload size={28} />
-                      <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
-                    </label>
+                    </div>
                   </div>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/*" 
+                    onChange={handleImageChange} 
+                  />
                   <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Biometric Capture</p>
+                  <p className="text-[10px] text-slate-300 mt-2">Drag image here or click</p>
                 </div>
-                <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-emerald-50 dark:bg-emerald-900/10 rounded-full blur-3xl opacity-40 group-hover:opacity-100 transition-opacity" />
               </div>
             </div>
 
@@ -251,8 +298,8 @@ export default function FarmerForm() {
                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Reference Code</label>
                   <div className="relative">
                     <Hash className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
-                    <input required type="text" name="farmer_code" value={formData.farmer_code} onChange={handleChange}
-                      className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
+                    <input required type="text" name="farmer_code" value={formData.farmer_code} onChange={handleChange} readOnly
+                      className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none opacity-70 cursor-not-allowed" />
                   </div>
                 </div>
                 <div className="space-y-3">
@@ -268,15 +315,17 @@ export default function FarmerForm() {
                 </div>
 
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal First Name</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal First Name <span className="text-rose-500">*</span></label>
                   <input required type="text" name="first_name" value={formData.first_name} onChange={handleChange}
                     className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal Last Name</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal Last Name <span className="text-rose-500">*</span></label>
                   <input required type="text" name="last_name" value={formData.last_name} onChange={handleChange}
                     className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
                 </div>
+                
+                {/* ... Middle Name and Suffix (Standard Inputs) ... */}
                 <div className="space-y-3">
                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Middle Name</label>
                   <input type="text" name="middle_name" value={formData.middle_name} onChange={handleChange}
@@ -287,11 +336,18 @@ export default function FarmerForm() {
                   <input type="text" name="extension_name" value={formData.extension_name} onChange={handleChange} placeholder="Jr., Sr., III"
                     className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
                 </div>
+
                 <div className="space-y-3">
                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Birth Date</label>
-                  <input type="date" name="birth_date" value={formData.birth_date} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
+                  <div className="flex gap-4 items-center">
+                    <input type="date" name="birth_date" value={formData.birth_date} onChange={handleChange}
+                        className="flex-1 px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
+                    <div className="px-6 py-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-black text-sm min-w-[80px] text-center">
+                        {calculatedAge} Y/O
+                    </div>
+                  </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Gender</label>
@@ -324,7 +380,7 @@ export default function FarmerForm() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Assigned Barangay</label>
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Assigned Barangay <span className="text-rose-500">*</span></label>
                 <select required name="barangay_id" value={formData.barangay_id} onChange={handleChange}
                   className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
                   <option value="">Select Territory...</option>
@@ -427,7 +483,7 @@ export default function FarmerForm() {
             <div className="space-y-6">
               {formData.products.length === 0 ? (
                 <div className="p-20 text-center bg-slate-50 dark:bg-white/5 rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-white/10">
-                  <div className="p-5 bg-white dark:bg-[#0b241f] rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-6 shadow-sm"><Briefcase size={32} /></div>
+                  <div className="p-5 bg-white dark:bg-[#0b241f] rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-6 shadow-sm"><FileText size={32} /></div>
                   <h4 className="text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">No active commodities detected</h4>
                   <p className="text-xs text-slate-400 dark:text-slate-600 mt-2">Initialize yield data by appending a new crop profile.</p>
                 </div>
@@ -471,7 +527,7 @@ export default function FarmerForm() {
             </div>
           </div>
 
-          {/* SECTION 5: FAMILY & SUCCESSION (Optimized in external component usually, but keeping context) */}
+          {/* SECTION 5: FAMILY & SUCCESSION */}
           {isEditMode && (
             <FarmerChildren
               farmerId={id}

@@ -1,35 +1,43 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { farmersAPI, barangaysAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { 
   Search, Filter, Download, Plus, ChevronLeft, ChevronRight, 
-  Eye, Edit, MapPin, Ruler, Trash2, X, Calendar, Info, Loader2, ArrowUpDown,
-  Phone, GraduationCap, Briefcase, DollarSign, Sprout, Building2, User, Activity, Globe
+  Eye, Edit, MapPin, Ruler, Trash2, X, Calendar, Loader2, ArrowUpDown,
+  Phone, Briefcase, DollarSign, Globe, LayoutList, LayoutGrid, PieChart, TrendingUp, Activity, User
 } from 'lucide-react';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace(/\/api\/?$/, '');
 
-// --- Skeleton Loader Component (Dark Mode Compatible) ---
-const TableSkeleton = () => (
-  <>
-    {[...Array(6)].map((_, i) => (
-      <tr key={i} className="animate-pulse">
-        <td className="px-10 py-7">
-          <div className="flex items-center gap-5">
-            <div className="h-14 w-14 bg-slate-100 dark:bg-white/5 rounded-2xl"></div>
-            <div className="space-y-3">
-              <div className="h-4 w-48 bg-slate-100 dark:bg-white/5 rounded-lg"></div>
-              <div className="h-3 w-24 bg-slate-50 dark:bg-white/5 rounded-md"></div>
+// --- Skeleton Loader ---
+const TableSkeleton = ({ viewMode }) => (
+  viewMode === 'list' ? (
+    <>
+      {[...Array(6)].map((_, i) => (
+        <tr key={i} className="animate-pulse">
+          <td className="px-10 py-7">
+            <div className="flex items-center gap-5">
+              <div className="h-14 w-14 bg-slate-100 dark:bg-white/5 rounded-2xl"></div>
+              <div className="space-y-3">
+                <div className="h-4 w-48 bg-slate-100 dark:bg-white/5 rounded-lg"></div>
+                <div className="h-3 w-24 bg-slate-50 dark:bg-white/5 rounded-md"></div>
+              </div>
             </div>
-          </div>
-        </td>
-        <td className="px-10 py-7"><div className="h-6 w-32 bg-slate-50 dark:bg-white/5 rounded-xl"></div></td>
-        <td className="px-10 py-7"><div className="h-8 w-24 bg-slate-50 dark:bg-white/5 rounded-xl"></div></td>
-        <td className="px-10 py-7 text-right"><div className="h-10 w-10 bg-slate-50 dark:bg-white/5 rounded-xl ml-auto"></div></td>
-      </tr>
-    ))}
-  </>
+          </td>
+          <td className="px-10 py-7"><div className="h-6 w-32 bg-slate-50 dark:bg-white/5 rounded-xl"></div></td>
+          <td className="px-10 py-7"><div className="h-8 w-24 bg-slate-50 dark:bg-white/5 rounded-xl"></div></td>
+          <td className="px-10 py-7 text-right"><div className="h-10 w-10 bg-slate-50 dark:bg-white/5 rounded-xl ml-auto"></div></td>
+        </tr>
+      ))}
+    </>
+  ) : (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 p-6">
+      {[...Array(6)].map((_, i) => (
+        <div key={i} className="h-64 bg-slate-50 dark:bg-white/5 rounded-[2.5rem] animate-pulse"></div>
+      ))}
+    </div>
+  )
 );
 
 export default function FarmersList() {
@@ -45,20 +53,30 @@ export default function FarmersList() {
   const [exporting, setExporting] = useState(false);
   const [selectedFarmer, setSelectedFarmer] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  
+  // View Mode State
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'grid'
 
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
-  const canEdit = hasPermission(['admin', 'researcher', 'data_encoder']);
-  const canDelete = hasPermission(['admin']);
+  
+  // --- FIX: Direct User Role Check ---
+  const { user } = useAuth();
+  // Safe checks that won't crash if user is null during loading
+  const canEdit = user && ['admin', 'researcher', 'data_encoder'].includes(user.role);
+  const canDelete = user && user.role === 'admin';
 
   useEffect(() => { fetchBarangays(); }, []);
   useEffect(() => { fetchFarmers(); }, [currentPage, search, selectedBarangay, sortBy, sortOrder]);
+
+  // Aggregate Metrics
+  const totalHectares = farmers.reduce((acc, f) => acc + (f.farm_size_hectares || 0), 0);
+  const avgIncome = farmers.length > 0 ? farmers.reduce((acc, f) => acc + (f.annual_income || 0), 0) / farmers.length : 0;
 
   const fetchBarangays = async () => {
     try {
       const response = await barangaysAPI.getAll();
       setBarangays(response.data);
-    } catch (error) { console.error('Error:', error); }
+    } catch (error) { console.error('Error fetching barangays:', error); }
   };
 
   const fetchFarmers = async () => {
@@ -67,11 +85,22 @@ export default function FarmersList() {
       const params = { page: currentPage, per_page: 20, sort_by: sortBy, sort_order: sortOrder };
       if (search) params.search = search;
       if (selectedBarangay) params.barangay_id = selectedBarangay;
+      
       const response = await farmersAPI.getAll(params);
-      setFarmers(response.data.farmers);
-      setTotalPages(response.data.pages);
-    } catch (error) { console.error('Error:', error); }
-    finally { setTimeout(() => setLoading(false), 800); }
+      
+      // Safety check in case API response format differs
+      if (response.data && response.data.farmers) {
+        setFarmers(response.data.farmers);
+        setTotalPages(response.data.pages || 1);
+      } else {
+        setFarmers([]);
+      }
+    } catch (error) { 
+      console.error('Error fetching farmers:', error);
+      setFarmers([]); 
+    } finally { 
+      setTimeout(() => setLoading(false), 800); 
+    }
   };
 
   const handleSortChange = (e) => {
@@ -123,12 +152,21 @@ export default function FarmersList() {
     return `${API_BASE_URL}/static/uploads/${cleanPath}?t=${Date.now()}`;
   };
 
+  // Helper for status badges
+  const getStatusColor = (status) => {
+    switch(status?.toLowerCase()) {
+      case 'owner': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30';
+      case 'tenant': return 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 border-amber-200 dark:border-amber-500/30';
+      default: return 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-400 border-slate-200 dark:border-white/10';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 pb-20 transition-colors duration-300">
-      <div className="max-w-[1400px] mx-auto space-y-12 animate-in fade-in duration-700">
+      <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-700">
         
         {/* 1. HEADER */}
-        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 px-4">
+        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 px-4 pt-8">
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="p-2 bg-emerald-600 rounded-xl text-white shadow-xl shadow-emerald-200 dark:shadow-none">
@@ -157,7 +195,31 @@ export default function FarmersList() {
           </div>
         </header>
 
-        {/* 2. CONTROL HUB */}
+        {/* 2. METRICS BAR */}
+        <div className="px-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-emerald-50/50 dark:bg-emerald-500/5 p-6 rounded-[2rem] border border-emerald-100/50 dark:border-emerald-500/10 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white dark:bg-[#0b241f] rounded-2xl text-emerald-600 dark:text-emerald-400 shadow-sm"><PieChart size={20}/></div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-500">Total Land Coverage</p>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white">{totalHectares.toLocaleString()} <span className="text-sm font-bold text-slate-400">ha</span></p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-blue-50/50 dark:bg-blue-500/5 p-6 rounded-[2rem] border border-blue-100/50 dark:border-blue-500/10 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white dark:bg-[#0b241f] rounded-2xl text-blue-600 dark:text-blue-400 shadow-sm"><TrendingUp size={20}/></div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-800 dark:text-blue-500">Avg. Annual Income</p>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white">{formatCurrency(avgIncome)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. CONTROL HUB */}
         <div className="px-4">
           <div className="bg-white dark:bg-[#0b241f] rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm p-3 flex flex-col xl:flex-row items-center gap-4 transition-all">
             <div className="relative flex-1 w-full">
@@ -172,19 +234,35 @@ export default function FarmersList() {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
-              <div className="relative flex-1 sm:w-64">
+              {/* View Toggle */}
+              <div className="flex bg-slate-50 dark:bg-white/5 p-1.5 rounded-[1.5rem] border border-slate-100 dark:border-white/5">
+                <button 
+                  onClick={() => setViewMode('list')}
+                  className={`p-3.5 rounded-2xl transition-all ${viewMode === 'list' ? 'bg-white dark:bg-[#041d18] text-emerald-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <LayoutList size={20} />
+                </button>
+                <button 
+                  onClick={() => setViewMode('grid')}
+                  className={`p-3.5 rounded-2xl transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-[#041d18] text-emerald-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <LayoutGrid size={20} />
+                </button>
+              </div>
+
+              <div className="relative flex-1 sm:w-56">
                 <Filter className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
                 <select
                   className="w-full pl-16 pr-10 py-5 bg-slate-50 dark:bg-white/5 border-none rounded-[1.5rem] text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 appearance-none outline-none cursor-pointer focus:ring-4 focus:ring-emerald-500/5 shadow-inner"
                   value={selectedBarangay}
                   onChange={(e) => { setSelectedBarangay(e.target.value); setCurrentPage(1); }}
                 >
-                  <option value="">Territory: All</option>
+                  <option value="">All Areas</option>
                   {barangays.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
 
-              <div className="relative flex-1 sm:w-64">
+              <div className="relative flex-1 sm:w-56">
                 <ArrowUpDown className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
                 <select
                   className="w-full pl-16 pr-10 py-5 bg-slate-50 dark:bg-white/5 border-none rounded-[1.5rem] text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 appearance-none outline-none cursor-pointer focus:ring-4 focus:ring-emerald-500/5 shadow-inner"
@@ -200,77 +278,118 @@ export default function FarmersList() {
           </div>
         </div>
 
-        {/* 3. TABLE DATA */}
+        {/* 4. DATA DISPLAY */}
         <div className="px-4">
           <div className="bg-white dark:bg-[#0b241f] rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm overflow-hidden transition-all hover:shadow-2xl">
-            <div className="overflow-x-auto no-scrollbar">
-              <table className="w-full text-left min-w-[1000px]">
-                <thead>
-                  <tr className="bg-slate-50/50 dark:bg-white/5 text-slate-400 dark:text-emerald-500/50 text-[10px] uppercase font-black tracking-[0.2em] border-b border-slate-100 dark:border-white/5">
-                    <th className="px-10 py-6">Core Identity</th>
-                    <th className="px-10 py-6">Assigned Territory</th>
-                    <th className="px-10 py-6">Land Allocation</th>
-                    <th className="px-10 py-6 text-right">Operations</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-white/5">
-                  {loading ? <TableSkeleton /> : farmers.map((farmer) => (
-                    <tr key={farmer.id} className="group hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all duration-300">
-                      <td className="px-10 py-6">
-                        <div className="flex items-center gap-5">
-                          <div className="h-14 w-14 rounded-2xl bg-slate-50 dark:bg-white/5 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-black shadow-inner border border-slate-100 dark:border-white/10 overflow-hidden group-hover:scale-110 transition-transform duration-500">
-                            {farmer.profile_image ? (
-                                <img src={getImageUrl(farmer.profile_image)} alt={farmer.first_name} className="h-full w-full object-cover" />
-                            ) : (
-                                <span className="text-lg">{getInitials(farmer.full_name)}</span>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight">{farmer.full_name}</p>
-                            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest mt-1 inline-flex items-center bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-100 dark:border-emerald-500/20">
-                               #{farmer.farmer_code}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-10 py-6">
-                        <div className="flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-400">
-                          <MapPin size={16} className="text-slate-300 dark:text-slate-600 group-hover:text-emerald-500 transition-colors" />
-                          {farmer.barangay?.name || 'Unassigned'}
-                        </div>
-                      </td>
-                      <td className="px-10 py-6">
-                        <div className="inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-blue-50/50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 text-xs font-black uppercase tracking-wider border border-blue-100/50 dark:border-blue-500/20">
-                          <Ruler size={14} /> {farmer.farm_size_hectares || 0} Hectares
-                        </div>
-                      </td>
-                      <td className="px-10 py-6 text-right">
-                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-                          <button onClick={() => handleViewDetails(farmer.id)} className="p-3 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-200 dark:hover:border-emerald-500/30 rounded-xl shadow-sm transition-all"><Eye size={18} /></button>
-                          {canEdit && <button onClick={() => navigate(`/farmers/${farmer.id}/edit`)} className="p-3 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-500/30 rounded-xl shadow-sm transition-all"><Edit size={18} /></button>}
-                          {canDelete && <button onClick={() => handleDelete(farmer.id, farmer.full_name)} className="p-3 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:border-rose-200 dark:hover:border-rose-500/30 rounded-xl shadow-sm transition-all"><Trash2 size={18} /></button>}
-                        </div>
-                      </td>
+            
+            {viewMode === 'list' ? (
+              <div className="overflow-x-auto no-scrollbar">
+                <table className="w-full text-left min-w-[1000px]">
+                  <thead>
+                    <tr className="bg-slate-50/50 dark:bg-white/5 text-slate-400 dark:text-emerald-500/50 text-[10px] uppercase font-black tracking-[0.2em] border-b border-slate-100 dark:border-white/5">
+                      <th className="px-10 py-6">Core Identity</th>
+                      <th className="px-10 py-6">Assigned Territory</th>
+                      <th className="px-10 py-6">Status & Tenure</th>
+                      <th className="px-10 py-6 text-right">Operations</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 dark:divide-white/5">
+                    {loading ? <TableSkeleton viewMode="list" /> : farmers.map((farmer) => (
+                      <tr key={farmer.id} className="group hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all duration-300">
+                        <td className="px-10 py-6">
+                          <div className="flex items-center gap-5">
+                            <div className="h-14 w-14 rounded-2xl bg-slate-50 dark:bg-white/5 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-black shadow-inner border border-slate-100 dark:border-white/10 overflow-hidden group-hover:scale-110 transition-transform duration-500">
+                              {farmer.profile_image ? (
+                                <img src={getImageUrl(farmer.profile_image)} alt={farmer.first_name} className="h-full w-full object-cover" />
+                              ) : (
+                                <span className="text-lg">{getInitials(farmer.full_name)}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight">{farmer.full_name}</p>
+                              <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest mt-1 inline-flex items-center bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-100 dark:border-emerald-500/20">
+                               #{farmer.farmer_code}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-10 py-6">
+                          <div className="flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-400">
+                            <MapPin size={16} className="text-slate-300 dark:text-slate-600 group-hover:text-emerald-500 transition-colors" />
+                            {farmer.barangay?.name || 'Unassigned'}
+                          </div>
+                        </td>
+                        <td className="px-10 py-6">
+                          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ${getStatusColor(farmer.land_ownership)}`}>
+                            {farmer.land_ownership || 'Unknown'}
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1 font-medium ml-1">{farmer.years_farming} years exp.</p>
+                        </td>
+                        <td className="px-10 py-6 text-right">
+                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+                            <button onClick={() => handleViewDetails(farmer.id)} className="p-3 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-200 dark:hover:border-emerald-500/30 rounded-xl shadow-sm transition-all"><Eye size={18} /></button>
+                            {canEdit && <button onClick={() => navigate(`/farmers/${farmer.id}/edit`)} className="p-3 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-500/30 rounded-xl shadow-sm transition-all"><Edit size={18} /></button>}
+                            {canDelete && <button onClick={() => handleDelete(farmer.id, farmer.full_name)} className="p-3 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:border-rose-200 dark:hover:border-rose-500/30 rounded-xl shadow-sm transition-all"><Trash2 size={18} /></button>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              // GRID VIEW
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 p-6 bg-slate-50/50 dark:bg-black/10">
+                {loading ? <TableSkeleton viewMode="grid" /> : farmers.map((farmer) => (
+                  <div key={farmer.id} className="bg-white dark:bg-[#041d18] p-6 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all group flex flex-col gap-6 relative overflow-hidden">
+                    <div className="flex items-center gap-5">
+                      <div className="h-16 w-16 rounded-3xl bg-slate-50 dark:bg-white/5 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-black shadow-inner border border-slate-100 dark:border-white/10 overflow-hidden">
+                        {farmer.profile_image ? (
+                          <img src={getImageUrl(farmer.profile_image)} alt={farmer.first_name} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-xl">{getInitials(farmer.full_name)}</span>
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-black text-slate-900 dark:text-white leading-tight">{farmer.full_name}</h3>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mt-1">{farmer.barangay?.name}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl">
+                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">Area</p>
+                        <p className="font-bold text-slate-800 dark:text-white">{farmer.farm_size_hectares} <span className="text-xs text-slate-400">ha</span></p>
+                      </div>
+                      <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl">
+                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">Tenure</p>
+                        <p className="font-bold text-slate-800 dark:text-white">{farmer.years_farming} <span className="text-xs text-slate-400">yrs</span></p>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto pt-6 border-t border-slate-100 dark:border-white/5 flex gap-2">
+                      <button onClick={() => handleViewDetails(farmer.id)} className="flex-1 py-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors">Profile</button>
+                      {canEdit && <button onClick={() => navigate(`/farmers/${farmer.id}/edit`)} className="p-3 text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-colors"><Edit size={18}/></button>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* PAGINATION */}
             {!loading && totalPages > 1 && (
-              <div className="px-10 py-8 bg-slate-50/50 dark:bg-white/[0.02] flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 dark:border-white/5 gap-6">
+              <div className="px-10 py-8 bg-white dark:bg-[#0b241f] flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 dark:border-white/5 gap-6">
                 <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Stream <span className="text-slate-900 dark:text-white">{currentPage}</span> / {totalPages}</p>
                 <div className="flex gap-4">
-                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-4 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-200 dark:hover:border-emerald-500/30 disabled:opacity-30 transition-all shadow-sm"><ChevronLeft size={20}/></button>
-                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-4 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-200 dark:hover:border-emerald-500/30 disabled:opacity-30 transition-all shadow-sm"><ChevronRight size={20}/></button>
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-4 bg-slate-50 dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-200 dark:hover:border-emerald-500/30 disabled:opacity-30 transition-all shadow-sm"><ChevronLeft size={20}/></button>
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-4 bg-slate-50 dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-200 dark:hover:border-emerald-500/30 disabled:opacity-30 transition-all shadow-sm"><ChevronRight size={20}/></button>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* --- 4. DOSSIER SLIDE-OVER (Dark Mode Optimized) --- */}
+        {/* --- 4. DOSSIER SLIDE-OVER --- */}
         {showViewModal && selectedFarmer && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-end overflow-hidden">
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowViewModal(false)} />
@@ -367,11 +486,6 @@ export default function FarmersList() {
           </div>
         )}
       </div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}} />
     </div>
   );
 }

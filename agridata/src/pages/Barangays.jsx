@@ -3,10 +3,11 @@ import { barangaysAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { 
   Plus, Search, MapPin, Users, Sprout, 
-  X, Info, TrendingUp, ChevronLeft, ChevronRight, Activity, Globe, Loader2
+  X, Info, TrendingUp, ChevronLeft, ChevronRight, Activity, Globe, Loader2,
+  Download, ArrowUpDown, Edit, Trash2, Filter
 } from 'lucide-react';
 
-// --- Skeleton Component (Dark Mode Compatible) ---
+// --- Skeleton Component ---
 const BarangaySkeleton = () => (
   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
     {[...Array(6)].map((_, i) => (
@@ -35,13 +36,24 @@ export default function Barangays() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // NEW: State for features
+  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
+  const [editingId, setEditingId] = useState(null); // Track ID if editing
+  
   const { hasPermission } = useAuth();
+  const canManage = hasPermission(['admin', 'data_encoder']);
+  const ITEMS_PER_PAGE = 9;
 
-  const [formData, setFormData] = useState({
+  const initialForm = {
     name: '', municipality: '', province: '',
     region: 'Region IV-A (CALABARZON)',
     population: '', total_households: '', agricultural_households: ''
-  });
+  };
+
+  const [formData, setFormData] = useState(initialForm);
 
   useEffect(() => {
     fetchBarangays();
@@ -62,36 +74,114 @@ export default function Barangays() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await barangaysAPI.create(formData);
-      setShowModal(false);
+      if (editingId) {
+        // Assume API has update capability
+        // await barangaysAPI.update(editingId, formData); 
+        // For demo/prototype without explicit update endpoint in context, we refresh
+        alert("Update feature requires backend integration. Simulating refresh.");
+      } else {
+        await barangaysAPI.create(formData);
+      }
+      
+      closeModal();
       fetchBarangays();
-      setFormData({
-        name: '', municipality: '', province: '',
-        region: 'Region IV-A (CALABARZON)',
-        population: '', total_households: '', agricultural_households: ''
-      });
     } catch (error) {
-      console.error('Error creating barangay:', error);
+      console.error('Error saving barangay:', error);
     }
   };
 
-  const canCreate = hasPermission(['admin', 'data_encoder']);
+  const handleEdit = (b) => {
+    setEditingId(b.id);
+    setFormData({
+      name: b.name,
+      municipality: b.municipality,
+      province: b.province,
+      region: b.region,
+      population: b.population,
+      total_households: b.total_households,
+      agricultural_households: b.agricultural_households
+    });
+    setShowModal(true);
+  };
 
-  const filteredBarangays = barangays.filter(b =>
-    b.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    b.municipality.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleDelete = async (id) => {
+    if (window.confirm("Are you sure you want to remove this territory? This may affect linked farmer records.")) {
+      try {
+        // await barangaysAPI.delete(id);
+        alert("Delete feature requires backend integration. Simulating removal.");
+        setBarangays(prev => prev.filter(b => b.id !== id));
+      } catch (error) {
+        console.error("Delete failed", error);
+      }
+    }
+  };
 
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingId(null);
+    setFormData(initialForm);
+  };
+
+  const handleExport = () => {
+    setIsExporting(true);
+    const headers = ["Name", "Municipality", "Province", "Population", "Total HH", "Agri HH", "Agri Density (%)"];
+    const rows = barangays.map(b => {
+      const density = ((b.agricultural_households / b.total_households) * 100).toFixed(2);
+      return [b.name, b.municipality, b.province, b.population, b.total_households, b.agricultural_households, density];
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `barangay_masterlist_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => setIsExporting(false), 800);
+  };
+
+  // --- Logic: Search -> Sort -> Paginate ---
+  
   const getAgriPercentage = (b) => {
     if (!b.total_households || !b.agricultural_households) return 0;
     return ((b.agricultural_households / b.total_households) * 100).toFixed(1);
   };
 
+  // 1. Filter
+  const filtered = barangays.filter(b =>
+    b.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    b.municipality.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    b.province.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // 2. Sort
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortConfig.key === 'population') {
+      return sortConfig.direction === 'asc' ? a.population - b.population : b.population - a.population;
+    }
+    if (sortConfig.key === 'agri_density') {
+      const denA = (a.agricultural_households / a.total_households) || 0;
+      const denB = (b.agricultural_households / b.total_households) || 0;
+      return sortConfig.direction === 'asc' ? denA - denB : denB - denA;
+    }
+    // Default Name
+    return sortConfig.direction === 'asc' 
+      ? a.name.localeCompare(b.name) 
+      : b.name.localeCompare(a.name);
+  });
+
+  // 3. Paginate
+  const totalPages = Math.ceil(sorted.length / ITEMS_PER_PAGE);
+  const paginated = sorted.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
   const totalPopulation = barangays.reduce((sum, b) => sum + (Number(b.population) || 0), 0);
   const totalAgriHouseholds = barangays.reduce((sum, b) => sum + (Number(b.agricultural_households) || 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 transition-colors duration-300">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 transition-colors duration-300 pb-20">
       <div className="max-w-[1400px] mx-auto space-y-12 animate-in fade-in duration-700">
         
         {/* Header Section */}
@@ -107,15 +197,25 @@ export default function Barangays() {
             <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">Comprehensive demographic and agricultural data per barangay.</p>
           </div>
           
-          {canCreate && (
+          <div className="flex items-center gap-3 w-full lg:w-auto">
             <button 
-              onClick={() => setShowModal(true)} 
-              className="group flex items-center justify-center gap-3 px-8 py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-emerald-500 active:scale-95 transition-all"
+                onClick={handleExport}
+                disabled={isExporting}
+                className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.25rem] font-black text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all shadow-sm"
             >
-              <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
-              <span>Add Barangay</span>
+                {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                <span>Export CSV</span>
             </button>
-          )}
+            {canManage && (
+              <button 
+                onClick={() => setShowModal(true)} 
+                className="flex-1 lg:flex-none group flex items-center justify-center gap-3 px-8 py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-emerald-500 active:scale-95 transition-all"
+              >
+                <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+                <span>Add Barangay</span>
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Stats Summary */}
@@ -138,27 +238,45 @@ export default function Barangays() {
           ))}
         </div>
 
-        {/* Search Bar */}
-        <div className="px-4">
-          <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-2 flex items-center transition-colors">
+        {/* Toolbar: Search & Sort */}
+        <div className="px-4 flex flex-col md:flex-row gap-4">
+          <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-2 flex items-center transition-colors flex-1">
             <div className="relative flex-1">
               <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
               <input
                 type="text"
-                className="w-full pl-16 pr-6 py-4 bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600"
-                placeholder="Filter communities by name or municipality..."
+                className="w-full pl-16 pr-6 py-4 bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600 outline-none"
+                placeholder="Filter by name, municipality or province..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               />
             </div>
+          </div>
+          
+          <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-2 flex items-center gap-4 px-6 w-full md:w-auto">
+             <Filter size={20} className="text-slate-400" />
+             <select 
+                className="bg-transparent border-none outline-none text-sm font-bold text-slate-600 dark:text-slate-400 cursor-pointer appearance-none pr-8"
+                onChange={(e) => setSortConfig({ key: e.target.value, direction: 'desc' })}
+             >
+                <option value="name">Sort: Name</option>
+                <option value="population">Sort: Population</option>
+                <option value="agri_density">Sort: Agri Density</option>
+             </select>
+             <button 
+                onClick={() => setSortConfig(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
+                className="p-2 hover:bg-slate-50 dark:hover:bg-white/5 rounded-full transition-colors"
+             >
+                <ArrowUpDown size={18} className={`text-slate-400 transition-transform ${sortConfig.direction === 'asc' ? 'rotate-180' : ''}`} />
+             </button>
           </div>
         </div>
 
         {/* Barangays Grid */}
-        <div className="px-4 pb-20">
+        <div className="px-4">
           {loading ? (
             <BarangaySkeleton />
-          ) : filteredBarangays.length === 0 ? (
+          ) : paginated.length === 0 ? (
             <div className="py-32 bg-white dark:bg-[#0b241f] rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-white/10 text-center transition-colors">
               <div className="p-8 bg-slate-50 dark:bg-white/5 rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-8">
                 <MapPin size={48} />
@@ -168,10 +286,18 @@ export default function Barangays() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredBarangays.map((b) => {
+              {paginated.map((b) => {
                 const agriPerc = getAgriPercentage(b);
                 return (
-                  <div key={b.id} className="group bg-white dark:bg-[#0b241f] rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] dark:hover:shadow-black/40 hover:-translate-y-2 transition-all duration-500 overflow-hidden">
+                  <div key={b.id} className="group bg-white dark:bg-[#0b241f] rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl dark:hover:shadow-black/40 hover:-translate-y-1 transition-all duration-500 overflow-hidden relative">
+                    {/* Action Overlay */}
+                    {canManage && (
+                        <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            <button onClick={() => handleEdit(b)} className="p-2 bg-white dark:bg-black/40 backdrop-blur-md rounded-xl text-slate-400 hover:text-emerald-500 shadow-sm border border-slate-100 dark:border-white/10"><Edit size={16}/></button>
+                            <button onClick={() => handleDelete(b.id)} className="p-2 bg-white dark:bg-black/40 backdrop-blur-md rounded-xl text-slate-400 hover:text-rose-500 shadow-sm border border-slate-100 dark:border-white/10"><Trash2 size={16}/></button>
+                        </div>
+                    )}
+
                     <div className="p-10">
                       <div className="flex justify-between items-start mb-8">
                         <div className="min-w-0">
@@ -217,18 +343,35 @@ export default function Barangays() {
           )}
         </div>
 
-        {/* MODAL REDESIGN - DARK MODE OPTIMIZED */}
+        {/* Pagination Controls */}
+        {!loading && totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-[#0b241f] px-10 py-6 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm mx-4 transition-colors">
+            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
+                Page <span className="text-slate-900 dark:text-white">{currentPage}</span> of {totalPages}
+            </p>
+            <div className="flex gap-4">
+                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-4 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 disabled:opacity-30 transition-all shadow-sm">
+                <ChevronLeft size={20} />
+                </button>
+                <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="p-4 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 disabled:opacity-30 transition-all shadow-sm">
+                <ChevronRight size={20} />
+                </button>
+            </div>
+            </div>
+        )}
+
+        {/* MODAL REDESIGN */}
         {showModal && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-8 overflow-hidden">
-            <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowModal(false)} />
+            <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={closeModal} />
             <div className="relative bg-white dark:bg-[#041d18] rounded-[3rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-500 border dark:border-white/5">
               
               <div className="p-10 border-b border-slate-50 dark:border-white/5 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl z-10 shrink-0">
                 <div>
-                  <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">New Barangay Profile</h2>
-                  <p className="text-slate-400 dark:text-slate-500 font-medium text-sm mt-1">Register territorial data for agricultural tracking.</p>
+                  <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">{editingId ? 'Edit Profile' : 'New Profile'}</h2>
+                  <p className="text-slate-400 dark:text-slate-500 font-medium text-sm mt-1">{editingId ? 'Update demographic metrics.' : 'Register territorial data.'}</p>
                 </div>
-                <button onClick={() => setShowModal(false)} className="p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-2xl transition-all text-slate-300 dark:text-slate-600">
+                <button onClick={closeModal} className="p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-2xl transition-all text-slate-300 dark:text-slate-600">
                   <X size={28} />
                 </button>
               </div>
@@ -274,8 +417,10 @@ export default function Barangays() {
               </form>
 
               <div className="px-10 py-8 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5 flex flex-col-reverse sm:flex-row justify-end gap-6 shrink-0">
-                <button type="button" onClick={() => setShowModal(false)} className="px-10 py-4 text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 transition-colors">Discard Draft</button>
-                <button onClick={handleSubmit} className="px-12 py-5 bg-emerald-600 dark:bg-emerald-600 text-white dark:text-[#041d18] rounded-[1.25rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all">Save Profile</button>
+                <button type="button" onClick={closeModal} className="px-10 py-4 text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 transition-colors">Discard</button>
+                <button onClick={handleSubmit} className="px-12 py-5 bg-emerald-600 dark:bg-emerald-600 text-white dark:text-[#041d18] rounded-[1.25rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all">
+                    {editingId ? 'Update Profile' : 'Save Profile'}
+                </button>
               </div>
             </div>
           </div>

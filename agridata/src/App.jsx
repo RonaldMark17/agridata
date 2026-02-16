@@ -2,13 +2,14 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 // Context & Security
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Layout & Authentication
 import Layout from './components/Layout';
 import Login from './pages/Login';
-import Register from './pages/Register';
-import ForgotPassword from './pages/ForgotPassword';
+import Register from './pages/Register'; // Ensure you created this file
+import LandingPage from './components/LandingPage'; // Ensure you created this file
 
 // Core Analytics
 import Dashboard from './pages/Dashboard';
@@ -20,7 +21,7 @@ import FarmerForm from './pages/FarmerForm';
 // Research & Community Modules
 import Experiences from './pages/Experiences';
 import ResearchProjects from './pages/ResearchProjects';
-import SurveyQuestionnaires from './pages/SurveyQuestionnaires'; // <--- ADDED IMPORT
+import SurveyQuestionnaires from './pages/SurveyQuestionnaires'; // <--- NEW MODULE
 import Barangays from './pages/Barangays';
 import Organizations from './pages/Organizations'; 
 import Products from './pages/Products';
@@ -29,108 +30,72 @@ import Products from './pages/Products';
 import Users from './pages/Users';
 import ActivityLogs from './pages/ActivityLogs';
 
-/**
- * ScrollToTop: Tactical helper to reset scroll position on navigation.
- * Essential for the "Aerospace" dashboard feel.
- */
+// Placeholders for missing pages (Delete these if you have real files)
+const ForgotPassword = () => <div className="p-10 text-center">Contact Admin to reset password.</div>;
+
 function ScrollToTop() {
   const { pathname } = useLocation();
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   return null;
 }
-
-/**
- * Internal Guard: Redirects unauthorized sessions to Login
- */
-const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { user, loading } = useAuth();
-  
-  if (loading) return null; // Component stays silent during auth check
-  
-  if (!user) return <Navigate to="/login" replace />;
-
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-  
-  return children;
-};
 
 function App() {
   return (
     <AuthProvider>
-      {/* Enable v7 Future Flags to ensure the application remains compatible 
-        with the next generation of React Router.
-      */}
-      <BrowserRouter 
-        future={{ 
-          v7_startTransition: true, 
-          v7_relativeSplatPath: true 
-        }}
-      >
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ScrollToTop />
         <Routes>
-          {/* --- PUBLIC AUTHENTICATION ZONE --- */}
+          {/* --- PUBLIC ZONE --- */}
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           
-          {/* --- PROTECTED SYSTEM SHELL --- */}
+          {/* --- PROTECTED APP ZONE --- */}
+          {/* We use a Layout Route without a path so it wraps all children */}
           <Route
-            path="/"
             element={
               <ProtectedRoute>
                 <Layout />
               </ProtectedRoute>
             }
           >
-            {/* Default Landing */}
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
+            {/* Redirect /app or unknown routes to dashboard */}
+            <Route path="/dashboard" element={<Dashboard />} />
             
-            {/* Farmer Module: Integrated CRUD & Dossier View */}
-            <Route path="farmers">
-              <Route index element={<FarmersList />} />
-              <Route path="new" element={<FarmerForm />} />
-              <Route path=":id" element={<FarmerForm />} /> {/* Read-only Dossier */}
-              <Route path=":id/edit" element={<FarmerForm />} />
-            </Route>
+            {/* Farmer Module */}
+            <Route path="/farmers" element={<FarmersList />} />
+            <Route path="/farmers/new" element={<FarmerForm />} />
+            <Route path="/farmers/:id" element={<FarmerForm />} />
+            <Route path="/farmers/:id/edit" element={<FarmerForm />} />
             
-            {/* Knowledge & Research Initiatives */}
-            <Route path="experiences" element={<Experiences />} />
-            <Route path="projects" element={<ResearchProjects />} />
-            <Route path="surveys" element={<SurveyQuestionnaires />} /> {/* <--- ADDED ROUTE */}
+            {/* Knowledge Modules */}
+            <Route path="/experiences" element={<Experiences />} />
+            <Route path="/projects" element={<ResearchProjects />} />
+            <Route path="/surveys" element={<SurveyQuestionnaires />} /> 
             
-            {/* Territorial & Commodity Registry */}
-            <Route path="barangays" element={<Barangays />} />
-            <Route path="organizations" element={<Organizations />} />
-            <Route path="products" element={<Products />} />
+            {/* Registry Modules */}
+            <Route path="/barangays" element={<Barangays />} />
+            <Route path="/organizations" element={<Organizations />} />
+            <Route path="/products" element={<Products />} />
 
-            {/* Restricted: Identity Governance */}
-            <Route
-              path="users"
-              element={
+            {/* Admin Modules */}
+            <Route path="/users" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <Users />
                 </ProtectedRoute>
-              }
+              } 
             />
-
-            {/* Restricted: System Audit Trail */}
-            <Route
-              path="logs"
-              element={
+            <Route path="/logs" element={
                 <ProtectedRoute allowedRoles={['admin', 'researcher']}>
                   <ActivityLogs />
                 </ProtectedRoute>
-              }
+              } 
             />
           </Route>
           
-          {/* SECURE FALLBACK: Redirect any invalid URL to Dashboard */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Global Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

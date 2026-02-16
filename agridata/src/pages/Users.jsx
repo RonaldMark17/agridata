@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usersAPI, authAPI, organizationsAPI } from '../services/api';
 import { 
   UserPlus, ShieldCheck, Microscope, PenTool, Eye, 
   Building, Lock, X, Edit2, Search,
   Fingerprint, Loader2, AlertCircle, 
-  Ban, CheckCircle, UserX, UserCheck
+  Ban, CheckCircle, UserX, UserCheck, Trash2, Filter, Download, ArrowUpDown
 } from 'lucide-react';
 
-// --- Skeleton Component (Dark Mode Compatible) ---
+// --- Skeleton Component ---
 const UserSkeleton = () => (
   <>
     {[...Array(5)].map((_, i) => (
@@ -30,6 +30,8 @@ const UserSkeleton = () => (
   </>
 );
 
+const ROLE_OPTIONS = ['All', 'admin', 'researcher', 'data_encoder', 'viewer'];
+
 export default function Users() {
   const [users, setUsers] = useState([]);
   const [organizations, setOrganizations] = useState([]);
@@ -37,11 +39,16 @@ export default function Users() {
   const [submitting, setSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  
+  // Filter & Sort State
   const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('All');
+  const [sortOrder, setSortOrder] = useState('asc'); // asc | desc
+  const [isExporting, setIsExporting] = useState(false);
   const [transactionError, setTransactionError] = useState('');
 
   const initialForm = {
-    username: '', email: '', password: '', full_name: '', role: 'viewer', organization: ''
+    username: '', email: '', password: '', confirmPassword: '', full_name: '', role: 'viewer', organization: ''
   };
 
   const [formData, setFormData] = useState(initialForm);
@@ -83,19 +90,27 @@ export default function Users() {
       return;
     }
 
+    if (!editingUser && formData.password !== formData.confirmPassword) {
+        setTransactionError('Security keys (passwords) do not match.');
+        setSubmitting(false);
+        return;
+    }
+
     try {
+      const payload = {
+        ...formData,
+        organization: formData.organization || null
+      };
+
       if (editingUser) {
-        await usersAPI.update(editingUser.id, {
-          ...formData,
-          password: formData.password.trim() === '' ? undefined : formData.password,
-          organization: formData.organization || null 
-        });
+        // Only include password if changed
+        if (!payload.password) delete payload.password;
+        delete payload.confirmPassword;
+        
+        await usersAPI.update(editingUser.id, payload);
       } else {
-        if (!formData.password) throw new Error('Security passcode is required.');
-        await authAPI.register({
-            ...formData,
-            organization: formData.organization || null 
-        });
+        delete payload.confirmPassword;
+        await authAPI.register(payload);
       }
       
       closeModal();
@@ -130,12 +145,24 @@ export default function Users() {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (window.confirm("PERMANENTLY OFFBOARD USER? This will remove their login and unlink their records. This action cannot be undone.")) {
+        try {
+            await usersAPI.delete(id);
+            setUsers(prev => prev.filter(u => u.id !== id));
+        } catch (error) {
+            alert(error.response?.data?.error || "Deletion failed. You cannot delete yourself or the primary admin.");
+        }
+    }
+  };
+
   const handleEdit = (user) => {
     setEditingUser(user);
     setFormData({
       username: user.username,
       email: user.email,
       password: '',
+      confirmPassword: '',
       full_name: user.full_name,
       role: user.role,
       organization: user.organization_id || '' 
@@ -151,17 +178,44 @@ export default function Users() {
     setTransactionError('');
   };
 
+  const handleExport = () => {
+    setIsExporting(true);
+    const headers = ["Username", "Full Name", "Email", "Role", "Status", "Organization"];
+    const rows = users.map(u => {
+        const orgName = organizations.find(o => o.id === u.organization_id)?.name || 'Independent';
+        return [u.username, `"${u.full_name}"`, u.email, u.role, u.is_active ? 'Active' : 'Disabled', `"${orgName}"`];
+    });
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `user_registry_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => setIsExporting(false), 1000);
+  };
+
+  // --- Filtering Logic ---
+  const filteredUsers = users
+    .filter(u => {
+        const matchesSearch = u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                              u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              u.username?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesRole = roleFilter === 'All' || u.role === roleFilter;
+        return matchesSearch && matchesRole;
+    })
+    .sort((a, b) => {
+        return sortOrder === 'asc' 
+            ? a.full_name.localeCompare(b.full_name) 
+            : b.full_name.localeCompare(a.full_name);
+    });
+
   const roleConfigs = {
     admin: { icon: ShieldCheck, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10', border: 'border-rose-100 dark:border-rose-500/20' },
     researcher: { icon: Microscope, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', border: 'border-blue-100 dark:border-blue-500/20' },
     data_encoder: { icon: PenTool, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', border: 'border-emerald-100 dark:border-emerald-500/20' },
     viewer: { icon: Eye, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-white/5', border: 'border-slate-100 dark:border-white/10' }
   };
-
-  const filteredUsers = users.filter(u => 
-    u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 transition-colors duration-300 pb-20">
@@ -180,29 +234,60 @@ export default function Users() {
             <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">Manage team access and secure system credentials.</p>
           </div>
           
-          <button 
-            onClick={() => setShowModal(true)} 
-            className="group flex items-center justify-center gap-3 px-8 py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-emerald-500 active:scale-95 transition-all"
-          >
-            <UserPlus size={18} className="group-hover:rotate-12 transition-transform" />
-            <span>Onboard Identity</span>
-          </button>
+          <div className="flex items-center gap-3 w-full lg:w-auto">
+            <button 
+                onClick={handleExport}
+                disabled={isExporting}
+                className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.25rem] font-black text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all shadow-sm"
+            >
+                {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                <span>Export CSV</span>
+            </button>
+            <button 
+                onClick={() => setShowModal(true)} 
+                className="flex-1 lg:flex-none group flex items-center justify-center gap-3 px-8 py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-emerald-500 active:scale-95 transition-all"
+            >
+                <UserPlus size={18} className="group-hover:rotate-12 transition-transform" />
+                <span>Onboard Identity</span>
+            </button>
+          </div>
         </header>
 
         {/* TABLE SECTION */}
         <div className="px-4">
           <div className="bg-white dark:bg-[#0b241f] rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm overflow-hidden transition-all hover:shadow-2xl">
             <div className="p-8 border-b border-slate-50 dark:border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
-                <input 
-                  type="text" 
-                  placeholder="Query identity..."
-                  className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+              
+              {/* Search & Filter Bar */}
+              <div className="flex flex-col sm:flex-row gap-4 flex-1">
+                <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
+                    <input 
+                    type="text" 
+                    placeholder="Query identity..."
+                    className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="relative w-full sm:w-48">
+                    <Filter className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
+                    <select 
+                        value={roleFilter}
+                        onChange={(e) => setRoleFilter(e.target.value)}
+                        className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 shadow-inner outline-none appearance-none cursor-pointer"
+                    >
+                        {ROLE_OPTIONS.map(r => <option key={r} value={r} className="dark:bg-[#0b241f]">{r.replace('_', ' ')}</option>)}
+                    </select>
+                </div>
+                <button 
+                    onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl text-slate-400 hover:text-emerald-600 transition-colors"
+                >
+                    <ArrowUpDown size={20} className={sortOrder === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'}/>
+                </button>
               </div>
+
               <div className="flex items-center gap-2 text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-100 dark:border-emerald-500/20 tracking-widest uppercase">
                 <Fingerprint size={14} /> Active Session Monitoring
               </div>
@@ -222,7 +307,10 @@ export default function Users() {
                 <tbody className="divide-y divide-slate-50 dark:divide-white/5">
                   {loading ? (
                     <tr><td colSpan="5" className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-emerald-500" /></td></tr>
-                  ) : filteredUsers.map((user) => {
+                  ) : filteredUsers.length === 0 ? (
+                    <tr><td colSpan="5" className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">No matching identities found</td></tr>
+                  ) : (
+                    filteredUsers.map((user) => {
                     const roleStyle = roleConfigs[user.role] || roleConfigs['viewer'];
                     const orgName = organizations.find(o => o.id === user.organization_id)?.name || 'Independent';
                     
@@ -260,16 +348,24 @@ export default function Users() {
                             </button>
                             <button 
                                 onClick={() => handleToggleStatus(user)} 
-                                className={`p-2.5 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl shadow-sm transition-all ${user.is_active ? 'text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400' : 'text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400'}`}
+                                className={`p-2.5 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl shadow-sm transition-all ${user.is_active ? 'text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400' : 'text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400'}`}
                                 title={user.is_active ? "Disable User" : "Enable User"}
                             >
-                                {user.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
+                                {user.is_active ? <Ban size={16} /> : <CheckCircle size={16} />}
+                            </button>
+                            {/* DELETE BUTTON */}
+                            <button 
+                                onClick={() => handleDelete(user.id)}
+                                className="p-2.5 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl shadow-sm transition-all"
+                                title="Offboard User"
+                            >
+                                <Trash2 size={16} />
                             </button>
                           </div>
                         </td>
                       </tr>
                     );
-                  })}
+                  }))}
                 </tbody>
               </table>
             </div>
@@ -334,11 +430,19 @@ export default function Users() {
                       </select>
                     </div>
                   </div>
+                  
+                  {/* PASSWORD SECTION */}
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">{editingUser ? 'Credential Reset (Leave blank to keep)' : 'Access Key (Password)'}</label>
-                    <div className="relative">
-                      <Lock className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={18} />
-                      <input type="password" required={!editingUser} className="w-full pl-16 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder={editingUser ? "••••••••" : "Create password"} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="relative">
+                            <Lock className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={18} />
+                            <input type="password" required={!editingUser} className="w-full pl-16 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder={editingUser ? "New Password" : "Create password"} />
+                        </div>
+                        <div className="relative">
+                            <Lock className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={18} />
+                            <input type="password" required={!editingUser || formData.password.length > 0} className="w-full pl-16 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" value={formData.confirmPassword} onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })} placeholder="Confirm password" />
+                        </div>
                     </div>
                   </div>
                 </div>
