@@ -25,7 +25,7 @@ export default function FarmerForm() {
 
   const [error, setError] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
-  const [isDragging, setIsDragging] = useState(false); // NEW: Drag & Drop State
+  const [isDragging, setIsDragging] = useState(false);
 
   const [formData, setFormData] = useState({
     farmer_code: '', 
@@ -51,7 +51,6 @@ export default function FarmerForm() {
     products: []
   });
 
-  // NEW: Calculated Age Display
   const [calculatedAge, setCalculatedAge] = useState(0);
 
   useEffect(() => {
@@ -63,7 +62,6 @@ export default function FarmerForm() {
     }
   }, [id]);
 
-  // NEW: Auto-Calculate Age Effect
   useEffect(() => {
     if (formData.birth_date) {
       const birthDate = new Date(formData.birth_date);
@@ -121,7 +119,6 @@ export default function FarmerForm() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // NEW: Drag and Drop Handlers
   const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
   const handleDrop = (e) => {
@@ -169,7 +166,6 @@ export default function FarmerForm() {
     setLoading(true);
     setError('');
 
-    // NEW: Validation Check
     if (!formData.first_name || !formData.last_name || !formData.barangay_id) {
         setError("Please fill in all required fields (Name, Surname, Barangay).");
         setLoading(false);
@@ -187,7 +183,7 @@ export default function FarmerForm() {
             data.append('profile_image', formData.profile_image);
           }
         } else if (key === 'age') {
-            data.append('age', calculatedAge); // Send calculated age
+            data.append('age', calculatedAge);
         } else if (formData[key] !== null && formData[key] !== undefined) {
           data.append(key, formData[key]);
         }
@@ -248,286 +244,289 @@ export default function FarmerForm() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-10">
+        {/* FIX 2: Wrapper DIV replaces the outermost form tag to prevent nesting issues */}
+        <div className="space-y-10">
 
-          {/* SECTION 1: IDENTITY */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-4 space-y-8">
-              {/* IMAGE UPLOAD WITH DRAG & DROP */}
-              <div 
-                className={`bg-white dark:bg-[#0b241f] p-10 rounded-[3rem] border shadow-sm flex flex-col items-center text-center relative overflow-hidden group transition-all duration-300
-                ${isDragging ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 border-dashed' : 'border-slate-100 dark:border-white/5'}`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <div className="relative z-10">
-                  <div className="relative group w-44 h-44 mb-6 mx-auto" onClick={() => fileInputRef.current.click()}>
-                    <div className={`w-full h-full rounded-[3.5rem] overflow-hidden border-8 border-slate-50 dark:border-[#020c0a] shadow-inner flex items-center justify-center bg-slate-100 dark:bg-[#020c0a] transition-all duration-500 group-hover:scale-105 cursor-pointer ${!imagePreview ? 'border-dashed border-slate-200 dark:border-white/10' : ''}`}>
-                      {imagePreview ? (
-                        <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                      ) : (
-                        <User size={64} className="text-slate-300 dark:text-slate-700" />
-                      )}
+          <form id="farmer-profile-form" onSubmit={handleSubmit} className="space-y-10">
+            {/* SECTION 1: IDENTITY */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-4 space-y-8">
+                {/* IMAGE UPLOAD WITH DRAG & DROP */}
+                <div 
+                  className={`bg-white dark:bg-[#0b241f] p-10 rounded-[3rem] border shadow-sm flex flex-col items-center text-center relative overflow-hidden group transition-all duration-300
+                  ${isDragging ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 border-dashed' : 'border-slate-100 dark:border-white/5'}`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <div className="relative z-10">
+                    <div className="relative group w-44 h-44 mb-6 mx-auto" onClick={() => fileInputRef.current.click()}>
+                      <div className={`w-full h-full rounded-[3.5rem] overflow-hidden border-8 border-slate-50 dark:border-[#020c0a] shadow-inner flex items-center justify-center bg-slate-100 dark:bg-[#020c0a] transition-all duration-500 group-hover:scale-105 cursor-pointer ${!imagePreview ? 'border-dashed border-slate-200 dark:border-white/10' : ''}`}>
+                        {imagePreview ? (
+                          <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <User size={64} className="text-slate-300 dark:text-slate-700" />
+                        )}
+                      </div>
+                      <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 text-white opacity-0 group-hover:opacity-100 rounded-[3.5rem] cursor-pointer transition-all duration-300 backdrop-blur-sm pointer-events-none">
+                        <Upload size={28} />
+                      </div>
                     </div>
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 text-white opacity-0 group-hover:opacity-100 rounded-[3.5rem] cursor-pointer transition-all duration-300 backdrop-blur-sm pointer-events-none">
-                      <Upload size={28} />
-                    </div>
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={handleImageChange} 
+                    />
+                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Biometric Capture</p>
+                    <p className="text-[10px] text-slate-300 mt-2">Drag image here or click</p>
                   </div>
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={handleImageChange} 
-                  />
-                  <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Biometric Capture</p>
-                  <p className="text-[10px] text-slate-300 mt-2">Drag image here or click</p>
                 </div>
               </div>
-            </div>
 
-            <div className="lg:col-span-8 bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10 relative overflow-hidden">
-              <div className="flex items-center gap-3 relative z-10">
-                <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-2xl text-slate-400 dark:text-slate-500 shadow-inner"><User size={20} /></div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Core Specifications</h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Reference Code</label>
-                  <div className="relative">
-                    <Hash className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
-                    <input required type="text" name="farmer_code" value={formData.farmer_code} onChange={handleChange} readOnly
-                      className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none opacity-70 cursor-not-allowed" />
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Affiliation</label>
-                  <div className="relative">
-                    <Building2 className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
-                    <select required name="organization_id" value={formData.organization_id} onChange={handleChange}
-                      className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
-                      <option value="">Select Organization...</option>
-                      {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-                    </select>
-                  </div>
+              <div className="lg:col-span-8 bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10 relative overflow-hidden">
+                <div className="flex items-center gap-3 relative z-10">
+                  <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-2xl text-slate-400 dark:text-slate-500 shadow-inner"><User size={20} /></div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Core Specifications</h3>
                 </div>
 
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal First Name <span className="text-rose-500">*</span></label>
-                  <input required type="text" name="first_name" value={formData.first_name} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
-                </div>
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal Last Name <span className="text-rose-500">*</span></label>
-                  <input required type="text" name="last_name" value={formData.last_name} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
-                </div>
-                
-                {/* ... Middle Name and Suffix (Standard Inputs) ... */}
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Middle Name</label>
-                  <input type="text" name="middle_name" value={formData.middle_name} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
-                </div>
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Suffix</label>
-                  <input type="text" name="extension_name" value={formData.extension_name} onChange={handleChange} placeholder="Jr., Sr., III"
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
-                </div>
-
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Birth Date</label>
-                  <div className="flex gap-4 items-center">
-                    <input type="date" name="birth_date" value={formData.birth_date} onChange={handleChange}
-                        className="flex-1 px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
-                    <div className="px-6 py-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-black text-sm min-w-[80px] text-center">
-                        {calculatedAge} Y/O
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
+                {/* FIX 1: Added ?? '' to all values */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Gender</label>
-                    <select name="gender" value={formData.gender} onChange={handleChange}
-                      className="w-full px-4 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                    </select>
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Reference Code</label>
+                    <div className="relative">
+                      <Hash className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
+                      <input required type="text" name="farmer_code" value={formData.farmer_code ?? ''} onChange={handleChange} readOnly
+                        className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none opacity-70 cursor-not-allowed" />
+                    </div>
                   </div>
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Civil Status</label>
-                    <select name="civil_status" value={formData.civil_status} onChange={handleChange}
-                      className="w-full px-4 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
-                      <option value="Single">Single</option>
-                      <option value="Married">Married</option>
-                      <option value="Widowed">Widowed</option>
-                      <option value="Separated">Separated</option>
-                    </select>
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Affiliation</label>
+                    <div className="relative">
+                      <Building2 className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
+                      <select required name="organization_id" value={formData.organization_id ?? ''} onChange={handleChange}
+                        className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
+                        <option value="">Select Organization...</option>
+                        {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal First Name <span className="text-rose-500">*</span></label>
+                    <input required type="text" name="first_name" value={formData.first_name ?? ''} onChange={handleChange}
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal Last Name <span className="text-rose-500">*</span></label>
+                    <input required type="text" name="last_name" value={formData.last_name ?? ''} onChange={handleChange}
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Middle Name</label>
+                    <input type="text" name="middle_name" value={formData.middle_name ?? ''} onChange={handleChange}
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Suffix</label>
+                    <input type="text" name="extension_name" value={formData.extension_name ?? ''} onChange={handleChange} placeholder="Jr., Sr., III"
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Birth Date</label>
+                    <div className="flex gap-4 items-center">
+                      <input type="date" name="birth_date" value={formData.birth_date ?? ''} onChange={handleChange}
+                          className="flex-1 px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none" />
+                      <div className="px-6 py-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-black text-sm min-w-[80px] text-center">
+                          {calculatedAge} Y/O
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Gender</label>
+                      <select name="gender" value={formData.gender ?? ''} onChange={handleChange}
+                        className="w-full px-4 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                      </select>
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Civil Status</label>
+                      <select name="civil_status" value={formData.civil_status ?? ''} onChange={handleChange}
+                        className="w-full px-4 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
+                        <option value="Single">Single</option>
+                        <option value="Married">Married</option>
+                        <option value="Widowed">Widowed</option>
+                        <option value="Separated">Separated</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* SECTION 2: GEOGRAPHIC */}
-          <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-2xl shadow-inner"><Globe size={20} /></div>
-              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Geographic Protocol</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Assigned Barangay <span className="text-rose-500">*</span></label>
-                <select required name="barangay_id" value={formData.barangay_id} onChange={handleChange}
-                  className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
-                  <option value="">Select Territory...</option>
-                  {barangays.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-              <div className="space-y-3 md:col-span-2">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Terminal Address (Purok/Sitio)</label>
-                <input type="text" name="address" value={formData.address} onChange={handleChange}
-                  className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" placeholder="Unit, Street, Complex" />
-              </div>
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Communication Link</label>
-                <div className="relative">
-                  <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
-                  <input type="text" name="contact_number" value={formData.contact_number} onChange={handleChange}
-                    className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" placeholder="+63 000 000 0000" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 3: METRICS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* SECTION 2: GEOGRAPHIC */}
             <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-amber-50 dark:bg-amber-500/10 text-amber-500 dark:text-amber-400 rounded-2xl shadow-inner"><Ruler size={20} /></div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Agricultural Metrics</h3>
+                <div className="p-3 bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-2xl shadow-inner"><Globe size={20} /></div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Geographic Protocol</h3>
               </div>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Land Area (HA)</label>
-                  <input type="number" step="0.01" name="farm_size_hectares" value={formData.farm_size_hectares} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
-                </div>
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Tenure (Yrs)</label>
-                  <input type="number" name="years_farming" value={formData.years_farming} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
-                </div>
-                <div className="col-span-2 space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Land Ownership Model</label>
-                  <select name="land_ownership" value={formData.land_ownership} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
-                    <option value="Owner">Global Owner</option>
-                    <option value="Tenant">Tenant Custodian</option>
-                    <option value="Leaseholder">Leaseholder</option>
-                    <option value="Caretaker">Caretaker Agent</option>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Assigned Barangay <span className="text-rose-500">*</span></label>
+                  <select required name="barangay_id" value={formData.barangay_id ?? ''} onChange={handleChange}
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
+                    <option value="">Select Territory...</option>
+                    {barangays.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
+                </div>
+                <div className="space-y-3 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Terminal Address (Purok/Sitio)</label>
+                  <input type="text" name="address" value={formData.address ?? ''} onChange={handleChange}
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" placeholder="Unit, Street, Complex" />
+                </div>
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Communication Link</label>
+                  <div className="relative">
+                    <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} />
+                    <input type="text" name="contact_number" value={formData.contact_number ?? ''} onChange={handleChange}
+                      className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" placeholder="+63 000 000 0000" />
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 rounded-2xl shadow-inner"><DollarSign size={20} /></div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Economic Profile</h3>
-              </div>
-              <div className="space-y-8">
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Educational Background</label>
-                  <select name="education_level" value={formData.education_level} onChange={handleChange}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
-                    <option value="Elementary">Elementary Cycle</option>
-                    <option value="High School Graduate">High School Diploma</option>
-                    <option value="College Undergraduate">College Undergrad</option>
-                    <option value="College Graduate">Academic Degree</option>
-                    <option value="Vocational">Vocational Cert</option>
-                    <option value="None">None</option>
-                  </select>
+            {/* SECTION 3: METRICS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-amber-50 dark:bg-amber-500/10 text-amber-500 dark:text-amber-400 rounded-2xl shadow-inner"><Ruler size={20} /></div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Agricultural Metrics</h3>
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Annual Yield (₱)</label>
-                    <input type="number" name="annual_income" value={formData.annual_income} onChange={handleChange}
-                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Land Area (HA)</label>
+                    <input type="number" step="0.01" name="farm_size_hectares" value={formData.farm_size_hectares ?? ''} onChange={handleChange}
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
                   </div>
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Primary Revenue Source</label>
-                    <input type="text" name="income_source" value={formData.income_source} onChange={handleChange}
-                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Tenure (Yrs)</label>
+                    <input type="number" name="years_farming" value={formData.years_farming ?? ''} onChange={handleChange}
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
+                  </div>
+                  <div className="col-span-2 space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Land Ownership Model</label>
+                    <select name="land_ownership" value={formData.land_ownership ?? ''} onChange={handleChange}
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
+                      <option value="Owner">Global Owner</option>
+                      <option value="Tenant">Tenant Custodian</option>
+                      <option value="Leaseholder">Leaseholder</option>
+                      <option value="Caretaker">Caretaker Agent</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 rounded-2xl shadow-inner"><DollarSign size={20} /></div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Economic Profile</h3>
+                </div>
+                <div className="space-y-8">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Educational Background</label>
+                    <select name="education_level" value={formData.education_level ?? ''} onChange={handleChange}
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
+                      <option value="Elementary">Elementary Cycle</option>
+                      <option value="High School Graduate">High School Diploma</option>
+                      <option value="College Undergraduate">College Undergrad</option>
+                      <option value="College Graduate">Academic Degree</option>
+                      <option value="Vocational">Vocational Cert</option>
+                      <option value="None">None</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Annual Yield (₱)</label>
+                      <input type="number" name="annual_income" value={formData.annual_income ?? ''} onChange={handleChange}
+                        className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Primary Revenue Source</label>
+                      <input type="text" name="income_source" value={formData.income_source ?? ''} onChange={handleChange}
+                        className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* SECTION 4: PRODUCTION */}
-          <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10 transition-all">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-6 pb-2 border-b border-slate-50 dark:border-white/5">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl shadow-inner"><Sprout size={20} /></div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Yield Documentation</h3>
+            {/* SECTION 4: PRODUCTION */}
+            <div className="bg-white dark:bg-[#0b241f] p-10 md:p-12 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-10 transition-all">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-6 pb-2 border-b border-slate-50 dark:border-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl shadow-inner"><Sprout size={20} /></div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Yield Documentation</h3>
+                </div>
+                <button type="button" onClick={addProduct} className="group inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all">
+                  <Plus size={14} className="group-hover:rotate-90 transition-transform" /> Append Commodity
+                </button>
               </div>
-              <button type="button" onClick={addProduct} className="group inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all">
-                <Plus size={14} className="group-hover:rotate-90 transition-transform" /> Append Commodity
-              </button>
-            </div>
 
-            <div className="space-y-6">
-              {formData.products.length === 0 ? (
-                <div className="p-20 text-center bg-slate-50 dark:bg-white/5 rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-white/10">
-                  <div className="p-5 bg-white dark:bg-[#0b241f] rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-6 shadow-sm"><FileText size={32} /></div>
-                  <h4 className="text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">No active commodities detected</h4>
-                  <p className="text-xs text-slate-400 dark:text-slate-600 mt-2">Initialize yield data by appending a new crop profile.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-6">
-                  {formData.products.map((product, index) => (
-                    <div key={index} className="flex flex-col lg:flex-row gap-6 items-start lg:items-end p-8 bg-slate-50 dark:bg-white/5 rounded-[2.5rem] border border-slate-100 dark:border-white/5 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl group animate-in slide-in-from-right-4">
-                      <div className="flex-1 w-full space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Commodity Type</label>
-                        <input type="text" placeholder="e.g. Hybrid Rice" value={product.product_name} onChange={(e) => handleProductChange(index, 'product_name', e.target.value)}
-                          className="w-full px-6 py-3.5 bg-white dark:bg-white/5 border-none rounded-2xl text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
+              <div className="space-y-6">
+                {formData.products.length === 0 ? (
+                  <div className="p-20 text-center bg-slate-50 dark:bg-white/5 rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-white/10">
+                    <div className="p-5 bg-white dark:bg-[#0b241f] rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-6 shadow-sm"><FileText size={32} /></div>
+                    <h4 className="text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">No active commodities detected</h4>
+                    <p className="text-xs text-slate-400 dark:text-slate-600 mt-2">Initialize yield data by appending a new crop profile.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-6">
+                    {formData.products.map((product, index) => (
+                      <div key={index} className="flex flex-col lg:flex-row gap-6 items-start lg:items-end p-8 bg-slate-50 dark:bg-white/5 rounded-[2.5rem] border border-slate-100 dark:border-white/5 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl group animate-in slide-in-from-right-4">
+                        <div className="flex-1 w-full space-y-3">
+                          <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Commodity Type</label>
+                          <input type="text" placeholder="e.g. Hybrid Rice" value={product.product_name ?? ''} onChange={(e) => handleProductChange(index, 'product_name', e.target.value)}
+                            className="w-full px-6 py-3.5 bg-white dark:bg-white/5 border-none rounded-2xl text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
+                        </div>
+                        <div className="w-full lg:w-40 space-y-3">
+                          <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Volume</label>
+                          <input type="number" placeholder="0" value={product.production_volume ?? ''} onChange={(e) => handleProductChange(index, 'production_volume', e.target.value)}
+                            className="w-full px-6 py-3.5 bg-white dark:bg-white/5 border-none rounded-2xl text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
+                        </div>
+                        <div className="w-full lg:w-32 space-y-3">
+                          <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Unit</label>
+                          <select value={product.unit ?? ''} onChange={(e) => handleProductChange(index, 'unit', e.target.value)}
+                            className="w-full px-6 py-3.5 bg-white dark:bg-white/5 border-none rounded-2xl text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none">
+                            <option value="kg">kg</option><option value="tons">tons</option><option value="sacks">sacks</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-6 pb-2">
+                          <label className="flex items-center gap-3 cursor-pointer group/check">
+                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${product.is_primary ? 'bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200 dark:shadow-none' : 'border-slate-200 dark:border-white/20 bg-white dark:bg-white/5 group-hover/check:border-emerald-300'}`}>
+                              {product.is_primary && <Plus size={14} className="text-white rotate-45" />}
+                            </div>
+                            <input type="checkbox" className="hidden" checked={product.is_primary} onChange={(e) => handleProductChange(index, 'is_primary', e.target.checked)} />
+                            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Primary Yield</span>
+                          </label>
+                          <button type="button" onClick={() => removeProduct(index)} className="p-3 bg-white dark:bg-[#041d18] border border-rose-100 dark:border-rose-500/20 text-rose-400 hover:bg-rose-500 dark:hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm active:scale-90">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </div>
-                      <div className="w-full lg:w-40 space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Volume</label>
-                        <input type="number" placeholder="0" value={product.production_volume} onChange={(e) => handleProductChange(index, 'production_volume', e.target.value)}
-                          className="w-full px-6 py-3.5 bg-white dark:bg-white/5 border-none rounded-2xl text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
-                      </div>
-                      <div className="w-full lg:w-32 space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Unit</label>
-                        <select value={product.unit} onChange={(e) => handleProductChange(index, 'unit', e.target.value)}
-                          className="w-full px-6 py-3.5 bg-white dark:bg-white/5 border-none rounded-2xl text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none">
-                          <option value="kg">kg</option><option value="tons">tons</option><option value="sacks">sacks</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-6 pb-2">
-                        <label className="flex items-center gap-3 cursor-pointer group/check">
-                          <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${product.is_primary ? 'bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200 dark:shadow-none' : 'border-slate-200 dark:border-white/20 bg-white dark:bg-white/5 group-hover/check:border-emerald-300'}`}>
-                            {product.is_primary && <Plus size={14} className="text-white rotate-45" />}
-                          </div>
-                          <input type="checkbox" className="hidden" checked={product.is_primary} onChange={(e) => handleProductChange(index, 'is_primary', e.target.checked)} />
-                          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Primary Yield</span>
-                        </label>
-                        <button type="button" onClick={() => removeProduct(index)} className="p-3 bg-white dark:bg-[#041d18] border border-rose-100 dark:border-rose-500/20 text-rose-400 hover:bg-rose-500 dark:hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm active:scale-90">
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </form>
 
-          {/* SECTION 5: FAMILY & SUCCESSION */}
+          {/* SECTION 5: FAMILY & SUCCESSION (Outside main form to prevent nesting) */}
           {isEditMode && (
             <FarmerChildren
               farmerId={id}
@@ -536,17 +535,18 @@ export default function FarmerForm() {
             />
           )}
 
-          {/* ACTION DECK */}
+          {/* ACTION DECK (Linked to form via ID) */}
           <footer className="flex flex-col-reverse sm:flex-row justify-end gap-6 pt-10 border-t border-slate-100 dark:border-white/5">
             <button type="button" onClick={() => navigate('/farmers')} className="px-10 py-5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95">
               Abort Operation
             </button>
-            <button type="submit" disabled={loading} className="px-12 py-5 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
+            <button type="submit" form="farmer-profile-form" disabled={loading} className="px-12 py-5 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
               <span>{isEditMode ? 'Commit Record Changes' : 'Finalize Identity Enrollment'}</span>
             </button>
           </footer>
-        </form>
+
+        </div>
       </div>
     </div>
   );

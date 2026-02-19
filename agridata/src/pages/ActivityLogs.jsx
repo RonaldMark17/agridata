@@ -4,7 +4,8 @@ import {
   History, PlusCircle, Edit3, Trash2, Key, 
   FileText, User, Hash, Clock, Filter, 
   ChevronLeft, ChevronRight, Activity, Terminal, ShieldAlert, Loader2,
-  Search, Download, RotateCcw, Maximize2, X, Globe, UserCircle, CalendarRange
+  Search, Download, RotateCcw, Maximize2, X, Globe, UserCircle, CalendarRange, 
+  MapPin 
 } from 'lucide-react';
 
 // --- Skeleton Component (Dark Mode Compatible) ---
@@ -176,7 +177,7 @@ export default function ActivityLogs() {
           </div>
         </header>
 
-        {/* Summary Metric Modules - Now Interactive */}
+        {/* Summary Metric Modules */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 px-4">
           {[
             { label: 'Total Events', key: '', val: logs.length, icon: Terminal, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-white/5' },
@@ -202,7 +203,7 @@ export default function ActivityLogs() {
           ))}
         </div>
 
-        {/* Unified Control Deck (Advanced Filters) */}
+        {/* Unified Control Deck */}
         <div className="px-4">
           <div className="bg-white dark:bg-[#0b241f] rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm p-4 space-y-4">
             <div className="flex flex-col xl:flex-row items-center gap-4">
@@ -277,17 +278,14 @@ export default function ActivityLogs() {
                 const Icon = config.icon;
                 return (
                   <div key={log.id} className="relative pl-12 md:pl-16 pb-12 group">
-                    {/* Vertical Progression Line */}
                     {index !== filteredLogs.length - 1 && (
                       <div className="absolute left-[23px] md:left-[31px] top-12 bottom-0 w-0.5 bg-slate-100 dark:bg-white/5 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-500/20 transition-colors duration-500" />
                     )}
                     
-                    {/* Event Connector Icon */}
                     <div className={`absolute left-0 md:left-2 top-0 w-12 h-12 rounded-[1.25rem] border-4 border-white dark:border-[#020c0a] shadow-xl flex items-center justify-center z-10 ${config.bg} ${config.color} transition-all duration-500 group-hover:scale-110 group-hover:${config.glow}`}>
                       <Icon size={20} strokeWidth={2.5} />
                     </div>
                     
-                    {/* Log Card Entry */}
                     <div 
                       onClick={() => setSelectedLog(log)}
                       className="bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 rounded-[2.5rem] p-8 md:p-10 shadow-sm hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] dark:hover:shadow-black/40 hover:-translate-y-1 transition-all duration-500 ml-4 relative overflow-hidden cursor-pointer"
@@ -295,7 +293,7 @@ export default function ActivityLogs() {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 relative z-10">
                         <div className="flex flex-wrap items-center gap-3">
                           <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] border shadow-inner ${config.bg} ${config.color} ${config.border}`}>
-                            {log.action}
+                            {log.action.replace(/_/g, ' ')}
                           </span>
                           {log.entity_type && (
                             <span className="px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] bg-slate-900 dark:bg-emerald-600 text-white shadow-lg">
@@ -326,7 +324,7 @@ export default function ActivityLogs() {
                               <Hash size={20} strokeWidth={2.5} />
                             </div>
                             <div className="min-w-0">
-                              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Entity Reference</p>
+                              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Entity Type</p>
                               <p className="text-lg font-mono font-black text-slate-700 dark:text-slate-300 truncate tracking-tight">#{log.entity_id}</p>
                             </div>
                           </div>
@@ -376,7 +374,7 @@ export default function ActivityLogs() {
           </div>
         )}
 
-        {/* LOG DETAIL MODAL (New Feature) */}
+        {/* LOG DETAIL MODAL */}
         {selectedLog && (
             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 overflow-hidden">
                 <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setSelectedLog(null)} />
@@ -415,11 +413,11 @@ export default function ActivityLogs() {
                              <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl space-y-2">
                                 <Activity size={18} className="text-slate-400"/>
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Operation</p>
-                                <p className="font-bold text-slate-800 dark:text-white">{selectedLog.action}</p>
+                                <p className="font-bold text-slate-800 dark:text-white">{selectedLog.action.replace(/_/g, ' ')}</p>
                              </div>
                              <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl space-y-2">
                                 <MapPin size={18} className="text-slate-400"/>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Entity</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Entity Type</p>
                                 <p className="font-bold text-slate-800 dark:text-white">{selectedLog.entity_type} / #{selectedLog.entity_id}</p>
                              </div>
                         </div>

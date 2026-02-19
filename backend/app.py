@@ -62,16 +62,19 @@ def create_app(config_name='development'):
     def log_activity(action, entity_type=None, entity_id=None, details=None):
         try:
             user_id = get_jwt_identity()
-            # Handle case where activity is logged during login/public events where token might be missing
             if not user_id:
                 return 
+
+            # --- REFINEMENT: Clean both Action and Entity Type ---
+            formatted_action = action.replace('_', ' ') if action else action
+            formatted_entity = entity_type.replace('_', ' ') if entity_type else entity_type
 
             str_entity_id = str(entity_id) if entity_id else None
             
             log = ActivityLog(
                 user_id=user_id,
-                action=action,
-                entity_type=entity_type,
+                action=formatted_action,
+                entity_type=formatted_entity, # Cleaned entity type
                 entity_id=str_entity_id,
                 details=details,
                 ip_address=request.remote_addr
@@ -243,7 +246,7 @@ def create_app(config_name='development'):
             access_token = create_access_token(identity=str(user.id), expires_delta=timedelta(hours=12))
             refresh_token = create_refresh_token(identity=str(user.id))
             
-            log_activity('LOGIN_SUCCESS', 'User', user.id, f"User {user.username} logged in")
+            log_activity('LOGIN SUCCESS', 'User', user.id, f"User {user.username} logged in")
             
             return jsonify({
                 'message': 'Login successful',
@@ -309,7 +312,7 @@ def create_app(config_name='development'):
             access_token = create_access_token(identity=str(user.id), expires_delta=timedelta(hours=12))
             refresh_token = create_refresh_token(identity=str(user.id))
             
-            log_activity('LOGIN_OTP_SUCCESS', 'User', user.id, f"User {user.username} verified OTP")
+            log_activity('LOGIN OTP SUCCESS', 'User', user.id, f"User {user.username} verified OTP")
 
             return jsonify({
                 'message': 'Verification successful',
@@ -351,7 +354,7 @@ def create_app(config_name='development'):
         db.session.commit()
 
         status = "enabled" if user.otp_enabled else "disabled"
-        log_activity('SECURITY_UPDATE', 'User', user.id, f"User {status} 2FA/OTP")
+        log_activity('SECURITY UPDATE', 'User', user.id, f"User {status} 2FA/OTP")
 
         return jsonify({'message': f'Two-factor authentication {status}', 'state': user.otp_enabled}), 200
     
@@ -731,7 +734,7 @@ def create_app(config_name='development'):
                     db.session.commit()
                 except: pass
 
-            log_activity('FARMER_CREATED', 'Farmer', farmer.id, f"Created: {farmer.first_name} {farmer.last_name}")
+            log_activity('FARMER CREATED', 'Farmer', farmer.id, f"Created: {farmer.first_name} {farmer.last_name}")
             return jsonify({'message': 'Success', 'farmer': farmer.to_dict()}), 201
         except Exception as e:
             db.session.rollback()
@@ -897,7 +900,7 @@ def create_app(config_name='development'):
             
             db.session.commit()
             
-            log_activity('FARMER_UPDATED', 'Farmer', farmer.id, f"Updated farmer: {farmer.first_name} {farmer.last_name}")
+            log_activity('FARMER UPDATED', 'Farmer', farmer.id, f"Updated farmer: {farmer.first_name} {farmer.last_name}")
             
             return jsonify({'message': 'Farmer updated successfully', 'farmer': farmer.to_dict()}), 200
             
@@ -926,7 +929,7 @@ def create_app(config_name='development'):
         if farmer.profile_image:
             delete_profile_image(farmer.profile_image)
         
-        log_activity('FARMER_DELETED', 'Farmer', farmer.id, f"Deleted farmer: {farmer.first_name} {farmer.last_name}")
+        log_activity('FARMER DELETED', 'Farmer', farmer.id, f"Deleted farmer: {farmer.first_name} {farmer.last_name}")
         
         db.session.delete(farmer)
         db.session.commit()
@@ -964,7 +967,7 @@ def create_app(config_name='development'):
             db.session.add(survey)
             db.session.commit()
             
-            log_activity('SURVEY_CREATED', 'SurveyQuestionnaire', survey.id, f"Created survey: {survey.title}")
+            log_activity('SURVEY CREATED', 'Survey Questionnaire', survey.id, f"Created survey: {survey.title}")
             return jsonify({'message': 'Survey created successfully', 'survey': survey.to_dict()}), 201
         except Exception as e:
             db.session.rollback()
@@ -1070,6 +1073,61 @@ def create_app(config_name='development'):
         
         return jsonify({'message': 'Child record added successfully', 'child': child.to_dict()}), 201
     
+    # Find this route in app.py and replace it
+    @app.route('/api/farmers/<int:farmer_id>/children/<int:child_id>', methods=['PUT'])
+    @jwt_required()
+    def update_farmer_child(farmer_id, child_id):
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        # Security Check
+        if current_user.role not in ['admin', 'researcher', 'data_encoder']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Verify the child exists and belongs to the specified farmer
+        child = FarmerChild.query.filter_by(id=child_id, farmer_id=farmer_id).first()
+        
+        if not child:
+            return jsonify({'error': 'Identity record not found in registry.'}), 404
+            
+        data = request.get_json()
+        
+        try:
+            # Safely update fields using dict.get() to avoid KeyErrors
+            if 'name' in data:
+                child.name = data.get('name')
+            if 'age' in data:
+                # Handle empty strings from frontend input type="number"
+                age_val = data.get('age')
+                child.age = int(age_val) if age_val else None
+            if 'gender' in data:
+                child.gender = data.get('gender')
+            if 'education_level' in data:
+                child.education_level = data.get('education_level')
+            if 'current_occupation' in data:
+                child.current_occupation = data.get('current_occupation')
+            if 'continues_farming' in data:
+                child.continues_farming = bool(data.get('continues_farming'))
+            if 'involvement_level' in data:
+                child.involvement_level = data.get('involvement_level')
+            if 'notes' in data:
+                child.notes = data.get('notes')
+                
+            db.session.commit()
+            
+            # Log the modification
+            log_activity('CHILD UPDATED', 'Farmer Child', child.id, f"Updated record for {child.name}")
+            
+            return jsonify({'message': 'Identity modified successfully', 'child': child.to_dict()}), 200
+            
+        except ValueError as ve:
+            db.session.rollback()
+            return jsonify({'error': 'Invalid data format provided (e.g. text in age field)'}), 400
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ CHILD UPDATE ERROR: {str(e)}")
+            return jsonify({'error': 'Database constraint violation or server error.'}), 500
+    
     # ============ Farmer Experiences Routes ============
     
     @app.route('/api/experiences', methods=['GET'])
@@ -1122,7 +1180,7 @@ def create_app(config_name='development'):
 
         db.session.commit()
         
-        log_activity('EXPERIENCE_CREATED', 'FarmerExperience', experience.id)
+        log_activity('EXPERIENCE CREATED', 'Farmer Experience', experience.id)
         
         return jsonify({'message': 'Experience recorded successfully', 'experience': experience.to_dict()}), 201
     
@@ -1182,7 +1240,7 @@ def create_app(config_name='development'):
 
         db.session.commit()
         
-        log_activity('PROJECT_CREATED', 'ResearchProject', project.id, f"Created project: {project.title}")
+        log_activity('PROJECT CREATED', 'Research Project', project.id, f"Created project: {project.title}")
         
         return jsonify({'message': 'Project created successfully', 'project': project.to_dict()}), 201
     
