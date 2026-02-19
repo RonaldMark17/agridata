@@ -21,10 +21,8 @@ export default function Layout() {
   const [theme, setTheme] = useState(() => localStorage.getItem('agri-theme') || 'system');
   
   // --- [FIX] INITIALIZE STATE CORRECTLY ---
-  // Initialize directly from the cached 'user' object to prevent it defaulting to false on refresh
   const [otpEnabled, setOtpEnabled] = useState(() => {
     if (!user) return false;
-    // Check all possible "truthy" values coming from DB/LocalStorage
     return user.otp_enabled === true || user.otp_enabled === 1 || user.otp_enabled === "1" || user.otp_enabled === "true";
   });
   
@@ -44,24 +42,19 @@ export default function Layout() {
   const notificationRef = useRef(null);
 
   // --- [FIX] SYNC WITH SERVER ON LOAD ---
-  // Even if initialized correctly, we double-check with the server to ensure fresh data
   useEffect(() => {
     const syncSecuritySettings = async () => {
       if (!user) return;
       try {
         const response = await authAPI.getCurrentUser();
         const serverUser = response.data;
-        
-        // Robust check for 1, "1", true, "true"
         const isServerEnabled = 
           serverUser.otp_enabled === true || 
           serverUser.otp_enabled === 1 || 
           serverUser.otp_enabled === "1" ||
           serverUser.otp_enabled === "true";
 
-        // Only update if different to prevent re-renders
         if (isServerEnabled !== otpEnabled) {
-            console.log("🔒 Security Sync | DB Value:", serverUser.otp_enabled, "-> UI:", isServerEnabled);
             setOtpEnabled(isServerEnabled);
         }
       } catch (err) {
@@ -70,7 +63,7 @@ export default function Layout() {
     };
 
     syncSecuritySettings();
-  }, [user, settingsOpen]); // Re-run if user context changes or settings open
+  }, [user, settingsOpen]);
 
   // --- NOTIFICATION ENGINE ---
   const fetchNotifications = async () => {
@@ -96,6 +89,41 @@ export default function Layout() {
     }
   };
 
+  // --- NEW: REDIRECTION LOGIC ---
+  const handleNotificationClick = (notification) => {
+    // 1. Mark as Read
+    if (!notification.is_read) {
+        markAsRead(notification.id);
+    }
+    
+    // 2. Close Dropdown
+    setShowNotifications(false);
+
+    // 3. Determine Route based on Title or Message Keywords
+    const text = (notification.title + " " + notification.message).toLowerCase();
+    
+    if (text.includes('farmer') || text.includes('lineage') || text.includes('succession')) {
+        navigate('/farmers');
+    } else if (text.includes('survey') || text.includes('instrument') || text.includes('protocol')) {
+        navigate('/surveys');
+    } else if (text.includes('research') || text.includes('project')) {
+        navigate('/projects');
+    } else if (text.includes('experience') || text.includes('knowledge')) {
+        navigate('/experiences');
+    } else if (text.includes('organization')) {
+        navigate('/organizations');
+    } else if (text.includes('barangay') || text.includes('territory')) {
+        navigate('/barangays');
+    } else if (text.includes('commodity') || text.includes('product')) {
+        navigate('/products');
+    } else if (text.includes('user') || text.includes('account')) {
+        navigate('/users');
+    } else {
+        // Default to dashboard if no keyword matches
+        navigate('/dashboard');
+    }
+  };
+
   const markAllAsRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     try {
@@ -118,19 +146,17 @@ export default function Layout() {
   // --- OTP TOGGLE HANDLER ---
   const handleToggleOtp = async () => {
     const newState = !otpEnabled;
-    setOtpEnabled(newState); // Optimistic UI update
+    setOtpEnabled(newState); 
     
     try {
-      console.log("Toggling OTP to:", newState);
       await authAPI.toggleOtp(newState);
     } catch (error) {
       console.error("Failed to toggle OTP:", error);
-      setOtpEnabled(!newState); // Revert on failure
+      setOtpEnabled(!newState); 
       alert("Failed to update security settings. Check connection.");
     }
   };
 
-  // Initial fetch and Polling (30s)
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
@@ -296,7 +322,7 @@ export default function Layout() {
                         <div className="p-10 text-center text-slate-400 text-xs italic">Clear channel</div>
                       ) : (
                         notifications.map(n => (
-                          <div key={n.id} onClick={() => markAsRead(n.id)} className={`p-5 border-b dark:border-white/5 last:border-0 flex gap-4 cursor-pointer transition-all ${!n.is_read ? 'bg-emerald-50/30 dark:bg-emerald-500/5' : 'opacity-60 hover:opacity-100'}`}>
+                          <div key={n.id} onClick={() => handleNotificationClick(n)} className={`p-5 border-b dark:border-white/5 last:border-0 flex gap-4 cursor-pointer transition-all ${!n.is_read ? 'bg-emerald-50/30 dark:bg-emerald-500/5' : 'opacity-60 hover:opacity-100'}`}>
                             <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${!n.is_read ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-300'}`} />
                             <div className="min-w-0">
                               <p className={`text-sm tracking-tight leading-snug ${!n.is_read ? 'font-bold text-slate-900 dark:text-white' : 'font-medium'}`}>{n.title}</p>
