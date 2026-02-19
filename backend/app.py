@@ -171,11 +171,13 @@ def create_app(config_name='development'):
             
             db.session.add(user)
             db.session.commit()
-            
+            log_activity('USER REGISTERED', 'User', user.id, f"New account created: {user.username}")
             return jsonify({'message': 'User created successfully', 'user': user.to_dict()}), 201
+        
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
+        
     
     @app.route('/api/auth/login', methods=['POST'])
     def login():
@@ -247,6 +249,7 @@ def create_app(config_name='development'):
             refresh_token = create_refresh_token(identity=str(user.id))
             
             log_activity('LOGIN SUCCESS', 'User', user.id, f"User {user.username} logged in")
+            
             
             return jsonify({
                 'message': 'Login successful',
@@ -449,6 +452,7 @@ def create_app(config_name='development'):
                 user.set_password(new_password)
                 db.session.commit()
                 del otp_storage[email]
+                log_activity('PASSWORD RESET', 'User', user.id, f"Identity recovery completed for {user.email}")
                 return jsonify({"message": "Password updated successfully."}), 200
         
         return jsonify({"error": "Invalid or expired verification code."}), 400
@@ -572,6 +576,7 @@ def create_app(config_name='development'):
             ).update({Notification.is_read: True}, synchronize_session=False)
             
             db.session.commit()
+            log_activity('NOTIFICATION CLEARANCE', 'User', get_jwt_identity(), "Operator cleared all active alerts")
             return jsonify({"message": "All marked as read"}), 200
         except Exception as e:
             db.session.rollback()
@@ -589,6 +594,7 @@ def create_app(config_name='development'):
             ).delete(synchronize_session=False)
             
             db.session.commit()
+            log_activity('NOTIFICATION PURGE', 'User', get_jwt_identity(), "Permanently deleted notification history")
             return jsonify({"message": "Registry cleared"}), 200
         except Exception as e:
             db.session.rollback()
@@ -760,6 +766,7 @@ def create_app(config_name='development'):
             )
             db.session.add(org)
             db.session.commit()
+            log_activity('ORGANIZATION CREATED', 'Organization', org.id, f"Registered: {org.name}")
             return jsonify({'message': 'Success', 'organization': org.to_dict()}), 201
         except Exception as e: 
             return jsonify({'error': str(e)}), 400
@@ -993,6 +1000,7 @@ def create_app(config_name='development'):
                     setattr(survey, key, value)
             
             db.session.commit()
+            log_activity('SURVEY UPDATED', 'Survey Questionnaire', survey.id, f"Modified protocol: {survey.title}")
             return jsonify({'message': 'Survey updated', 'survey': survey.to_dict()}), 200
         except Exception as e:
             db.session.rollback()
@@ -1040,7 +1048,7 @@ def create_app(config_name='development'):
         
         db.session.add(product)
         db.session.commit()
-        
+        log_activity('COMMODITY ADDED', 'Farmer', farmer_id, f"Appended new crop yield profile to registry")
         return jsonify({'message': 'Product added successfully', 'product': product.to_dict()}), 201
     
     # ============ Farmer Children Routes ============
@@ -1070,7 +1078,7 @@ def create_app(config_name='development'):
         
         db.session.add(child)
         db.session.commit()
-        
+        log_activity('CHILD ADDED', 'Farmer Child', child.id, f"Enrolled lineage for Farmer ID: {farmer_id}")
         return jsonify({'message': 'Child record added successfully', 'child': child.to_dict()}), 201
     
     # Find this route in app.py and replace it
@@ -1127,6 +1135,24 @@ def create_app(config_name='development'):
             db.session.rollback()
             print(f"❌ CHILD UPDATE ERROR: {str(e)}")
             return jsonify({'error': 'Database constraint violation or server error.'}), 500
+        
+    @app.route('/api/farmers/<int:farmer_id>/children/<int:child_id>', methods=['DELETE'])
+    @jwt_required()
+    def delete_farmer_child(farmer_id, child_id):
+        current_user = User.query.get(get_jwt_identity())
+        if current_user.role not in ['admin', 'researcher']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        child = FarmerChild.query.filter_by(id=child_id, farmer_id=farmer_id).first_or_404()
+        child_name = child.name
+        
+        db.session.delete(child)
+        db.session.commit()
+        
+        # LOG: Lineage removal
+        log_activity('CHILD REMOVED', 'Farmer Child', child_id, f"Revoked succession record for {child_name}")
+        
+        return jsonify({'message': 'Record deleted'}), 200
     
     # ============ Farmer Experiences Routes ============
     
@@ -1281,7 +1307,7 @@ def create_app(config_name='development'):
         
         db.session.add(barangay)
         db.session.commit()
-        
+        log_activity('BARANGAY CREATED', 'Barangay', barangay.id, f"Added territory: {barangay.name}")
         return jsonify({'message': 'Barangay created successfully', 'barangay': barangay.to_dict()}), 201
     
     # ============ Products Routes ============
@@ -1311,7 +1337,7 @@ def create_app(config_name='development'):
         
         db.session.add(product)
         db.session.commit()
-        
+        log_activity('PRODUCT CREATED', 'Agricultural Product', product.id, f"Added commodity: {product.name}")
         return jsonify({'message': 'Product created successfully', 'product': product.to_dict()}), 201
     
 
@@ -1458,6 +1484,7 @@ def create_app(config_name='development'):
                 user.set_password(data['password'])
                 
             db.session.commit()
+            log_activity('USER UPDATED', 'User', user.id, f"Modified profile/role for {user.username}")
             return jsonify({'message': 'User updated successfully', 'user': user.to_dict()}), 200
         except Exception as e:
             db.session.rollback()
@@ -1499,7 +1526,7 @@ def create_app(config_name='development'):
             # 4. Execute Deletion
             db.session.delete(user_to_delete)
             db.session.commit()
-            
+            log_activity('USER DELETED', 'User', id, f"Revoked access for {user_name}")
             return jsonify({'message': 'User identity revoked and data unlinked successfully'}), 200
             
         except Exception as e:
