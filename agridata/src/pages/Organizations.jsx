@@ -3,10 +3,34 @@ import { organizationsAPI } from '../services/api';
 import { 
   Building2, Plus, Search, MapPin, Globe, 
   Users, Edit2, Trash2, X, Save, Loader2, 
-  Briefcase, Building, AlertCircle, Filter, Download, ArrowUpDown, Eye, PieChart
+  Briefcase, Building, AlertCircle, Filter, Download, ArrowUpDown, Eye, PieChart,
+  ChevronLeft, ChevronRight, Landmark, Handshake
 } from 'lucide-react';
 
 const ORG_TYPES = ['Cooperative', 'Government', 'NGO', 'Private', 'Association'];
+
+// --- SKELETON COMPONENT ---
+const OrganizationSkeleton = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+    {[...Array(6)].map((_, i) => (
+      <div key={i} className="bg-white dark:bg-[#0b241f] rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-8 animate-pulse shadow-sm">
+        <div className="flex justify-between mb-6">
+          <div className="space-y-3 flex-1">
+            <div className="h-6 w-32 bg-slate-100 dark:bg-white/5 rounded-lg"></div>
+            <div className="h-4 w-48 bg-slate-50 dark:bg-white/5 rounded-md"></div>
+          </div>
+          <div className="h-12 w-12 bg-slate-50 dark:bg-white/5 rounded-2xl"></div>
+        </div>
+        <div className="space-y-5 pt-6 border-t border-slate-50 dark:border-white/5">
+          <div className="space-y-3">
+            <div className="h-2 w-full bg-slate-50 dark:bg-white/5 rounded-full"></div>
+            <div className="h-2 w-2/3 bg-slate-50 dark:bg-white/5 rounded-full"></div>
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 export default function Organizations() {
   const [organizations, setOrganizations] = useState([]);
@@ -15,18 +39,21 @@ export default function Organizations() {
   
   // Modals
   const [showModal, setShowModal] = useState(false);
-  const [showViewModal, setShowViewModal] = useState(false); // NEW: View Modal
+  const [showViewModal, setShowViewModal] = useState(false); 
   
   // Selection & Forms
   const [editingOrg, setEditingOrg] = useState(null);
-  const [selectedOrg, setSelectedOrg] = useState(null); // NEW: For View Mode
+  const [selectedOrg, setSelectedOrg] = useState(null); 
   const [error, setError] = useState('');
 
-  // Filters & Sorting
+  // Filters, Sorting & Pagination
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('All'); // NEW: Filter by Type
-  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' }); // NEW: Sorting
+  const [typeFilter, setTypeFilter] = useState('All'); 
+  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' }); 
+  const [currentPage, setCurrentPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
+  
+  const ITEMS_PER_PAGE = 9;
 
   const initialForm = {
     name: '',
@@ -84,7 +111,7 @@ export default function Organizations() {
     }
   };
 
-  // --- NEW FEATURES ---
+  // --- FEATURES ---
 
   const handleExport = () => {
     setIsExporting(true);
@@ -149,6 +176,15 @@ export default function Organizations() {
       return b.name.localeCompare(a.name);
     });
 
+  // --- PAGINATION LOGIC ---
+  const totalPages = Math.ceil(filteredOrgs.length / ITEMS_PER_PAGE);
+  const paginated = filteredOrgs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  // --- STATS CALCULATION ---
+  const totalOrgs = organizations.length;
+  const totalCoops = organizations.filter(o => o.type === 'Cooperative').length;
+  const totalGovNGO = organizations.filter(o => ['Government', 'NGO'].includes(o.type)).length;
+
   const getTypeStyle = (type) => {
     switch(type) {
       case 'Government': return 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20';
@@ -167,10 +203,10 @@ export default function Organizations() {
         <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 px-4 py-6">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-blue-600 rounded-xl text-white shadow-xl shadow-blue-200 dark:shadow-none">
+              <div className="p-2 bg-emerald-600 rounded-xl text-white shadow-xl shadow-emerald-200 dark:shadow-none">
                 <Building2 size={20} />
               </div>
-              <span className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.3em]">Network Registry</span>
+              <span className="text-xs font-black text-emerald-600 dark:text-blue-400 uppercase tracking-[0.3em]">Network Registry</span>
             </div>
             <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Institutional Partners</h1>
             <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">Manage cooperatives, agencies, and funding bodies.</p>
@@ -185,123 +221,162 @@ export default function Organizations() {
           </button>
         </header>
 
-        {/* CONTROLS (Search, Filter, Export) */}
-        <div className="px-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-8 flex flex-col sm:flex-row gap-4">
-            
-            {/* Search */}
-            <div className="relative flex-[2]">
+        {/* STATS SUMMARY */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 px-4">
+          {[
+            { label: 'Total Entities', val: totalOrgs, icon: Globe, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10' },
+            { label: 'Active Cooperatives', val: totalCoops, icon: Handshake, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+            { label: 'Govt & NGOs', val: totalGovNGO, icon: Landmark, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10' },
+          ].map((stat, i) => (
+            <div key={i} className="group bg-white dark:bg-[#0b241f] p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all duration-300 flex items-center gap-6 relative overflow-hidden">
+               <div className={`p-5 rounded-2xl ${stat.bg} ${stat.color} shrink-0 group-hover:scale-110 transition-transform`}>
+                <stat.icon size={28} />
+              </div>
+              <div className="min-w-0 relative z-10">
+                <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{stat.label}</p>
+                <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">{stat.val}</p>
+              </div>
+              <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full ${stat.bg} opacity-10 dark:opacity-5 group-hover:scale-150 transition-transform duration-700`} />
+            </div>
+          ))}
+        </div>
+
+        {/* TOOLBAR: SEARCH, FILTER, SORT, EXPORT */}
+        <div className="px-4 flex flex-col md:flex-row gap-4">
+          
+          <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-2 flex items-center transition-colors flex-[2]">
+            <div className="relative flex-1">
               <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
               <input 
                 type="text" 
                 placeholder="Search partner network..." 
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-16 pr-6 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.5rem] shadow-sm text-sm font-bold dark:text-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                className="w-full pl-16 pr-6 py-4 bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600 outline-none"
               />
-            </div>
-
-            {/* Type Filter */}
-            <div className="relative flex-1">
-              <Filter className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
-              <select 
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="w-full pl-14 pr-6 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.5rem] shadow-sm text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 outline-none appearance-none cursor-pointer hover:bg-slate-50 dark:hover:bg-white/10 transition-colors"
-              >
-                <option value="All">All Entities</option>
-                {ORG_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-
-            {/* Sort & Export */}
-            <div className="flex gap-2">
-                <button onClick={handleSort} className="p-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.5rem] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm">
-                    <ArrowUpDown size={20} className={sortConfig.direction === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'}/>
-                </button>
-                <button onClick={handleExport} disabled={isExporting} className="p-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.5rem] text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shadow-sm">
-                    {isExporting ? <Loader2 className="animate-spin" size={20}/> : <Download size={20}/>}
-                </button>
             </div>
           </div>
 
-          {/* Metric Card */}
-          <div className="lg:col-span-4 bg-blue-50 dark:bg-blue-500/10 rounded-[1.5rem] border border-blue-100 dark:border-blue-500/20 p-4 flex items-center justify-between px-8 transition-colors">
-             <div className="flex items-center gap-3">
-               <PieChart size={20} className="text-blue-600 dark:text-blue-400"/>
-               <span className="text-xs font-black text-blue-900 dark:text-blue-300 uppercase tracking-widest">Total Partners</span>
-             </div>
-             <span className="text-2xl font-black text-blue-600 dark:text-blue-400">{organizations.length}</span>
+          <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-2 flex items-center gap-4 px-4 flex-1 w-full md:w-auto">
+            <Filter size={18} className="text-slate-400 ml-2" />
+            <select 
+              value={typeFilter}
+              onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }}
+              className="bg-transparent border-none outline-none text-sm font-bold text-slate-600 dark:text-slate-400 cursor-pointer appearance-none w-full pr-8"
+            >
+              <option value="All">All Entities</option>
+              {ORG_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+
+          <div className="flex gap-2">
+              <button onClick={handleSort} className="p-4 bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 rounded-[2rem] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm flex items-center justify-center w-14">
+                  <ArrowUpDown size={20} className={sortConfig.direction === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'}/>
+              </button>
+              <button onClick={handleExport} disabled={isExporting} className="p-4 bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 rounded-[2rem] text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shadow-sm flex items-center justify-center w-14">
+                  {isExporting ? <Loader2 className="animate-spin" size={20}/> : <Download size={20}/>}
+              </button>
           </div>
         </div>
 
         {/* GRID LAYOUT */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 px-4">
+        <div className="px-4">
           {loading ? (
-            [1,2,3].map(i => <div key={i} className="h-64 bg-white dark:bg-[#0b241f] rounded-[2.5rem] animate-pulse border border-slate-100 dark:border-white/5 shadow-sm" />)
-          ) : filteredOrgs.length === 0 ? (
-            <div className="col-span-full py-20 text-center text-slate-400 dark:text-slate-600 font-bold uppercase tracking-widest">No organizations match your criteria</div>
+            <OrganizationSkeleton />
+          ) : paginated.length === 0 ? (
+            <div className="py-32 bg-white dark:bg-[#0b241f] rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-white/10 text-center transition-colors">
+              <div className="p-8 bg-slate-50 dark:bg-white/5 rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-8">
+                <Building size={48} />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">No Organizations Found</h3>
+              <p className="text-slate-400 dark:text-slate-500 font-medium mt-3">Try adjusting your search or filters.</p>
+            </div>
           ) : (
-            filteredOrgs.map(org => (
-              <div key={org.id} className="group bg-white dark:bg-[#0b241f] p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl dark:hover:shadow-black/40 transition-all relative overflow-hidden flex flex-col justify-between h-full">
-                
-                {/* Action Menu (Hover) */}
-                <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
-                  <button onClick={() => handleView(org)} className="p-2 bg-slate-50 dark:bg-black/40 backdrop-blur-md hover:text-emerald-500 rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10"><Eye size={16}/></button>
-                  <button onClick={() => handleEdit(org)} className="p-2 bg-slate-50 dark:bg-black/40 backdrop-blur-md hover:text-blue-600 rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10"><Edit2 size={16}/></button>
-                  <button onClick={() => handleDelete(org.id)} className="p-2 bg-slate-50 dark:bg-black/40 backdrop-blur-md hover:text-rose-600 rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10"><Trash2 size={16}/></button>
-                </div>
-
-                <div>
-                  <div className="flex items-start justify-between mb-6">
-                    <div className={`p-4 rounded-2xl border transition-colors ${getTypeStyle(org.type)}`}>
-                      <Building size={24} />
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {paginated.map(org => (
+                <div key={org.id} className="group bg-white dark:bg-[#0b241f] p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl dark:hover:shadow-black/40 hover:-translate-y-1 transition-all relative overflow-hidden flex flex-col justify-between h-full">
+                  
+                  {/* Action Menu (Hover) */}
+                  <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+                    <button onClick={() => handleView(org)} className="p-2 bg-white dark:bg-black/40 backdrop-blur-md hover:text-emerald-500 rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10"><Eye size={16}/></button>
+                    <button onClick={() => handleEdit(org)} className="p-2 bg-white dark:bg-black/40 backdrop-blur-md hover:text-blue-600 rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10"><Edit2 size={16}/></button>
+                    <button onClick={() => handleDelete(org.id)} className="p-2 bg-white dark:bg-black/40 backdrop-blur-md hover:text-rose-600 rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10"><Trash2 size={16}/></button>
                   </div>
 
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight mb-2 uppercase tracking-tight">{org.name}</h3>
-                  <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border mb-4 transition-colors ${getTypeStyle(org.type)}`}>
-                    {org.type || 'Organization'}
-                  </span>
-                  
-                  <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed line-clamp-3">
-                    {org.description || 'No institutional description available.'}
-                  </p>
-                </div>
+                  <div>
+                    <div className="flex items-start justify-between mb-6">
+                      <div className={`p-4 rounded-2xl border transition-colors ${getTypeStyle(org.type)}`}>
+                        <Building size={24} />
+                      </div>
+                    </div>
 
-                <div className="mt-8 pt-6 border-t border-slate-50 dark:border-white/5 flex items-center gap-3 text-xs font-bold text-slate-400 dark:text-slate-500">
-                  <MapPin size={14} />
-                  <span className="truncate">{org.location || 'Headquarters: Unspecified'}</span>
+                    <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight mb-2 uppercase tracking-tight pr-12 line-clamp-2">{org.name}</h3>
+                    <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border mb-4 transition-colors ${getTypeStyle(org.type)}`}>
+                      {org.type || 'Organization'}
+                    </span>
+                    
+                    <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed line-clamp-3">
+                      {org.description || 'No institutional description available.'}
+                    </p>
+                  </div>
+
+                  <div className="mt-8 pt-6 border-t border-slate-50 dark:border-white/5 flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                    <MapPin size={14} />
+                    <span className="truncate">{org.location || 'Headquarters: Unspecified'}</span>
+                  </div>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
 
-        {/* VIEW MODAL (New) */}
+        {/* PAGINATION CONTROLS */}
+        {!loading && totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-[#0b241f] px-10 py-6 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm mx-4 transition-colors">
+            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
+                Page <span className="text-slate-900 dark:text-white">{currentPage}</span> of {totalPages}
+            </p>
+            <div className="flex gap-4">
+                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-4 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30 transition-all shadow-sm">
+                <ChevronLeft size={20} />
+                </button>
+                <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="p-4 bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-2xl text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30 transition-all shadow-sm">
+                <ChevronRight size={20} />
+                </button>
+            </div>
+            </div>
+        )}
+
+        {/* VIEW MODAL */}
         {showViewModal && selectedOrg && (
             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-8 overflow-hidden">
-                <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={closeModal} />
-                <div className="relative bg-white dark:bg-[#041d18] rounded-[2.5rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in zoom-in-95 duration-500 border dark:border-white/5">
-                    <div className="p-8 border-b border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50/50 dark:bg-black/20">
-                        <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-widest">Entity Profile</h3>
+                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={closeModal} />
+                <div className="relative bg-white dark:bg-[#041d18] rounded-[3rem] shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-500 border dark:border-white/5">
+                    <div className="p-8 border-b border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50/50 dark:bg-black/20 shrink-0">
+                        <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                           <Globe size={14} /> Entity Profile
+                        </h3>
                         <button onClick={closeModal} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-full text-slate-400 transition-colors"><X size={20}/></button>
                     </div>
-                    <div className="p-8 space-y-6">
-                        <div className="text-center">
-                            <div className={`mx-auto w-16 h-16 rounded-3xl flex items-center justify-center mb-4 ${getTypeStyle(selectedOrg.type)}`}>
+                    <div className="p-10 space-y-8 overflow-y-auto no-scrollbar">
+                        <div className="flex items-center gap-6">
+                            <div className={`w-20 h-20 rounded-[1.5rem] flex items-center justify-center shrink-0 border ${getTypeStyle(selectedOrg.type)}`}>
                                 <Building size={32} />
                             </div>
-                            <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase leading-tight mb-2">{selectedOrg.name}</h2>
-                            <span className="px-3 py-1 bg-slate-100 dark:bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{selectedOrg.type}</span>
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase leading-tight mb-2 tracking-tight">{selectedOrg.name}</h2>
+                                <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors ${getTypeStyle(selectedOrg.type)}`}>
+                                   {selectedOrg.type || 'Organization'}
+                                </span>
+                            </div>
                         </div>
-                        <div className="space-y-4">
-                            <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-2"><MapPin size={12}/> Location</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-2"><MapPin size={14}/> Base of Operations</p>
                                 <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedOrg.location || 'N/A'}</p>
                             </div>
-                            <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">About</p>
+                            <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 md:col-span-2">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-2"><Briefcase size={14}/> Institutional Mandate</p>
                                 <p className="text-sm font-medium text-slate-600 dark:text-slate-400 leading-relaxed">{selectedOrg.description || 'No description provided.'}</p>
                             </div>
                         </div>
@@ -313,10 +388,10 @@ export default function Organizations() {
         {/* EDIT/CREATE MODAL */}
         {showModal && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-8 overflow-hidden">
-            <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={closeModal} />
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={closeModal} />
             <div className="relative bg-white dark:bg-[#041d18] rounded-[3rem] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-500 border dark:border-white/5">
               
-              <div className="p-10 border-b border-slate-50 dark:border-white/5 flex items-center justify-between bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl shrink-0 z-10">
+              <div className="p-8 sm:p-10 border-b border-slate-50 dark:border-white/5 flex items-center justify-between bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl shrink-0 z-10">
                 <div>
                   <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">{editingOrg ? 'Update Entity' : 'Register Entity'}</h2>
                   <p className="text-slate-400 dark:text-slate-500 font-medium text-sm mt-1">Define institutional parameters.</p>
@@ -324,7 +399,7 @@ export default function Organizations() {
                 <button onClick={closeModal} className="p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-2xl transition-all text-slate-300 dark:text-slate-600"><X size={28} /></button>
               </div>
 
-              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-10 space-y-8 no-scrollbar">
+              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 sm:p-10 space-y-8 no-scrollbar">
                 
                 {error && (
                   <div className="p-4 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center gap-3 border border-rose-100 dark:border-rose-500/20">
@@ -354,7 +429,7 @@ export default function Organizations() {
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-3 pb-6">
                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Description & Mandate</label>
                   <textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})}
                     className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-sm font-bold dark:text-slate-200 shadow-inner outline-none min-h-[120px] transition-all" placeholder="Brief summary of the organization..." />

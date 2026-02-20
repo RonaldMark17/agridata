@@ -145,6 +145,12 @@ export default function Layout() {
 
   // --- OTP TOGGLE HANDLER ---
   const handleToggleOtp = async () => {
+    // PREVENT ADMIN FROM DISABLING
+    if (user?.role === 'admin' && otpEnabled) {
+      alert("System Protocol: Administrators cannot disable Two-Factor Authentication.");
+      return;
+    }
+
     const newState = !otpEnabled;
     setOtpEnabled(newState); 
     
@@ -392,11 +398,20 @@ export default function Layout() {
                     <div>
                       <p className="text-sm font-bold text-slate-900 dark:text-white">Two-Factor Auth (OTP)</p>
                       <p className="text-[10px] font-medium text-slate-400">Require email code verification on login</p>
+                      {/* FIX: Warning indicator for admins */}
+                      {user?.role === 'admin' && otpEnabled && (
+                        <p className="text-[9px] font-bold text-rose-500 mt-1 uppercase tracking-widest">Required for Admins</p>
+                      )}
                     </div>
                   </div>
+                  
+                  {/* FIX: Disable button visually and programmatically if Admin */}
                   <button 
                     onClick={handleToggleOtp} 
-                    className={`relative w-14 h-8 rounded-full transition-all duration-300 focus:outline-none ${otpEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-white/10'}`}
+                    disabled={user?.role === 'admin' && otpEnabled}
+                    className={`relative w-14 h-8 rounded-full transition-all duration-300 focus:outline-none 
+                      ${otpEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-white/10'} 
+                      ${user?.role === 'admin' && otpEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <div className={`absolute top-1 left-1 bg-white w-6 h-6 rounded-full shadow-md transition-transform duration-300 transform ${otpEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
                   </button>

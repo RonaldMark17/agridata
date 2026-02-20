@@ -61,8 +61,13 @@ def create_app(config_name='development'):
 
     def log_activity(action, entity_type=None, entity_id=None, details=None):
         try:
-            user_id = get_jwt_identity()
-            if not user_id:
+            user_id = None
+            try:
+                user_id = get_jwt_identity()
+            except:
+                pass # Allow system/background logs if no JWT context exists
+
+            if not user_id and request and hasattr(request, 'path') and 'login' not in request.path:
                 return 
 
             # --- REFINEMENT: Clean both Action and Entity Type ---
@@ -77,9 +82,28 @@ def create_app(config_name='development'):
                 entity_type=formatted_entity, # Cleaned entity type
                 entity_id=str_entity_id,
                 details=details,
-                ip_address=request.remote_addr
+                ip_address=request.remote_addr if request else None
             )
             db.session.add(log)
+            
+            # --- NEW: AUTOMATED NOTIFICATION GENERATOR ---
+            # This makes notifications function exactly like activity logs.
+            try:
+                notif_title = f"{formatted_entity} Update" if formatted_entity else f"System Event: {formatted_action}"
+                notif_msg = details if details else f"A new {formatted_action} action was recorded."
+                
+                auto_notif = Notification(
+                    user_id=None, # Broadcast to all system admins/operators
+                    title=notif_title,
+                    message=notif_msg,
+                    is_read=False,
+                    created_at=datetime.utcnow()
+                )
+                db.session.add(auto_notif)
+            except Exception as notif_e:
+                print(f"Auto-Notif Generation Error: {str(notif_e)}")
+            # ---------------------------------------------
+            
             db.session.commit()
         except Exception as e:
             print(f"Logging error: {e}")
@@ -337,15 +361,9 @@ def create_app(config_name='development'):
         
         if not user:
             return jsonify({'error': 'User not found'}), 404
-            
-        # --- COMMENT THIS OUT TO ALLOW ADMINS TO TOGGLE ---
-        # if user.role == 'admin':
-        #     if not user.otp_enabled:
-        #         user.otp_enabled = True
-        #         db.session.commit()
-        #     return jsonify({'error': 'Admins cannot disable 2FA.'}), 403
-        # --------------------------------------------------
 
+        # REMOVED the "admin cannot disable 2FA" 403 Forbidden block here
+        
         data = request.get_json()
         
         # Ensure we handle boolean values correctly
@@ -594,7 +612,7 @@ def create_app(config_name='development'):
             ).delete(synchronize_session=False)
             
             db.session.commit()
-            log_activity('NOTIFICATION PURGE', 'User', get_jwt_identity(), "Permanently deleted notification history")
+            # log_activity('NOTIFICATION PURGE', 'User', get_jwt_identity(), "Permanently deleted notification history")
             return jsonify({"message": "Registry cleared"}), 200
         except Exception as e:
             db.session.rollback()
@@ -1372,32 +1390,6 @@ def create_app(config_name='development'):
         organizations = Organization.query.order_by(Organization.name).all()
         return jsonify([o.to_dict() for o in organizations]), 200
     
-    @app.route('/api/barangays', methods=['POST'])
-    @jwt_required()
-    def create_barangay():
-        current_user_id = get_jwt_identity()
-        current_user = User.query.get(current_user_id)
-        
-        if current_user.role not in ['admin', 'data_encoder']:
-            return jsonify({'error': 'Unauthorized'}), 403
-        
-        data = request.get_json()
-        
-        barangay = Barangay(
-            name=data['name'],
-            municipality=data['municipality'],
-            province=data['province'],
-            region=data['region'],
-            population=data.get('population'),
-            total_households=data.get('total_households'),
-            agricultural_households=data.get('agricultural_households')
-        )
-        
-        db.session.add(barangay)
-        db.session.commit()
-        log_activity('BARANGAY CREATED', 'Barangay', barangay.id, f"Added territory: {barangay.name}")
-        return jsonify({'message': 'Barangay created successfully', 'barangay': barangay.to_dict()}), 201
-    
     # ============ Products Routes ============
     
     @app.route('/api/products', methods=['GET'])
@@ -1594,6 +1586,7 @@ def create_app(config_name='development'):
             return jsonify({'error': 'System Protocol: Cannot delete active admin account'}), 400
 
         user_to_delete = User.query.get_or_404(id)
+        user_name = user_to_delete.username
         
         try:
             # 3. UNLINK RELATED RECORDS (The Fix)
