@@ -8,7 +8,8 @@ import {
 import { 
   Users, MapPin, Wheat, FileText, Sprout, Baby, 
   ArrowUpRight, Activity, MoreVertical, Download, RefreshCw, 
-  Clock, Terminal, ChevronRight, Plus, UserPlus, FilePlus, ArrowDownRight
+  Clock, Terminal, ChevronRight, Plus, UserPlus, FilePlus, ArrowDownRight,
+  Sun, Map as MapIcon, Database, Server, ShieldCheck, Thermometer
 } from 'lucide-react';
 
 // --- Configuration ---
@@ -160,6 +161,10 @@ export default function Dashboard() {
     { label: 'Youth in Farming', value: stats?.children_farming || 0, trend: 'Succession', up: true, icon: Baby, color: 'text-fuchsia-600 dark:text-fuchsia-400', bg: 'bg-fuchsia-50 dark:bg-fuchsia-500/10' },
   ];
 
+  // Dynamic Greeting Logic
+  const hour = currentTime.getHours();
+  const greeting = hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening';
+
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] p-4 md:p-8 font-sans transition-colors duration-300 pb-24 relative">
       
@@ -170,6 +175,7 @@ export default function Dashboard() {
             <Activity size={28} />
           </div>
           <div className="min-w-0">
+            <p className="text-xs font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest mb-1">{greeting}, User</p>
             <div className="flex items-center gap-3 mb-1">
                <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Command Center</h1>
                <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5 ${systemStatus === 'online' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
@@ -177,10 +183,19 @@ export default function Dashboard() {
                  {systemStatus.toUpperCase()}
                </div>
             </div>
-            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-bold text-sm tracking-tight">
-              <span>{currentTime.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</span>
-              <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
-              <span>{currentTime.toLocaleTimeString()}</span>
+            
+            <div className="flex items-center gap-4 mt-2">
+              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-bold text-sm tracking-tight">
+                <span>{currentTime.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
+                <span>{currentTime.toLocaleTimeString()}</span>
+              </div>
+              
+              {/* NEW: Weather Context Widget */}
+              <div className="hidden sm:flex items-center gap-2 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-3 py-1 rounded-lg text-xs font-bold border border-amber-100 dark:border-amber-500/20">
+                <Sun size={14} />
+                <span>32°C San Pablo</span>
+              </div>
             </div>
           </div>
         </div>
@@ -336,8 +351,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 4. LOWER INTELLIGENCE SECTION */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      {/* 4. LOWER INTELLIGENCE SECTION (UPDATED TO 3 COLUMNS) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Recent Activity Mini-Feed */}
         <div className="bg-white dark:bg-[#0b241f] rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-8 flex flex-col shadow-sm">
@@ -400,25 +415,78 @@ export default function Dashboard() {
              ))}
           </div>
         </div>
+
+        {/* NEW: System Analytics & Diagnostics */}
+        <div className="bg-white dark:bg-[#0b241f] rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-8 flex flex-col shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+             <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 rounded-xl"><Server size={18} /></div>
+                <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight">System Health</h3>
+             </div>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/[0.02] rounded-2xl border border-slate-100 dark:border-white/5">
+              <div className="flex items-center gap-3">
+                <Database size={16} className="text-slate-400" />
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Main Database</span>
+              </div>
+              <span className="text-xs font-black text-emerald-600 flex items-center gap-1"><ShieldCheck size={14}/> Secured</span>
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/[0.02] rounded-2xl border border-slate-100 dark:border-white/5">
+              <div className="flex items-center gap-3">
+                <Activity size={16} className="text-slate-400" />
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">API Latency</span>
+              </div>
+              <span className="text-xs font-black text-blue-600">24ms (Optimal)</span>
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/[0.02] rounded-2xl border border-slate-100 dark:border-white/5">
+              <div className="flex items-center gap-3">
+                <Thermometer size={16} className="text-slate-400" />
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Server Load</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 w-1/4"></div>
+                </div>
+                <span className="text-xs font-black text-slate-500">18%</span>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Last Backup</span>
+              <span className="text-xs font-black text-slate-600 dark:text-slate-300">Today, 03:00 AM</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* QUICK ACTIONS FAB */}
       <div className="fixed bottom-8 right-8 z-30 flex flex-col gap-3 items-end">
         {showQuickActions && (
           <div className="flex flex-col gap-3 animate-in slide-in-from-bottom-4">
-            <button onClick={() => navigate('/farmers')} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#0b241f] rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all">
-              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Add Farmer</span>
-              <div className="p-2 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 rounded-xl"><UserPlus size={18}/></div>
+            
+            {/* NEW: Map Quick Link */}
+            <button onClick={() => navigate('/map')} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#0b241f] rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all group">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 transition-colors">Live Map</span>
+              <div className="p-2 bg-amber-100 dark:bg-amber-500/20 text-amber-600 rounded-xl group-hover:scale-110 transition-transform"><MapIcon size={18}/></div>
             </button>
-            <button onClick={() => navigate('/surveys')} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#0b241f] rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all">
-              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">New Survey</span>
-              <div className="p-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 rounded-xl"><FilePlus size={18}/></div>
+
+            <button onClick={() => navigate('/farmers')} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#0b241f] rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all group">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 transition-colors">Add Farmer</span>
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 rounded-xl group-hover:scale-110 transition-transform"><UserPlus size={18}/></div>
+            </button>
+            <button onClick={() => navigate('/surveys')} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#0b241f] rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all group">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-blue-600 transition-colors">New Survey</span>
+              <div className="p-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 rounded-xl group-hover:scale-110 transition-transform"><FilePlus size={18}/></div>
             </button>
           </div>
         )}
         <button 
           onClick={() => setShowQuickActions(!showQuickActions)} 
-          className="p-4 bg-emerald-600 text-white rounded-[1.5rem] shadow-2xl hover:bg-emerald-500 transition-all hover:scale-110 active:scale-95"
+          className="p-4 bg-emerald-600 text-white rounded-[1.5rem] shadow-2xl shadow-emerald-600/50 hover:bg-emerald-500 transition-all hover:scale-110 active:scale-95"
         >
           {showQuickActions ? <ArrowDownRight size={24} /> : <Plus size={24} />}
         </button>

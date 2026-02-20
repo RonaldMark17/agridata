@@ -61,20 +61,13 @@ def create_app(config_name='development'):
 
     def log_activity(action, entity_type=None, entity_id=None, details=None):
         try:
-            user_id = None
-            try:
-                user_id = get_jwt_identity()
-            except:
-                pass 
+            user_id = get_jwt_identity()
+            if not user_id:
+                return 
 
             # --- REFINEMENT: Clean both Action and Entity Type ---
             formatted_action = action.replace('_', ' ') if action else action
-            
-            # FIX: Convert SurveyQuestionnaire to "Survey Questionnaire"
-            if entity_type == 'SurveyQuestionnaire':
-                formatted_entity = 'Survey Questionnaire'
-            else:
-                formatted_entity = entity_type.replace('_', ' ') if entity_type else entity_type
+            formatted_entity = entity_type.replace('_', ' ') if entity_type else entity_type
 
             str_entity_id = str(entity_id) if entity_id else None
             
@@ -178,12 +171,9 @@ def create_app(config_name='development'):
             
             db.session.add(user)
             db.session.commit()
-            
             log_activity('USER REGISTERED', 'User', user.id, f"New account created: {user.username}")
-            broadcast_notification("New User Enrolled", f"A new system account for {user.full_name} has been registered.")
-            db.session.commit()
-
             return jsonify({'message': 'User created successfully', 'user': user.to_dict()}), 201
+        
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
@@ -350,10 +340,10 @@ def create_app(config_name='development'):
             
         # --- COMMENT THIS OUT TO ALLOW ADMINS TO TOGGLE ---
         # if user.role == 'admin':
-        #      if not user.otp_enabled:
-        #          user.otp_enabled = True
-        #          db.session.commit()
-        #      return jsonify({'error': 'Admins cannot disable 2FA.'}), 403
+        #     if not user.otp_enabled:
+        #         user.otp_enabled = True
+        #         db.session.commit()
+        #     return jsonify({'error': 'Admins cannot disable 2FA.'}), 403
         # --------------------------------------------------
 
         data = request.get_json()
@@ -368,8 +358,6 @@ def create_app(config_name='development'):
 
         status = "enabled" if user.otp_enabled else "disabled"
         log_activity('SECURITY UPDATE', 'User', user.id, f"User {status} 2FA/OTP")
-        broadcast_notification("Security Protocol Update", f"Two-factor authentication has been {status} for your account.", target_user_id=user.id)
-        db.session.commit()
 
         return jsonify({'message': f'Two-factor authentication {status}', 'state': user.otp_enabled}), 200
     
@@ -465,8 +453,6 @@ def create_app(config_name='development'):
                 db.session.commit()
                 del otp_storage[email]
                 log_activity('PASSWORD RESET', 'User', user.id, f"Identity recovery completed for {user.email}")
-                broadcast_notification("Account Secured", "Your account password was successfully reset via the identity recovery protocol.", target_user_id=user.id)
-                db.session.commit()
                 return jsonify({"message": "Password updated successfully."}), 200
         
         return jsonify({"error": "Invalid or expired verification code."}), 400
@@ -734,7 +720,8 @@ def create_app(config_name='development'):
             # --- AUTO-NOTIFICATION TRIGGER ---
             broadcast_notification(
                 title="New Farmer Onboarded", 
-                message=f"{data.get('first_name')} {data.get('last_name')} has been successfully registered by {current_user.full_name}."
+                message=f"{data.get('first_name')} {data.get('last_name')} has been registered by {current_user.full_name}.",
+                target_user_id=None # Broadcast to all
             )
             # ---------------------------------
 
@@ -758,6 +745,7 @@ def create_app(config_name='development'):
         except Exception as e:
             db.session.rollback()
             print(f"ERROR: {e}")
+            import traceback
             traceback.print_exc()
             return jsonify({'error': str(e)}), 400
         
@@ -777,9 +765,8 @@ def create_app(config_name='development'):
                 address=data.get('location') 
             )
             db.session.add(org)
-            log_activity('ORGANIZATION CREATED', 'Organization', org.id, f"Registered: {org.name}")
-            broadcast_notification("Registry Update", f"A new organization '{org.name}' has been enrolled in the institutional registry.")
             db.session.commit()
+            log_activity('ORGANIZATION CREATED', 'Organization', org.id, f"Registered: {org.name}")
             return jsonify({'message': 'Success', 'organization': org.to_dict()}), 201
         except Exception as e: 
             return jsonify({'error': str(e)}), 400
@@ -799,8 +786,6 @@ def create_app(config_name='development'):
                 elif hasattr(org, k) and k != 'id': 
                     setattr(org, k, v)
             
-            log_activity('ORGANIZATION UPDATED', 'Organization', id, f"Modified specifications for {org.name}")
-            broadcast_notification("Organization Revised", f"The registry profile for {org.name} has been modified.")
             db.session.commit()
             return jsonify({'message': 'Updated', 'organization': org.to_dict()}), 200
         except Exception as e: 
@@ -811,11 +796,7 @@ def create_app(config_name='development'):
     def delete_organization(id):
         if User.query.get(get_jwt_identity()).role != 'admin': return jsonify({'error': 'Unauthorized'}), 403
         try:
-            org = Organization.query.get_or_404(id)
-            org_name = org.name
-            db.session.delete(org)
-            log_activity('ORGANIZATION DELETED', 'Organization', id, f"Removed {org_name}")
-            broadcast_notification("Registry Removal", f"Organization '{org_name}' was removed from the system registry.")
+            db.session.delete(Organization.query.get_or_404(id))
             db.session.commit()
             return jsonify({'message': 'Deleted'}), 200
         except: return jsonify({'error': 'Cannot delete active organization'}), 400
@@ -893,15 +874,47 @@ def create_app(config_name='development'):
                     else:
                         setattr(farmer, db_key, value)
 
-            log_activity('FARMER UPDATED', 'Farmer', farmer.id, f"Updated farmer: {farmer.first_name} {farmer.last_name}")
-            broadcast_notification("Registry Record Modified", f"Informational specs for {farmer.first_name} {farmer.last_name} have been updated.")
+            products_json = data.get('products')
+            if products_json:
+                try:
+                    FarmerProduct.query.filter_by(farmer_id=farmer.id).delete()
+                    products_list = json.loads(products_json)
+                    for prod_data in products_list:
+                        if not prod_data.get('product_name'):
+                            continue
+
+                        prod_name = prod_data['product_name'].strip()
+                        agri_product = AgriculturalProduct.query.filter(
+                            func.lower(AgriculturalProduct.name) == func.lower(prod_name)
+                        ).first()
+
+                        if not agri_product:
+                            agri_product = AgriculturalProduct(name=prod_name, category='Crop')
+                            db.session.add(agri_product)
+                            db.session.commit()
+
+                        farmer_product = FarmerProduct(
+                            farmer_id=farmer.id,
+                            product_id=agri_product.id,
+                            production_volume=prod_data.get('production_volume', 0),
+                            unit=prod_data.get('unit', 'kg'),
+                            is_primary=prod_data.get('is_primary', False)
+                        )
+                        db.session.add(farmer_product)
+                        
+                except json.JSONDecodeError:
+                    print("Error decoding products JSON during update")
+            
             db.session.commit()
+            
+            log_activity('FARMER UPDATED', 'Farmer', farmer.id, f"Updated farmer: {farmer.first_name} {farmer.last_name}")
             
             return jsonify({'message': 'Farmer updated successfully', 'farmer': farmer.to_dict()}), 200
             
         except Exception as e:
             db.session.rollback()
             print(f"❌ UPDATE ERROR: {e}")
+            import traceback
             traceback.print_exc()
             return jsonify({'error': f'Failed to update record: {str(e)}'}), 400
     
@@ -915,7 +928,6 @@ def create_app(config_name='development'):
             return jsonify({'error': 'Unauthorized'}), 403
         
         farmer = Farmer.query.get_or_404(id)
-        name = f"{farmer.first_name} {farmer.last_name}"
         
         FarmerProduct.query.filter_by(farmer_id=id).delete()
         FarmerChild.query.filter_by(farmer_id=id).delete()
@@ -924,8 +936,7 @@ def create_app(config_name='development'):
         if farmer.profile_image:
             delete_profile_image(farmer.profile_image)
         
-        log_activity('FARMER DELETED', 'Farmer', farmer.id, f"Deleted farmer: {name}")
-        broadcast_notification("Farmer Record Purged", f"The identity profile for {name} was permanently removed from the system registry.")
+        log_activity('FARMER DELETED', 'Farmer', farmer.id, f"Deleted farmer: {farmer.first_name} {farmer.last_name}")
         
         db.session.delete(farmer)
         db.session.commit()
@@ -957,15 +968,13 @@ def create_app(config_name='development'):
                 description=data.get('description'),
                 category=data.get('category', 'General'),
                 is_active=data.get('is_active', True),
+                # FIX: Changed from created_by_id to created_by
                 created_by=current_user.id
             )
             db.session.add(survey)
             db.session.commit()
             
             log_activity('SURVEY CREATED', 'Survey Questionnaire', survey.id, f"Created survey: {survey.title}")
-            broadcast_notification("New Instrument Deployed", f"A new survey instrument '{survey.title}' is now available for deployment.")
-            db.session.commit()
-
             return jsonify({'message': 'Survey created successfully', 'survey': survey.to_dict()}), 201
         except Exception as e:
             db.session.rollback()
@@ -986,12 +995,12 @@ def create_app(config_name='development'):
         
         try:
             for key, value in data.items():
+                # FIX: Exclude 'created_by' from being updated by frontend data
                 if hasattr(survey, key) and key not in ['id', 'created_at', 'created_by']:
                     setattr(survey, key, value)
             
-            log_activity('SURVEY UPDATED', 'Survey Questionnaire', survey.id, f"Modified protocol: {survey.title}")
-            broadcast_notification("Survey Protocol Revised", f"The specifications for the instrument '{survey.title}' have been modified.")
             db.session.commit()
+            log_activity('SURVEY UPDATED', 'Survey Questionnaire', survey.id, f"Modified protocol: {survey.title}")
             return jsonify({'message': 'Survey updated', 'survey': survey.to_dict()}), 200
         except Exception as e:
             db.session.rollback()
@@ -1000,15 +1009,15 @@ def create_app(config_name='development'):
     @app.route('/api/surveys/<int:id>', methods=['DELETE'])
     @jwt_required()
     def delete_survey(id):
-        if User.query.get(get_jwt_identity()).role != 'admin':
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin']:
             return jsonify({'error': 'Unauthorized'}), 403
         
         try:
             survey = SurveyQuestionnaire.query.get_or_404(id)
-            s_title = survey.title
             db.session.delete(survey)
-            log_activity('SURVEY DELETED', 'Survey Questionnaire', id, f"Removed survey: {s_title}")
-            broadcast_notification("Instrument Archived", f"The survey protocol '{s_title}' has been removed from the active data stream.")
             db.session.commit()
             return jsonify({'message': 'Survey deleted'}), 200
         except Exception as e:
@@ -1039,11 +1048,7 @@ def create_app(config_name='development'):
         
         db.session.add(product)
         db.session.commit()
-        
         log_activity('COMMODITY ADDED', 'Farmer', farmer_id, f"Appended new crop yield profile to registry")
-        broadcast_notification("Production Data Logged", "New commodity yield metrics have been added to a farmer profile.")
-        db.session.commit()
-
         return jsonify({'message': 'Product added successfully', 'product': product.to_dict()}), 201
     
     # ============ Farmer Children Routes ============
@@ -1073,22 +1078,21 @@ def create_app(config_name='development'):
         
         db.session.add(child)
         db.session.commit()
-        
         log_activity('CHILD ADDED', 'Farmer Child', child.id, f"Enrolled lineage for Farmer ID: {farmer_id}")
-        broadcast_notification("Lineage Registry Update", f"A new succession profile for {child.name} has been enrolled.")
-        db.session.commit()
-
         return jsonify({'message': 'Child record added successfully', 'child': child.to_dict()}), 201
     
+    # Find this route in app.py and replace it
     @app.route('/api/farmers/<int:farmer_id>/children/<int:child_id>', methods=['PUT'])
     @jwt_required()
     def update_farmer_child(farmer_id, child_id):
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
         
+        # Security Check
         if current_user.role not in ['admin', 'researcher', 'data_encoder']:
             return jsonify({'error': 'Unauthorized'}), 403
             
+        # Verify the child exists and belongs to the specified farmer
         child = FarmerChild.query.filter_by(id=child_id, farmer_id=farmer_id).first()
         
         if not child:
@@ -1097,26 +1101,41 @@ def create_app(config_name='development'):
         data = request.get_json()
         
         try:
-            if 'name' in data: child.name = data.get('name')
-            if 'age' in data: child.age = int(data.get('age')) if data.get('age') else None
-            if 'gender' in data: child.gender = data.get('gender')
-            if 'education_level' in data: child.education_level = data.get('education_level')
-            if 'current_occupation' in data: child.current_occupation = data.get('current_occupation')
-            if 'continues_farming' in data: child.continues_farming = bool(data.get('continues_farming'))
-            if 'involvement_level' in data: child.involvement_level = data.get('involvement_level')
-            if 'notes' in data: child.notes = data.get('notes')
+            # Safely update fields using dict.get() to avoid KeyErrors
+            if 'name' in data:
+                child.name = data.get('name')
+            if 'age' in data:
+                # Handle empty strings from frontend input type="number"
+                age_val = data.get('age')
+                child.age = int(age_val) if age_val else None
+            if 'gender' in data:
+                child.gender = data.get('gender')
+            if 'education_level' in data:
+                child.education_level = data.get('education_level')
+            if 'current_occupation' in data:
+                child.current_occupation = data.get('current_occupation')
+            if 'continues_farming' in data:
+                child.continues_farming = bool(data.get('continues_farming'))
+            if 'involvement_level' in data:
+                child.involvement_level = data.get('involvement_level')
+            if 'notes' in data:
+                child.notes = data.get('notes')
                 
             db.session.commit()
+            
+            # Log the modification
             log_activity('CHILD UPDATED', 'Farmer Child', child.id, f"Updated record for {child.name}")
-            broadcast_notification("Lineage Data Revised", f"The identity specifications for {child.name} were updated.")
-            db.session.commit()
-
+            
             return jsonify({'message': 'Identity modified successfully', 'child': child.to_dict()}), 200
             
+        except ValueError as ve:
+            db.session.rollback()
+            return jsonify({'error': 'Invalid data format provided (e.g. text in age field)'}), 400
         except Exception as e:
             db.session.rollback()
-            return jsonify({'error': 'Failed to modify record.'}), 500
-            
+            print(f"❌ CHILD UPDATE ERROR: {str(e)}")
+            return jsonify({'error': 'Database constraint violation or server error.'}), 500
+        
     @app.route('/api/farmers/<int:farmer_id>/children/<int:child_id>', methods=['DELETE'])
     @jwt_required()
     def delete_farmer_child(farmer_id, child_id):
@@ -1125,15 +1144,14 @@ def create_app(config_name='development'):
             return jsonify({'error': 'Unauthorized'}), 403
             
         child = FarmerChild.query.filter_by(id=child_id, farmer_id=farmer_id).first_or_404()
-        c_name = child.name
+        child_name = child.name
         
         db.session.delete(child)
         db.session.commit()
         
-        log_activity('CHILD REMOVED', 'Farmer Child', child_id, f"Revoked succession record for {c_name}")
-        broadcast_notification("Lineage Entry Revoked", f"Succession record for {c_name} has been removed from the registry.")
-        db.session.commit()
-
+        # LOG: Lineage removal
+        log_activity('CHILD REMOVED', 'Farmer Child', child_id, f"Revoked succession record for {child_name}")
+        
         return jsonify({'message': 'Record deleted'}), 200
     
     # ============ Farmer Experiences Routes ============
@@ -1142,28 +1160,55 @@ def create_app(config_name='development'):
     @jwt_required()
     def get_experiences():
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
+        per_page = request.args.get('per_page', app.config.get('ITEMS_PER_PAGE', 20), type=int)
+        
         pagination = FarmerExperience.query.order_by(FarmerExperience.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-        return jsonify({'experiences': [exp.to_dict(include_relations=True) for exp in pagination.items], 'total': pagination.total, 'pages': pagination.pages, 'current_page': page}), 200
+        
+        return jsonify({
+            'experiences': [exp.to_dict(include_relations=True) for exp in pagination.items],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': page
+        }), 200
     
     @app.route('/api/experiences', methods=['POST'])
     @jwt_required()
     def create_experience():
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
+        
         if current_user.role not in ['admin', 'researcher', 'data_encoder']:
             return jsonify({'error': 'Unauthorized'}), 403
         
         data = request.get_json()
+        
         experience = FarmerExperience(
-            farmer_id=data['farmer_id'], experience_type=data['experience_type'], title=data['title'],
-            description=data['description'], date_recorded=date.today(), interviewer_id=current_user.id
+            farmer_id=data['farmer_id'],
+            experience_type=data['experience_type'],
+            title=data['title'],
+            description=data['description'],
+            date_recorded=datetime.strptime(data['date_recorded'], '%Y-%m-%d').date() if data.get('date_recorded') else date.today(),
+            interviewer_id=current_user.id,
+            location=data.get('location'),
+            context=data.get('context'),
+            impact_level=data.get('impact_level')
         )
+        
         db.session.add(experience)
-        log_activity('EXPERIENCE CREATED', 'Farmer Experience', experience.id, f"Added: {experience.title}")
-        broadcast_notification("Knowledge Base Update", f"A new field experience '{data['title']}' has been added to the knowledge registry.")
+        
+        # --- AUTO-NOTIFICATION TRIGGER ---
+        broadcast_notification(
+            title="Knowledge Base Update", 
+            message=f"New {data['experience_type']} recorded: '{data['title']}'",
+            target_user_id=None
+        )
+        # ---------------------------------
+
         db.session.commit()
-        return jsonify({'message': 'Success', 'experience': experience.to_dict()}), 201
+        
+        log_activity('EXPERIENCE CREATED', 'Farmer Experience', experience.id)
+        
+        return jsonify({'message': 'Experience recorded successfully', 'experience': experience.to_dict()}), 201
     
     # ============ Research Projects Routes ============
     
@@ -1171,99 +1216,440 @@ def create_app(config_name='development'):
     @jwt_required()
     def get_projects():
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
+        per_page = request.args.get('per_page', app.config.get('ITEMS_PER_PAGE', 20), type=int)
+        
         pagination = ResearchProject.query.order_by(ResearchProject.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-        return jsonify({'projects': [p.to_dict(include_relations=True) for p in pagination.items], 'total': pagination.total, 'pages': pagination.pages, 'current_page': page}), 200
+        
+        return jsonify({
+            'projects': [proj.to_dict(include_relations=True) for proj in pagination.items],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': page
+        }), 200
     
     @app.route('/api/projects', methods=['POST'])
     @jwt_required()
     def create_project():
-        current_user = User.query.get(get_jwt_identity())
-        if current_user.role not in ['admin', 'researcher']: return jsonify({'error': 'Unauthorized'}), 403
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin', 'researcher']:
+            return jsonify({'error': 'Unauthorized'}), 403
         
         data = request.get_json()
+        
         project = ResearchProject(
-            project_code=data.get('project_code'), title=data['title'], principal_investigator_id=current_user.id,
-            research_type=data['research_type'], status=data.get('status', 'Planning')
+            project_code=data.get('project_code'),
+            title=data['title'],
+            description=data.get('description'),
+            principal_investigator_id=current_user.id,
+            organization_id=data.get('organization_id'),
+            start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date() if data.get('start_date') else None,
+            end_date=datetime.strptime(data['end_date'], '%Y-%m-%d').date() if data.get('end_date') else None,
+            status=data.get('status', 'Planning'),
+            research_type=data['research_type'],
+            objectives=data.get('objectives'),
+            methodology=data.get('methodology'),
+            budget=data.get('budget'),
+            funding_source=data.get('funding_source')
         )
+        
         db.session.add(project)
-        log_activity('PROJECT CREATED', 'Research Project', project.id, f"Initiated: {project.title}")
-        broadcast_notification("Research Initiative Launched", f"A new research project '{project.title}' has been initiated by {current_user.full_name}.")
+        
+        # --- AUTO-NOTIFICATION TRIGGER ---
+        broadcast_notification(
+            title="Research Initiative Launched", 
+            message=f"Project '{data['title']}' has been initiated by {current_user.full_name}.",
+            target_user_id=None
+        )
+        # ---------------------------------
+
         db.session.commit()
-        return jsonify({'message': 'Success', 'project': project.to_dict()}), 201
+        
+        log_activity('PROJECT CREATED', 'Research Project', project.id, f"Created project: {project.title}")
+        
+        return jsonify({'message': 'Project created successfully', 'project': project.to_dict()}), 201
     
-    # ============ Registry Routes ============
+    # ============ Barangay Routes ============
+    
+    @app.route('/api/barangays', methods=['GET', 'POST'])
+    @jwt_required()
+    def manage_barangays():
+        if request.method == 'GET':
+            barangays = Barangay.query.order_by(Barangay.name).all()
+            return jsonify([b.to_dict() for b in barangays]), 200
+            
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        if current_user.role not in ['admin', 'data_encoder']: return jsonify({'error': 'Unauthorized'}), 403
+        
+        data = request.get_json()
+        
+        # FIX: Ensure latitude and longitude are pulled from frontend data
+        barangay = Barangay(
+            name=data['name'], 
+            municipality=data['municipality'], 
+            province=data['province'],
+            region=data['region'], 
+            population=data.get('population'), 
+            total_households=data.get('total_households'),
+            agricultural_households=data.get('agricultural_households'),
+            latitude=data.get('latitude'),    # <--- ADDED THIS
+            longitude=data.get('longitude')   # <--- ADDED THIS
+        )
+        
+        db.session.add(barangay)
+        db.session.commit()
+        
+        log_activity('BARANGAY CREATED', 'Barangay', barangay.id, f"Added territory: {barangay.name}")
+        broadcast_notification("Geographic Registry", f"New territory '{barangay.name}' added to mapping.")
+        return jsonify({'message': 'Barangay created successfully', 'barangay': barangay.to_dict()}), 201
+    
+    @app.route('/api/mapping/demographics', methods=['GET'])
+    @jwt_required()
+    def get_map_demographics():
+        try:
+            # Safely get all barangays
+            barangays = Barangay.query.all()
+            map_data = []
+            
+            # Base coordinates for San Pablo City
+            base_lat = 14.0673
+            base_lng = 121.3242
+            
+            for b in barangays:
+                farmer_count = Farmer.query.filter_by(barangay_id=b.id).count()
+                
+                # Safe top product query using SQLite compatible string aggregation
+                top_crop_name = "Mixed Crops"
+                if farmer_count > 0:
+                    try:
+                        # Find the most common product for this barangay
+                        top_product = db.session.query(
+                            AgriculturalProduct.name, 
+                            func.count(FarmerProduct.id).label('total')
+                        ).join(FarmerProduct, AgriculturalProduct.id == FarmerProduct.product_id)\
+                         .join(Farmer, Farmer.id == FarmerProduct.farmer_id)\
+                         .filter(Farmer.barangay_id == b.id)\
+                         .group_by(AgriculturalProduct.name)\
+                         .order_by(desc('total')).first()
+                         
+                        if top_product:
+                            top_crop_name = top_product[0]
+                    except:
+                        pass # Fallback to "Mixed Crops" if query fails
+                
+                # Check if lat/lng exist in DB, otherwise generate pseudo-coordinates around San Pablo
+                lat = getattr(b, 'latitude', None)
+                lng = getattr(b, 'longitude', None)
+                
+                if not lat or not lng:
+                    # Random visual spread for demonstration (within ~5km of center)
+                    lat = base_lat + (random.uniform(-0.04, 0.04))
+                    lng = base_lng + (random.uniform(-0.04, 0.04))
+
+                if farmer_count > 0:
+                    map_data.append({
+                        "id": b.id,
+                        "name": b.name,
+                        "lat": lat,
+                        "lng": lng,
+                        "farmer_count": farmer_count,
+                        "top_product": top_crop_name
+                    })
+                    
+            return jsonify(map_data), 200
+        except Exception as e:
+            print(f"Mapping Error: {str(e)}")
+            traceback.print_exc()
+            return jsonify({'error': 'Failed to load map data'}), 500
+        
+        
+    
+    @app.route('/api/organizations', methods=['GET'])
+    @jwt_required()
+    def get_organizations():
+        organizations = Organization.query.order_by(Organization.name).all()
+        return jsonify([o.to_dict() for o in organizations]), 200
     
     @app.route('/api/barangays', methods=['POST'])
     @jwt_required()
     def create_barangay():
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin', 'data_encoder']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
         data = request.get_json()
-        b = Barangay(name=data['name'], municipality=data['municipality'], province=data['province'], region=data['region'])
-        db.session.add(b)
-        log_activity('BARANGAY CREATED', 'Barangay', b.id, f"Added territory: {b.name}")
-        broadcast_notification("Registry Update", f"New territory '{b.name}' added to the geographic registry mapping.")
+        
+        barangay = Barangay(
+            name=data['name'],
+            municipality=data['municipality'],
+            province=data['province'],
+            region=data['region'],
+            population=data.get('population'),
+            total_households=data.get('total_households'),
+            agricultural_households=data.get('agricultural_households')
+        )
+        
+        db.session.add(barangay)
         db.session.commit()
-        return jsonify(b.to_dict()), 201
-
+        log_activity('BARANGAY CREATED', 'Barangay', barangay.id, f"Added territory: {barangay.name}")
+        return jsonify({'message': 'Barangay created successfully', 'barangay': barangay.to_dict()}), 201
+    
+    # ============ Products Routes ============
+    
+    @app.route('/api/products', methods=['GET'])
+    @jwt_required()
+    def get_products():
+        products = AgriculturalProduct.query.order_by(AgriculturalProduct.name).all()
+        return jsonify([p.to_dict() for p in products]), 200
+    
     @app.route('/api/products', methods=['POST'])
     @jwt_required()
     def create_product():
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin', 'researcher']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
         data = request.get_json()
-        p = AgriculturalProduct(name=data['name'], category=data['category'])
-        db.session.add(p)
-        log_activity('PRODUCT CREATED', 'Agricultural Product', p.id, f"Added commodity: {p.name}")
-        broadcast_notification("Commodity Registry Updated", f"New product type '{p.name}' is now available in the commodity registry.")
+        
+        product = AgriculturalProduct(
+            name=data['name'],
+            category=data['category'],
+            description=data.get('description')
+        )
+        
+        db.session.add(product)
         db.session.commit()
-        return jsonify(p.to_dict()), 201
+        log_activity('PRODUCT CREATED', 'Agricultural Product', product.id, f"Added commodity: {product.name}")
+        return jsonify({'message': 'Product created successfully', 'product': product.to_dict()}), 201
+    
 
+    @app.route('/api/products/<int:id>', methods=['PUT'])
+    @jwt_required()
+    def update_product(id):
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin', 'researcher']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        product = AgriculturalProduct.query.get_or_404(id)
+        data = request.get_json()
+        
+        try:
+            # Check for duplicate name if name is changing
+            if 'name' in data and data['name'] != product.name:
+                if AgriculturalProduct.query.filter(func.lower(AgriculturalProduct.name) == func.lower(data['name'])).first():
+                    return jsonify({'error': 'Product name already exists'}), 400
+
+            if 'name' in data: product.name = data['name']
+            if 'category' in data: product.category = data['category']
+            if 'description' in data: product.description = data['description']
+            
+            db.session.commit()
+            return jsonify({'message': 'Product updated successfully', 'product': product.to_dict()}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+
+    @app.route('/api/products/<int:id>', methods=['DELETE'])
+    @jwt_required()
+    def delete_product(id):
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        try:
+            product = AgriculturalProduct.query.get_or_404(id)
+            db.session.delete(product)
+            db.session.commit()
+            return jsonify({'message': 'Product deleted successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            # This usually happens if the product is used in a Farmer's record
+            return jsonify({'error': 'Cannot delete: This commodity is linked to existing farmer records.'}), 400
+    
+    # ============ Export Routes ============
+    
+    @app.route('/api/export/farmers', methods=['GET'])
+    @jwt_required()
+    def export_farmers():
+        try:
+            farmers = Farmer.query.all()
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            writer.writerow([
+                'Farmer Code', 'First Name', 'Last Name', 'Age', 'Gender', 
+                'Education', 'Barangay', 'Municipality', 'Province',
+                'Annual Income', 'Farm Size (ha)', 'Years Farming'
+            ])
+            
+            for farmer in farmers:
+                b_name = farmer.barangay.name if farmer.barangay else ''
+                b_muni = farmer.barangay.municipality if farmer.barangay else ''
+                b_prov = farmer.barangay.province if farmer.barangay else ''
+                
+                writer.writerow([
+                    farmer.farmer_code or '',
+                    farmer.first_name or '',
+                    farmer.last_name or '',
+                    farmer.age or '',
+                    farmer.gender or '',
+                    farmer.education_level or '',
+                    b_name,
+                    b_muni,
+                    b_prov,
+                    str(farmer.annual_income) if farmer.annual_income else '',
+                    str(farmer.farm_size_hectares) if farmer.farm_size_hectares else '',
+                    farmer.years_farming or ''
+                ])
+            
+            csv_data = output.getvalue()
+            output.close()
+            
+            byte_output = io.BytesIO(csv_data.encode('utf-8'))
+            
+            return send_file(
+                byte_output,
+                mimetype='text/csv',
+                as_attachment=True,
+                download_name=f'farmers_export_{datetime.now().strftime("%Y%m%d")}.csv'
+            )
+        except Exception as e:
+            print(f"Export Error: {e}")
+            return jsonify({'error': 'Failed to generate export file'}), 500
+            
     # ============ Users Management Routes ============
     
     @app.route('/api/users', methods=['GET'])
     @jwt_required()
     def get_users():
-        if User.query.get(get_jwt_identity()).role != 'admin': return jsonify({'error': 'Unauthorized'}), 403
-        return jsonify([u.to_dict() for u in User.query.order_by(User.created_at.desc()).all()]), 200
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        users = User.query.order_by(User.created_at.desc()).all()
+        return jsonify([u.to_dict() for u in users]), 200
     
     @app.route('/api/users/<int:id>', methods=['PUT'])
     @jwt_required()
     def update_user(id):
-        if User.query.get(get_jwt_identity()).role != 'admin': return jsonify({'error': 'Unauthorized'}), 403
-        user = User.query.get_or_404(id); data = request.get_json()
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        if current_user.role not in ['admin']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        user = User.query.get_or_404(id)
+        data = request.get_json()
+        
         try:
-            for key, value in data.items():
-                if hasattr(user, key) and key not in ['id', 'password_hash']: setattr(user, key, value)
-            if 'password' in data and data['password']: user.set_password(data['password'])
-            log_activity('USER UPDATED', 'User', user.id, f"Modified profile for {user.username}")
-            broadcast_notification("Account Updated", f"System operator profile for {user.username} was modified by an administrator.", target_user_id=user.id)
-            db.session.commit()
-            return jsonify({'message': 'Success', 'user': user.to_dict()}), 200
-        except Exception as e: return jsonify({'error': str(e)}), 400
+            # Added duplicate checks
+            if 'username' in data and data['username'] != user.username:
+                if User.query.filter_by(username=data['username']).first():
+                    return jsonify({'error': 'Username already taken'}), 400
+            
+            if 'email' in data and data['email'] != user.email:
+                if User.query.filter_by(email=data['email']).first():
+                    return jsonify({'error': 'Email already registered'}), 400
 
+            for key, value in data.items():
+                if hasattr(user, key) and key not in ['id', 'password_hash', 'created_at', 'password']:
+                    setattr(user, key, value)
+            
+            if 'password' in data and data['password']:
+                user.set_password(data['password'])
+                
+            db.session.commit()
+            log_activity('USER UPDATED', 'User', user.id, f"Modified profile/role for {user.username}")
+            return jsonify({'message': 'User updated successfully', 'user': user.to_dict()}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+
+    # ADDED DELETE ROUTE HERE
     @app.route('/api/users/<int:id>', methods=['DELETE'])
     @jwt_required()
     def delete_user(id):
-        curr_id = get_jwt_identity()
-        if User.query.get(curr_id).role != 'admin' or int(curr_id) == id: return jsonify({'error': 'Forbidden'}), 403
-        u = User.query.get_or_404(id); name = u.username
-        Farmer.query.filter_by(data_encoder_id=id).update({'data_encoder_id': None})
-        ActivityLog.query.filter_by(user_id=id).update({'user_id': None})
-        db.session.delete(u)
-        log_activity('USER DELETED', 'User', id, f"Revoked registry for {name}")
-        broadcast_notification("Access Revoked", f"System access for operator '{name}' was permanently deleted.")
-        db.session.commit()
-        return jsonify({'message': 'Success'}), 200
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
         
+        # 1. Permission Check
+        if not current_user or current_user.role != 'admin':
+            return jsonify({'error': 'Unauthorized: Admin privileges required'}), 403
+        
+        # 2. Self-Deletion Check
+        if int(current_user_id) == id:
+            return jsonify({'error': 'System Protocol: Cannot delete active admin account'}), 400
+
+        user_to_delete = User.query.get_or_404(id)
+        
+        try:
+            # 3. UNLINK RELATED RECORDS (The Fix)
+            # instead of crashing, we set the 'author' of these records to NULL (Unknown)
+            
+            # Unlink Farmers encoded by this user
+            Farmer.query.filter_by(data_encoder_id=id).update({'data_encoder_id': None})
+            
+            # Unlink Experiences recorded by this user
+            FarmerExperience.query.filter_by(interviewer_id=id).update({'interviewer_id': None})
+            
+            # Unlink Projects led by this user
+            ResearchProject.query.filter_by(principal_investigator_id=id).update({'principal_investigator_id': None})
+            
+            # Unlink Activity Logs (Keep the history, remove the link)
+            ActivityLog.query.filter_by(user_id=id).update({'user_id': None})
+
+            # 4. Execute Deletion
+            db.session.delete(user_to_delete)
+            db.session.commit()
+            log_activity('USER DELETED', 'User', id, f"Revoked access for {user_name}")
+            return jsonify({'message': 'User identity revoked and data unlinked successfully'}), 200
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ DELETE USER ERROR: {str(e)}")
+            return jsonify({'error': f'Database Constraint Error: {str(e)}'}), 500
+        
+        
+    
+    
     # ============ Activity Logs Routes ============
     
     @app.route('/api/activity-logs', methods=['GET'])
     @jwt_required()
     def get_activity_logs():
-        current_user = User.query.get(get_jwt_identity())
-        if current_user.role not in ['admin', 'researcher', 'data_encoder', 'viewer']: return jsonify({'error': 'Unauthorized'}), 403
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        # --- FIX: Allow all authenticated roles to see logs (or at least their own) ---
+        if current_user.role not in ['admin', 'researcher', 'data_encoder', 'viewer']:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
         page = request.args.get('page', 1, type=int)
-        pagination = ActivityLog.query.order_by(ActivityLog.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
-        return jsonify({'logs': [log.to_dict() for log in pagination.items], 'total': pagination.total, 'pages': pagination.pages, 'current_page': page}), 200
+        per_page = request.args.get('per_page', 50, type=int)
+        
+        pagination = ActivityLog.query.order_by(ActivityLog.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+        
+        return jsonify({
+            'logs': [log.to_dict() for log in pagination.items],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': page
+        }), 200
     
+    # Initialize DB tables if they don't exist
     with app.app_context():
         db.create_all()
 

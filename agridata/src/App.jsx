@@ -8,8 +8,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 // Layout & Authentication
 import Layout from './components/Layout';
 import Login from './pages/Login';
-import Register from './pages/Register'; // Ensure you created this file
-import LandingPage from './components/LandingPage'; // Ensure you created this file
+import Register from './pages/Register';
+import LandingPage from './components/LandingPage';
 
 // Core Analytics
 import Dashboard from './pages/Dashboard';
@@ -18,10 +18,13 @@ import Dashboard from './pages/Dashboard';
 import FarmersList from './pages/FarmersList';
 import FarmerForm from './pages/FarmerForm'; 
 
+// Geospatial Module
+import GeospatialMapping from './pages/GeospatialMapping';
+
 // Research & Community Modules
 import Experiences from './pages/Experiences';
 import ResearchProjects from './pages/ResearchProjects';
-import SurveyQuestionnaires from './pages/SurveyQuestionnaires'; // <--- NEW MODULE
+import SurveyQuestionnaires from './pages/SurveyQuestionnaires';
 import Barangays from './pages/Barangays';
 import Organizations from './pages/Organizations'; 
 import Products from './pages/Products';
@@ -30,12 +33,15 @@ import Products from './pages/Products';
 import Users from './pages/Users';
 import ActivityLogs from './pages/ActivityLogs';
 
-// Placeholders for missing pages (Delete these if you have real files)
-const ForgotPassword = () => <div className="p-10 text-center">Contact Admin to reset password.</div>;
+// Fallback Page
+const ForgotPassword = () => <div className="p-10 text-center font-bold text-slate-500">Contact System Administrator to reset password.</div>;
 
+// Scroll Management
 function ScrollToTop() {
   const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  useEffect(() => { 
+    window.scrollTo(0, 0); 
+  }, [pathname]);
   return null;
 }
 
@@ -52,16 +58,17 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           
           {/* --- PROTECTED APP ZONE --- */}
-          {/* We use a Layout Route without a path so it wraps all children */}
-          <Route
+          {/* The Layout wraps all internal routes, enforcing authentication globally */}
+          <Route 
             element={
               <ProtectedRoute>
                 <Layout />
               </ProtectedRoute>
             }
           >
-            {/* Redirect /app or unknown routes to dashboard */}
+            {/* Main Dashboards */}
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/map" element={<GeospatialMapping />} />
             
             {/* Farmer Module */}
             <Route path="/farmers" element={<FarmersList />} />
@@ -69,7 +76,7 @@ function App() {
             <Route path="/farmers/:id" element={<FarmerForm />} />
             <Route path="/farmers/:id/edit" element={<FarmerForm />} />
             
-            {/* Knowledge Modules */}
+            {/* Knowledge & Data Modules */}
             <Route path="/experiences" element={<Experiences />} />
             <Route path="/projects" element={<ResearchProjects />} />
             <Route path="/surveys" element={<SurveyQuestionnaires />} /> 
@@ -79,22 +86,26 @@ function App() {
             <Route path="/organizations" element={<Organizations />} />
             <Route path="/products" element={<Products />} />
 
-            {/* Admin Modules */}
-            <Route path="/users" element={
+            {/* Admin Modules (Double-Protected by Role) */}
+            <Route 
+              path="/users" 
+              element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <Users />
                 </ProtectedRoute>
               } 
             />
-            <Route path="/logs" element={
-                <ProtectedRoute allowedRoles={['admin', 'researcher']}>
+            <Route 
+              path="/logs" 
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'researcher', 'data_encoder', 'viewer']}>
                   <ActivityLogs />
                 </ProtectedRoute>
               } 
             />
           </Route>
           
-          {/* Global Fallback */}
+          {/* Global Fallback (404 Redirect) */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

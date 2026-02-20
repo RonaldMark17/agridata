@@ -77,6 +77,8 @@ class Barangay(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
     municipality = db.Column(db.String(255), nullable=False)
     province = db.Column(db.String(255), nullable=False)
     region = db.Column(db.String(255), nullable=False)

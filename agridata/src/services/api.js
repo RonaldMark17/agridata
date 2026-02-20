@@ -27,7 +27,9 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // FIX: Added `originalRequest.url !== '/auth/refresh'` to prevent infinite loops 
+    // if the refresh token itself is expired and returns a 401.
+    if (error.response?.status === 401 && !originalRequest._retry && originalRequest.url !== '/auth/refresh') {
       originalRequest._retry = true;
 
       try {
@@ -63,10 +65,11 @@ export const authAPI = {
   
   // Password Reset Flow
   requestOtp: (email) => api.post('/auth/forgot-password', { email }),
+  verifyOtpReset: (data) => api.post('/auth/verify-otp-reset', data), // FIX: Added missing route to match backend
   resetPassword: (data) => api.post('/auth/reset-password', data),
   
   // Login OTP Verification
-  verifyOtp: (data) => api.post('/auth/verify-otp', data), // Fixed naming casing
+  verifyOtp: (data) => api.post('/auth/verify-otp', data), 
   toggleOtp: (enable) => api.post('/auth/toggle-otp', { enable }),
 };
 
@@ -110,6 +113,11 @@ export const projectsAPI = {
 export const barangaysAPI = {
   getAll: () => api.get('/barangays'),
   create: (data) => api.post('/barangays', data),
+};
+
+// Mapping API
+export const mappingAPI = {
+  getDemographics: () => api.get('/mapping/demographics'),
 };
 
 // Products API

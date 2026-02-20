@@ -8,7 +8,7 @@ import {
   Menu, X, Sprout, ChevronRight, Bell, Search,
   PanelLeftClose, PanelLeftOpen, Settings, Sun, Moon, Monitor,
   AlertCircle, Building2, ClipboardList, CheckCheck, Trash2,
-  Activity, RefreshCw, Smartphone, ShieldCheck
+  Activity, RefreshCw, Smartphone, ShieldCheck,MapPinned
 } from 'lucide-react';
 
 export default function Layout() {
@@ -201,6 +201,7 @@ export default function Layout() {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Geospatial Map', href: '/map', icon: MapPinned },
     { name: 'Farmers', href: '/farmers', icon: Users },
     { name: 'Experiences', href: '/experiences', icon: BookOpen },
     { name: 'Research Projects', href: '/projects', icon: Beaker },
