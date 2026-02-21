@@ -6,28 +6,31 @@ import {
   Trophy, AlertTriangle, Lightbulb, Sprout, Landmark, Pin,
   ChevronLeft, ChevronRight, Activity, Filter, Info, Loader2,
   Search, Download, ThumbsUp, Share2, ExternalLink, Image as ImageIcon,
-  FileText, Check, MessageSquare, Send, Clock, Lock, Unlock, Edit2, Trash2
+  FileText, Check, MessageSquare, Send, Clock, Lock, Unlock, Edit2, Trash2, AlertCircle, Terminal
 } from 'lucide-react';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace('/api', '');
 
-// --- Skeleton Component ---
+// --- Skeleton Component (Matched to Dashboard) ---
 const ExperienceSkeleton = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 px-3 sm:px-6 lg:px-8">
     {[...Array(6)].map((_, i) => (
-      <div key={i} className="bg-white dark:bg-[#0b241f] rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 dark:border-white/5 p-6 sm:p-8 animate-pulse shadow-sm">
+      <div key={i} className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-6 sm:p-8 animate-pulse shadow-sm h-full flex flex-col">
         <div className="flex justify-between mb-4 sm:mb-6">
-          <div className="h-10 w-10 sm:h-14 sm:w-14 bg-slate-100 dark:bg-white/5 rounded-xl sm:rounded-2xl"></div>
+          <div className="h-12 w-12 sm:h-14 sm:w-14 bg-slate-100 dark:bg-white/5 rounded-2xl"></div>
           <div className="h-5 sm:h-6 w-20 sm:w-24 bg-slate-50 dark:bg-white/5 rounded-full"></div>
         </div>
         <div className="h-5 sm:h-6 w-3/4 bg-slate-100 dark:bg-white/5 rounded-lg mb-3 sm:mb-4"></div>
-        <div className="space-y-2 sm:space-y-3 mb-6 sm:mb-8">
+        <div className="space-y-2 sm:space-y-3 mb-6 sm:mb-8 flex-1">
           <div className="h-2.5 sm:h-3 w-full bg-slate-50 dark:bg-white/5 rounded"></div>
           <div className="h-2.5 sm:h-3 w-5/6 bg-slate-50 dark:bg-white/5 rounded"></div>
         </div>
-        <div className="pt-4 sm:pt-6 border-t border-slate-50 dark:border-white/5 space-y-3 sm:space-y-4">
-          <div className="h-2.5 sm:h-3 w-1/2 bg-slate-100 dark:bg-white/5 rounded"></div>
-          <div className="h-2.5 sm:h-3 w-1/3 bg-slate-100 dark:bg-white/5 rounded"></div>
+        <div className="pt-4 sm:pt-6 border-t border-slate-50 dark:border-white/5 flex items-center justify-between shrink-0 mt-auto">
+          <div className="flex gap-2">
+            <div className="h-6 w-6 rounded-full bg-slate-100 dark:bg-white/5"></div>
+            <div className="h-2.5 sm:h-3 w-16 sm:w-20 bg-slate-100 dark:bg-white/5 rounded mt-1.5"></div>
+          </div>
+          <div className="h-6 w-12 bg-slate-50 dark:bg-white/5 rounded-lg"></div>
         </div>
       </div>
     ))}
@@ -38,11 +41,13 @@ export default function Experiences() {
   const [experiences, setExperiences] = useState([]);
   const [farmers, setFarmers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   
   // Modals & Interactivity
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedExperience, setSelectedExperience] = useState(null); 
   const [commentText, setCommentText] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   
   // Comment Edit State
   const [editingCommentId, setEditingCommentId] = useState(null);
@@ -54,7 +59,6 @@ export default function Experiences() {
   const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isExporting, setIsExporting] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
 
   const { user } = useAuth();
   const canCreate = user && ['admin', 'researcher', 'data_encoder'].includes(user.role);
@@ -110,13 +114,19 @@ export default function Experiences() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitting(true);
+    setErrorMessage('');
     try {
       await experiencesAPI.create(formData);
       setShowCreateModal(false);
       fetchExperiences();
       setFormData(initialFormState);
     } catch (error) {
+      const msg = error.response?.data?.error || 'Failed to save record. Please check inputs.';
+      setErrorMessage(msg);
       console.error('Error creating experience:', error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -137,12 +147,10 @@ export default function Experiences() {
     }
   };
 
-  // --- UPGRADED COMMENT SUBMISSION ENGINE ---
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
     if (!commentText.trim() || !selectedExperience) return;
 
-    // Create a temporary ID so the UI updates instantly
     const tempId = Date.now();
     const tempComment = {
       id: tempId, 
@@ -154,7 +162,6 @@ export default function Experiences() {
       created_at: new Date().toISOString()
     };
 
-    // 1. Optimistically update the UI
     const updatedExperience = {
       ...selectedExperience,
       comments: [...(selectedExperience.comments || []), tempComment],
@@ -164,12 +171,9 @@ export default function Experiences() {
     setExperiences(prev => prev.map(exp => exp.id === selectedExperience.id ? updatedExperience : exp));
     setCommentText('');
 
-    // 2. Sync with backend and SWAP the temporary ID with the real Database ID
     try {
       if (experiencesAPI.addComment) {
         const response = await experiencesAPI.addComment(selectedExperience.id, { text: tempComment.text });
-        
-        // Grab the actual saved comment from the backend
         const realComment = response.data.comment;
         
         const finalExperience = {
@@ -182,9 +186,8 @@ export default function Experiences() {
       }
     } catch (error) {
       console.error("Failed to post comment:", error);
-      alert("Database Error: Failed to save comment. Please make sure you ran the SQL script in phpMyAdmin.");
+      alert("Database Error: Failed to save comment.");
       
-      // Revert the UI if it failed to save
       const revertedExperience = {
         ...selectedExperience,
         comments: selectedExperience.comments.filter(c => c.id !== tempId),
@@ -338,8 +341,7 @@ export default function Experiences() {
       if (navigator.share) { await navigator.share(shareData); } 
       else {
         await navigator.clipboard.writeText(`${shareData.text}\n\nRead more at: ${shareData.url}`);
-        setShareCopied(true);
-        setTimeout(() => setShareCopied(false), 2000);
+        alert("Link copied to clipboard!");
       }
     } catch (err) { console.error("Error sharing:", err); }
   };
@@ -375,50 +377,53 @@ export default function Experiences() {
   const tabs = ['All', 'Success Story', 'Challenge', 'Innovation', 'Farming Practice', 'Cultural Tradition'];
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans transition-colors duration-300 pb-20">
-      <div className="max-w-[1400px] mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-700">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 pb-24 transition-colors duration-300">
+      <div className="max-w-[1400px] mx-auto space-y-6 sm:space-y-10 animate-in fade-in duration-700">
         
-        {/* Header Section */}
-        <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4 sm:gap-6 px-4 pt-6 sm:pt-8">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2 sm:mb-3">
-              <div className="p-1.5 sm:p-2 bg-emerald-600 rounded-lg text-white shadow-lg">
-                <BookOpen size={16} />
+        {/* Header Section (Matched to Dashboard) */}
+        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 sm:gap-8 px-3 sm:px-6 lg:px-8 py-6">
+          <div>
+            <div className="flex items-center gap-2 mb-3 sm:mb-4">
+              <div className="p-1.5 sm:p-2 bg-emerald-600 rounded-lg sm:rounded-xl text-white shadow-xl shadow-emerald-200 dark:shadow-none">
+                <BookOpen size={18} className="sm:w-[20px] sm:h-[20px]" />
               </div>
-              <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Knowledge Repo</span>
+              <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-[0.3em]">Knowledge Repo</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Field Wisdom</h1>
-            <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium max-w-2xl">Collective insights capturing field-tested success and innovation.</p>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Field Wisdom</h1>
+            <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium max-w-2xl mt-2 sm:mt-3">Collective insights capturing field-tested success and innovation.</p>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs sm:text-sm font-bold dark:text-white outline-none"
+              <input type="text" placeholder="Search insights..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-3.5 sm:py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] text-xs sm:text-sm font-bold dark:text-white outline-none"
               />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <button onClick={handleExport} disabled={isExporting} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl font-black text-[9px] uppercase text-slate-500 dark:text-slate-400 shadow-sm">
+              <button onClick={handleExport} disabled={isExporting} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-3.5 sm:py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-black text-[9px] sm:text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 shadow-sm transition-colors hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50">
                 {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} <span>Export</span>
               </button>
               {canCreate && (
-                <button onClick={() => setShowCreateModal(true)} className="flex-1 sm:flex-none group flex items-center justify-center gap-2 px-4 py-3 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl font-bold text-[10px] uppercase shadow-xl hover:bg-slate-800 dark:hover:bg-emerald-500 transition-colors">
-                  <Plus size={14} /> <span>Record</span>
+                <button 
+                  onClick={() => setShowCreateModal(true)} 
+                  className="flex-1 sm:flex-none group flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-[10px] uppercase tracking-[0.2em] shadow-xl sm:shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-emerald-500 active:scale-95 transition-all"
+                >
+                  <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300" /> <span>Record</span>
                 </button>
               )}
             </div>
           </div>
-        </div>
+        </header>
 
         {/* Categories Tab Bar */}
-        <div className="mx-4">
-          <div className="bg-white dark:bg-[#0b241f] p-1.5 rounded-xl sm:rounded-[1.5rem] border border-slate-100 dark:border-white/5 shadow-sm overflow-x-auto no-scrollbar">
+        <div className="mx-3 sm:mx-6 lg:mx-8">
+          <div className="bg-white dark:bg-[#0b241f] p-1.5 sm:p-2 rounded-xl sm:rounded-[1.5rem] border border-slate-100 dark:border-white/5 shadow-sm overflow-x-auto no-scrollbar">
             <nav className="flex items-center gap-1 min-w-max">
               {tabs.map((tab) => (
                 <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`px-4 sm:px-5 py-2.5 sm:py-3 rounded-lg sm:rounded-2xl text-[10px] sm:text-xs font-black uppercase transition-all ${
-                    activeTab === tab ? 'bg-slate-900 dark:bg-emerald-500 text-white' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600'
+                  className={`px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-lg sm:rounded-2xl text-[10px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
+                    activeTab === tab ? 'bg-slate-900 dark:bg-emerald-500 text-white' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-white/5'
                   }`}>{tab}</button>
               ))}
             </nav>
@@ -426,45 +431,62 @@ export default function Experiences() {
         </div>
 
         {/* Content Area */}
-        <div className="min-h-[500px] px-4">
+        <div className="min-h-[500px] px-3 sm:px-6 lg:px-8">
           {loading ? <ExperienceSkeleton /> : filteredExperiences.length === 0 ? (
-            <div className="py-32 text-center"><h3 className="text-xl font-black dark:text-white uppercase">No Results Found</h3></div>
+            <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-white/5 py-20 sm:py-32 text-center transition-all">
+              <div className="p-6 sm:p-8 bg-slate-50 dark:bg-white/5 rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-6 sm:mb-8">
+                <Search size={36} className="sm:w-[48px] sm:h-[48px]" />
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Archives Empty</h3>
+              <p className="text-sm sm:text-base text-slate-400 dark:text-slate-500 font-medium mt-2 sm:mt-3">No insights found. Begin by recording field wisdom.</p>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
               {filteredExperiences.map((exp) => {
                 const style = getTypeStyles(exp.experience_type);
                 const Icon = style.icon;
                 return (
                   <div key={exp.id} onClick={() => setSelectedExperience(exp)}
-                    className="group bg-white dark:bg-[#0b241f] rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-8 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all duration-300 relative overflow-hidden cursor-pointer flex flex-col h-full"
+                    className="group bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-10 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl sm:hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] dark:hover:shadow-black/40 hover:-translate-y-1 transition-all duration-500 overflow-hidden relative cursor-pointer flex flex-col h-full"
                   >
-                    <div className="flex justify-between items-start mb-6 relative z-10">
-                      <div className={`p-3 rounded-xl ${style.bg} ${style.color}`}><Icon size={20} /></div>
-                      <span className={`px-2.5 py-1 rounded-lg text-[8px] sm:text-[9px] font-black uppercase border ${exp.impact_level === 'High' ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'}`}>{exp.impact_level}</span>
+                    <div className="flex justify-between items-start mb-6 sm:mb-8 relative z-10">
+                      <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] ${style.bg} ${style.color} group-hover:scale-110 transition-transform duration-500`}>
+                        <Icon size={24} className="sm:w-[28px] sm:h-[28px]" />
+                      </div>
+                      <span className={`px-3 py-1.5 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border ${exp.impact_level === 'High' ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:border-rose-500/20' : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/20'}`}>
+                        {exp.impact_level}
+                      </span>
                     </div>
-                    <div className="space-y-3 mb-6 flex-1 relative z-10">
-                      <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase leading-tight line-clamp-2">{exp.title}</h3>
-                      <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed line-clamp-3">{exp.description}</p>
+
+                    <div className="space-y-3 sm:space-y-4 mb-8 flex-1 relative z-10">
+                      <div className="flex items-center gap-2">
+                         <span className="text-[8px] sm:text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-500/20">
+                            {exp.experience_type}
+                         </span>
+                      </div>
+                      <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight leading-tight line-clamp-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{exp.title}</h3>
+                      <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium leading-relaxed line-clamp-3">{exp.description}</p>
                     </div>
-                    <div className="pt-4 border-t border-slate-50 dark:border-white/5 flex items-center justify-between relative z-10">
-                      <div className="flex items-center gap-2 pr-4 min-w-0">
-                        <div className="h-7 w-7 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-emerald-600 shrink-0"><User size={12} /></div>
+
+                    <div className="pt-6 border-t border-slate-50 dark:border-white/5 flex items-center justify-between relative z-10 shrink-0 mt-auto">
+                      <div className="flex items-center gap-3 pr-4 min-w-0">
+                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-emerald-600 shrink-0"><User size={14} /></div>
                         <div className="min-w-0">
-                            <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{exp.farmer_name}</p>
-                            <p className="text-[8px] text-slate-400 font-black">{formatDate(exp.date_recorded)}</p>
+                            <p className="text-[10px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{exp.farmer_name}</p>
+                            <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mt-0.5">{formatDate(exp.date_recorded)}</p>
                         </div>
                       </div>
                       
                       {/* COMMENT COUNT AND LIKE BUTTON */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <div className="flex items-center gap-1 px-2 text-slate-400">
-                          <MessageSquare size={14} />
-                          <span className="text-[10px] font-black">{exp.comments_count || 0}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 px-3 text-slate-400">
+                          <MessageSquare size={14} className="sm:w-[16px] sm:h-[16px]" />
+                          <span className="text-[10px] sm:text-xs font-black">{exp.comments_count || 0}</span>
                         </div>
 
                         <button 
                             onClick={(e) => toggleVote(exp.id, e)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                            className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl transition-all ${
                                 exp.is_liked_by_me 
                                 ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600' 
                                 : 'bg-slate-50 dark:bg-white/5 text-slate-400 hover:text-blue-500'
@@ -472,9 +494,9 @@ export default function Experiences() {
                         >
                             <ThumbsUp 
                                 size={14} 
-                                className={exp.is_liked_by_me ? 'fill-current' : ''} 
+                                className={`sm:w-[16px] sm:h-[16px] ${exp.is_liked_by_me ? 'fill-current' : ''}`} 
                             />
-                            <span className="text-[10px] font-black">{exp.likes_count || 0}</span>
+                            <span className="text-[10px] sm:text-xs font-black">{exp.likes_count || 0}</span>
                         </button>
                       </div>
                     </div>
@@ -485,121 +507,164 @@ export default function Experiences() {
           )}
         </div>
 
-        {/* --- FIXED: CREATE EXPERIENCE MODAL --- */}
+        {/* Global Pagination */}
+        {!loading && totalPages > 1 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-[#0b241f] px-6 sm:px-10 py-5 sm:py-6 rounded-3xl sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm mx-3 sm:mx-6 lg:mx-8 transition-colors gap-4">
+            <p className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
+              Page <span className="text-slate-900 dark:text-white">{currentPage}</span> of {totalPages}
+            </p>
+            <div className="flex gap-3 sm:gap-4 w-full sm:w-auto justify-center">
+              <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="flex-1 sm:flex-none p-3 sm:p-4 flex justify-center bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 disabled:opacity-30 transition-all shadow-sm">
+                <ChevronLeft size={18} className="sm:w-[20px] sm:h-[20px]" />
+              </button>
+              <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="flex-1 sm:flex-none p-3 sm:p-4 flex justify-center bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 disabled:opacity-30 transition-all shadow-sm">
+                <ChevronRight size={18} className="sm:w-[20px] sm:h-[20px]" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* --- FIXED: CREATE EXPERIENCE MODAL (Matched to Dashboard/Projects) --- */}
         {showCreateModal && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 overflow-hidden">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in" onClick={() => setShowCreateModal(false)} />
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-0 sm:p-4 md:p-8 overflow-hidden">
+            <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowCreateModal(false)} />
             
-            <div className="relative bg-[#f8fafc] dark:bg-[#020c0a] w-full max-w-2xl rounded-[2.5rem] shadow-2xl flex flex-col border dark:border-white/10 animate-in zoom-in-95 max-h-[90vh]">
+            <div className="relative bg-white dark:bg-[#041d18] rounded-none sm:rounded-[3rem] shadow-2xl w-full h-full sm:h-auto sm:max-w-4xl sm:max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-10 sm:slide-in-from-bottom-0 duration-500 border-none sm:border dark:border-white/5">
               
-              <div className="p-6 sm:p-8 border-b border-slate-200 dark:border-white/5 flex justify-between items-center bg-white dark:bg-[#0b241f] rounded-t-[2.5rem] shrink-0">
+              <div className="p-6 sm:p-10 border-b border-slate-50 dark:border-white/5 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl z-10 shrink-0 pt-safe">
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white uppercase">Record Experience</h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Log field observations and success stories.</p>
+                  <h2 className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Record Experience</h2>
+                  <p className="text-slate-400 dark:text-slate-500 font-medium text-xs sm:text-sm mt-0.5 sm:mt-1">Log field observations and success stories.</p>
                 </div>
-                <button onClick={() => setShowCreateModal(false)} className="p-2 bg-slate-50 dark:bg-white/5 rounded-full text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
-                  <X size={20} />
+                <button onClick={() => setShowCreateModal(false)} className="p-2.5 sm:p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl sm:rounded-2xl transition-all text-slate-300 dark:text-slate-600">
+                  <X size={24} className="sm:w-[28px] sm:h-[28px]" />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-8 sm:space-y-12 no-scrollbar pb-safe">
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 ml-1">Select Farmer</label>
-                    <select required value={formData.farmer_id} onChange={handleFarmerChange} className="w-full px-4 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none">
-                      <option value="" disabled>Select a registered farmer...</option>
-                      {farmers.map(f => (
-                        <option key={f.id} value={f.id}>{f.first_name} {f.last_name} ({f.farmer_code})</option>
-                      ))}
-                    </select>
+                {errorMessage && (
+                  <div className="p-4 sm:p-6 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-2xl sm:rounded-3xl flex items-center gap-3 sm:gap-4 text-rose-600 dark:text-rose-400 animate-in slide-in-from-top-4">
+                    <AlertCircle size={20} className="sm:w-[24px] sm:h-[24px] shrink-0" />
+                    <p className="text-xs sm:text-sm font-bold uppercase tracking-widest leading-relaxed">{errorMessage}</p>
                   </div>
+                )}
+
+                <div className="space-y-6 sm:space-y-8">
+                  <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600 dark:text-emerald-500 flex items-center gap-2 sm:gap-3">
+                    <Activity size={12} className="sm:w-[14px] sm:h-[14px]" /> Core Identity
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+                    <div className="space-y-2 sm:space-y-3">
+                      <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Select Farmer</label>
+                      <select required value={formData.farmer_id} onChange={handleFarmerChange} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none appearance-none">
+                        <option value="" disabled className="dark:bg-[#041d18]">Select a registered farmer...</option>
+                        {farmers.map(f => (
+                          <option key={f.id} value={f.id} className="dark:bg-[#041d18]">{f.first_name} {f.last_name} ({f.farmer_code})</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div className="space-y-2 sm:space-y-3">
+                      <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Experience Type</label>
+                      <select value={formData.experience_type} onChange={(e) => setFormData({...formData, experience_type: e.target.value})} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none appearance-none">
+                        <option value="Success Story" className="dark:bg-[#041d18]">Success Story</option>
+                        <option value="Challenge" className="dark:bg-[#041d18]">Challenge / Issue</option>
+                        <option value="Innovation" className="dark:bg-[#041d18]">Innovation / Experiment</option>
+                        <option value="Farming Practice" className="dark:bg-[#041d18]">Farming Practice</option>
+                        <option value="Cultural Tradition" className="dark:bg-[#041d18]">Cultural Tradition</option>
+                        <option value="Other" className="dark:bg-[#041d18]">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 sm:space-y-3">
+                    <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Title</label>
+                    <input type="text" required placeholder="e.g., Successfully transitioned to organic fertilizers..." value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none" />
+                  </div>
+                </div>
+
+                <div className="space-y-6 sm:space-y-8 pb-6 sm:pb-10">
+                  <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 dark:text-blue-500 flex items-center gap-2 sm:gap-3 border-t border-slate-100 dark:border-white/5 pt-8">
+                    <FileText size={12} className="sm:w-[14px] sm:h-[14px]" /> Detailed Context
+                  </p>
                   
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 ml-1">Experience Type</label>
-                    <select value={formData.experience_type} onChange={(e) => setFormData({...formData, experience_type: e.target.value})} className="w-full px-4 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none">
-                      <option value="Success Story">Success Story</option>
-                      <option value="Challenge">Challenge / Issue</option>
-                      <option value="Innovation">Innovation / Experiment</option>
-                      <option value="Farming Practice">Farming Practice</option>
-                      <option value="Cultural Tradition">Cultural Tradition</option>
-                      <option value="Other">Other</option>
-                    </select>
+                  <div className="space-y-2 sm:space-y-3">
+                    <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Description</label>
+                    <textarea required rows="4" placeholder="Describe the experience, methods used, and outcomes..." value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full px-4 sm:px-6 py-4 sm:py-5 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-2xl sm:rounded-3xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-medium dark:text-slate-200 min-h-[140px] outline-none resize-none" />
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 ml-1">Title</label>
-                  <input type="text" required placeholder="e.g., Successfully transitioned to organic fertilizers..." value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full px-4 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/50" />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 ml-1">Detailed Description</label>
-                  <textarea required rows="4" placeholder="Describe the experience, methods used, and outcomes..." value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full px-4 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none" />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 ml-1">Location</label>
-                    <input type="text" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})} className="w-full px-4 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/50" />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 ml-1">Impact Level</label>
-                    <select value={formData.impact_level} onChange={(e) => setFormData({...formData, impact_level: e.target.value})} className="w-full px-4 py-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none">
-                      <option value="Low">Low Impact</option>
-                      <option value="Medium">Medium Impact</option>
-                      <option value="High">High Impact</option>
-                    </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+                    <div className="space-y-2 sm:space-y-3">
+                      <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Location</label>
+                      <input type="text" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none" />
+                    </div>
+                    
+                    <div className="space-y-2 sm:space-y-3">
+                      <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Impact Level</label>
+                      <select value={formData.impact_level} onChange={(e) => setFormData({...formData, impact_level: e.target.value})} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none appearance-none">
+                        <option value="Low" className="dark:bg-[#041d18]">Low Impact</option>
+                        <option value="Medium" className="dark:bg-[#041d18]">Medium Impact</option>
+                        <option value="High" className="dark:bg-[#041d18]">High Impact</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
               </form>
 
-              <div className="p-6 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#0b241f] rounded-b-[2.5rem] shrink-0 flex justify-end gap-3">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">Cancel</button>
-                <button type="button" onClick={handleSubmit} className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg transition-all">Submit Record</button>
+              <div className="px-6 sm:px-10 py-6 sm:py-8 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5 flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-6 shrink-0">
+                <button type="button" onClick={() => setShowCreateModal(false)} className="w-full sm:w-auto px-6 sm:px-10 py-3.5 sm:py-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-600 bg-white dark:bg-transparent rounded-xl sm:rounded-none border border-slate-200 sm:border-none dark:border-white/10 hover:text-slate-600 dark:hover:text-slate-400 transition-colors">Discard</button>
+                <button 
+                  type="button" 
+                  onClick={handleSubmit} 
+                  disabled={submitting}
+                  className="w-full sm:w-auto px-8 sm:px-12 py-4 sm:py-5 bg-emerald-600 dark:bg-emerald-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-xl sm:shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3 disabled:opacity-50"
+                >
+                  {submitting ? <Loader2 className="animate-spin sm:w-[18px] sm:h-[18px]" size={16} /> : <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />}
+                  {submitting ? 'Processing...' : 'Record'}
+                </button>
               </div>
 
             </div>
           </div>
         )}
 
-        {/* --- REDESIGNED READ & COMMENT MODAL --- */}
+        {/* --- REDESIGNED READ & COMMENT MODAL (Matched to Projects/Sleek Theme) --- */}
         {selectedExperience && (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-0 sm:p-4 overflow-hidden">
-                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in" onClick={() => { setSelectedExperience(null); setCommentText(''); setEditingCommentId(null); }} />
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-0 sm:p-4 md:p-8 overflow-hidden">
+                <div className="absolute inset-0 bg-slate-900/60 dark:bg-black/60 backdrop-blur-md animate-in fade-in" onClick={() => { setSelectedExperience(null); setCommentText(''); setEditingCommentId(null); }} />
                 
-                <div className="relative bg-[#f8fafc] dark:bg-[#020c0a] w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-[2.5rem] shadow-2xl flex flex-col border dark:border-white/10 animate-in zoom-in-95 duration-300">
+                <div className="relative bg-white dark:bg-[#041d18] rounded-none sm:rounded-[3rem] shadow-2xl w-full h-full sm:h-auto sm:max-w-4xl sm:max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-10 sm:slide-in-from-bottom-0 duration-500 border-none sm:border dark:border-white/5">
                     
                     {/* Header Fixed */}
-                    <div className="p-5 sm:p-8 border-b dark:border-white/5 flex justify-between items-start bg-white dark:bg-[#0b241f] shrink-0 pt-safe sm:rounded-t-[2.5rem]">
+                    <div className="p-6 sm:p-10 border-b border-slate-50 dark:border-white/5 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl z-10 shrink-0 pt-safe">
                         <div className="space-y-2">
                             <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${getTypeStyles(selectedExperience.experience_type).bg} ${getTypeStyles(selectedExperience.experience_type).color}`}>
                                 {selectedExperience.experience_type}
                             </span>
-                            <h2 className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white uppercase leading-tight pr-4">{selectedExperience.title}</h2>
+                            <h2 className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight pr-4">{selectedExperience.title}</h2>
                         </div>
-                        <button onClick={() => { setSelectedExperience(null); setCommentText(''); setEditingCommentId(null); }} className="p-2 bg-slate-100 dark:bg-white/5 rounded-full text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors shrink-0">
-                          <X size={20} />
+                        <button onClick={() => { setSelectedExperience(null); setCommentText(''); setEditingCommentId(null); }} className="p-2.5 sm:p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl sm:rounded-2xl transition-all text-slate-300 dark:text-slate-600">
+                          <X size={24} className="sm:w-[28px] sm:h-[28px]" />
                         </button>
                     </div>
 
                     {/* Scrollable Body (Description + Meta + Comments) */}
-                    <div className="overflow-y-auto flex-1 no-scrollbar flex flex-col">
+                    <div className="overflow-y-auto flex-1 no-scrollbar flex flex-col pb-safe">
                         
                         {/* Core Content */}
-                        <div className="p-5 sm:p-8 bg-white dark:bg-[#0b241f] space-y-6 sm:space-y-8">
-                          <p className="text-sm sm:text-lg font-medium text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{selectedExperience.description}</p>
+                        <div className="p-6 sm:p-10 bg-white dark:bg-[#041d18] space-y-6 sm:space-y-8 border-b border-slate-50 dark:border-white/5">
+                          <p className="text-sm sm:text-base font-medium text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{selectedExperience.description}</p>
                           
-                          <div className="grid grid-cols-2 gap-4 p-5 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+                          <div className="grid grid-cols-2 gap-4 p-5 sm:p-6 bg-slate-50 dark:bg-black/20 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-white/5">
                               <div className="space-y-1 min-w-0">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><User size={12}/> Contributor</span>
-                                  <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{selectedExperience.farmer_name}</p>
+                                  <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><User size={12} className="sm:w-[14px] sm:h-[14px]"/> Contributor</span>
+                                  <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">{selectedExperience.farmer_name}</p>
                               </div>
                               <div className="space-y-1 min-w-0 border-l border-slate-200 dark:border-white/10 pl-4">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={12}/> Location</span>
-                                  <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{selectedExperience.location || 'N/A'}</p>
+                                  <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={12} className="sm:w-[14px] sm:h-[14px]"/> Location</span>
+                                  <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">{selectedExperience.location || 'N/A'}</p>
                               </div>
                           </div>
 
@@ -607,26 +672,26 @@ export default function Experiences() {
                           <div className="flex flex-wrap items-center gap-3 pt-2">
                             <button 
                               onClick={() => toggleVote(selectedExperience.id)} 
-                              className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all shadow-sm ${selectedExperience.is_liked_by_me ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'}`}
+                              className={`flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl sm:rounded-[1.25rem] font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all shadow-sm ${selectedExperience.is_liked_by_me ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'}`}
                             >
-                                <ThumbsUp size={14} className={selectedExperience.is_liked_by_me ? 'fill-current' : ''}/> 
+                                <ThumbsUp size={14} className={selectedExperience.is_liked_by_me ? 'fill-current sm:w-[16px] sm:h-[16px]' : 'sm:w-[16px] sm:h-[16px]'}/> 
                                 {selectedExperience.is_liked_by_me ? 'Helpful' : 'Mark Helpful'} 
-                                <span className="ml-1 px-1.5 py-0.5 bg-black/10 rounded-md">{selectedExperience.likes_count || 0}</span>
+                                <span className="ml-1 px-2 py-1 bg-black/10 rounded-md text-[9px] sm:text-[10px]">{selectedExperience.likes_count || 0}</span>
                             </button>
-                            <button onClick={() => handleShare(selectedExperience)} className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-transparent border border-slate-200 dark:border-white/10 rounded-xl font-bold uppercase tracking-widest text-[10px] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm">
-                              <Share2 size={14}/> Share
+                            <button onClick={() => handleShare(selectedExperience)} className="flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white dark:bg-transparent border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-bold uppercase tracking-widest text-[10px] sm:text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm">
+                              <Share2 size={14} className="sm:w-[16px] sm:h-[16px]"/> Share
                             </button>
                             
                             {/* DISABLE COMMENTS TOGGLE FOR ADMINS/CREATORS */}
                             {canCreate && (
                               <button 
                                 onClick={handleToggleComments} 
-                                className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-transparent border border-slate-200 dark:border-white/10 rounded-xl font-bold uppercase tracking-widest text-[10px] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm ml-auto"
+                                className="flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white dark:bg-transparent border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-bold uppercase tracking-widest text-[10px] sm:text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm ml-auto"
                               >
                                 {selectedExperience.comments_enabled === false ? (
-                                  <><Unlock size={14} className="text-emerald-500" /> Enable Discussion</>
+                                  <><Unlock size={14} className="text-emerald-500 sm:w-[16px] sm:h-[16px]" /> Enable</>
                                 ) : (
-                                  <><Lock size={14} className="text-rose-500" /> Disable Discussion</>
+                                  <><Lock size={14} className="text-rose-500 sm:w-[16px] sm:h-[16px]" /> Disable</>
                                 )}
                               </button>
                             )}
@@ -634,38 +699,38 @@ export default function Experiences() {
                         </div>
 
                         {/* Discussion / Comments Section */}
-                        <div className="p-5 sm:p-8 flex-1">
-                          <h4 className="flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-6">
+                        <div className="p-6 sm:p-10 flex-1 bg-slate-50 dark:bg-black/20">
+                          <h4 className="flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-6 sm:mb-8">
                             <MessageSquare size={16} className={selectedExperience.comments_enabled === false ? 'text-slate-400' : 'text-emerald-600'} /> 
                             Discussion ({selectedExperience.comments?.length || 0})
                           </h4>
 
-                          <div className="space-y-4 sm:space-y-5">
+                          <div className="space-y-4 sm:space-y-6">
                             {selectedExperience.comments && selectedExperience.comments.length > 0 ? (
                               selectedExperience.comments.map((c, i) => (
                                 <div key={c.id || i} className="flex gap-3 sm:gap-4 group animate-in slide-in-from-bottom-2">
                                   <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-black text-xs sm:text-sm shrink-0 border border-emerald-200 dark:border-emerald-500/30 mt-1">
                                     {c.user_name?.charAt(0) || 'U'}
                                   </div>
-                                  <div className="flex-1 flex flex-col gap-1">
+                                  <div className="flex-1 flex flex-col gap-1.5 sm:gap-2">
                                     <div className="bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 p-4 sm:p-5 rounded-2xl rounded-tl-none shadow-sm">
                                       
                                       <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                                           <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">{c.user_name}</span>
                                           <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1">
-                                            <Clock size={10}/> {new Date(c.created_at).toLocaleDateString()}
+                                            <span className="hidden sm:inline">•</span> {new Date(c.created_at).toLocaleDateString()}
                                           </span>
                                         </div>
 
                                         {/* Owner Actions: Edit / Delete */}
                                         {c.user_id === user?.id && editingCommentId !== c.id && (
                                           <div className="flex gap-1.5 sm:gap-2 opacity-50 hover:opacity-100 transition-opacity">
-                                            <button onClick={() => handleEditCommentClick(c)} className="text-blue-500 hover:text-blue-600 p-1 bg-blue-50 dark:bg-blue-500/10 rounded-md">
-                                              <Edit2 size={12} />
+                                            <button onClick={() => handleEditCommentClick(c)} className="text-blue-500 hover:text-blue-600 p-1.5 bg-blue-50 dark:bg-blue-500/10 rounded-md">
+                                              <Edit2 size={12} className="sm:w-[14px] sm:h-[14px]" />
                                             </button>
-                                            <button onClick={() => handleDeleteComment(c.id)} className="text-rose-500 hover:text-rose-600 p-1 bg-rose-50 dark:bg-rose-500/10 rounded-md">
-                                              <Trash2 size={12} />
+                                            <button onClick={() => handleDeleteComment(c.id)} className="text-rose-500 hover:text-rose-600 p-1.5 bg-rose-50 dark:bg-rose-500/10 rounded-md">
+                                              <Trash2 size={12} className="sm:w-[14px] sm:h-[14px]" />
                                             </button>
                                           </div>
                                         )}
@@ -677,7 +742,7 @@ export default function Experiences() {
                                           <textarea 
                                             value={editCommentText} 
                                             onChange={(e) => setEditCommentText(e.target.value)}
-                                            className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-emerald-500/50 dark:text-white transition-all resize-none min-h-[60px]"
+                                            className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-emerald-500/50 dark:text-white transition-all resize-none min-h-[60px]"
                                           />
                                           <div className="flex justify-end gap-2">
                                             <button onClick={handleCancelEdit} className="text-[9px] sm:text-[10px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white uppercase tracking-widest px-3 py-1.5">Cancel</button>
@@ -690,7 +755,7 @@ export default function Experiences() {
                                       
                                     </div>
                                     
-                                    {/* NEW: COMMENT LIKE/DISLIKE FEATURE */}
+                                    {/* COMMENT LIKE/DISLIKE FEATURE */}
                                     <div className="flex items-center gap-3 px-2">
                                       <button 
                                         onClick={() => handleToggleCommentLike(c.id)}
@@ -704,61 +769,61 @@ export default function Experiences() {
                                 </div>
                               ))
                             ) : (
-                              <div className="text-center py-8 sm:py-12 bg-white/50 dark:bg-white/5 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10">
+                              <div className="text-center py-10 sm:py-16 bg-white dark:bg-[#0b241f] rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-white/10 shadow-sm">
                                 {selectedExperience.comments_enabled === false ? (
                                   <>
-                                    <Lock size={24} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-                                    <p className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">Discussion Locked.</p>
-                                    <p className="text-[10px] sm:text-xs text-slate-400 mt-1">Comments are turned off for this experience.</p>
+                                    <Lock size={28} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                                    <p className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Discussion Locked</p>
+                                    <p className="text-[10px] sm:text-xs text-slate-400 mt-1 font-medium">Comments are turned off for this experience.</p>
                                   </>
                                 ) : (
                                   <>
-                                    <MessageSquare size={24} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-                                    <p className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">No field notes yet.</p>
-                                    <p className="text-[10px] sm:text-xs text-slate-400 mt-1">Be the first to share your perspective on this experience.</p>
+                                    <MessageSquare size={28} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                                    <p className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">No field notes yet</p>
+                                    <p className="text-[10px] sm:text-xs text-slate-400 mt-1 font-medium">Be the first to share your perspective.</p>
                                   </>
                                 )}
                               </div>
                             )}
                           </div>
                         </div>
-                    </div>
 
-                    {/* Fixed Footer: Conditionally render Input Bar OR Disabled Message */}
-                    <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#0b241f] shrink-0 pb-safe sm:rounded-b-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-none">
-                      {selectedExperience.comments_enabled !== false ? (
-                        <form onSubmit={handleCommentSubmit} className="flex items-end gap-2 sm:gap-3">
-                          <div className="flex-1 relative">
-                            <textarea
-                              value={commentText}
-                              onChange={(e) => setCommentText(e.target.value)}
-                              placeholder="Write a comment..."
-                              rows="1"
-                              className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-3.5 sm:py-4 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-emerald-500/50 dark:text-white transition-all resize-none min-h-[44px] sm:min-h-[52px]"
-                              onInput={(e) => {
-                                e.target.style.height = 'auto';
-                                e.target.style.height = (e.target.scrollHeight) + 'px';
-                              }}
-                            />
-                          </div>
-                          <button 
-                            type="submit" 
-                            disabled={!commentText.trim()}
-                            className="h-[44px] sm:h-[52px] px-5 sm:px-8 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/30 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 shrink-0"
-                          >
-                            <span className="hidden sm:inline">Post</span>
-                            <Send size={16} className="sm:w-[18px] sm:h-[18px] -ml-1 sm:ml-0" />
-                          </button>
-                        </form>
-                      ) : (
-                        <div className="w-full py-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 text-center">
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
-                            <Lock size={14} /> Comments have been disabled by the author
-                          </p>
+                        {/* Fixed Footer: Conditionally render Input Bar OR Disabled Message */}
+                        <div className="p-4 sm:p-6 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#041d18] shrink-0 sticky bottom-0 z-20">
+                          {selectedExperience.comments_enabled !== false ? (
+                            <form onSubmit={handleCommentSubmit} className="flex items-end gap-3">
+                              <div className="flex-1 relative">
+                                <textarea
+                                  value={commentText}
+                                  onChange={(e) => setCommentText(e.target.value)}
+                                  placeholder="Write a comment..."
+                                  rows="1"
+                                  className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-2xl px-4 py-3 sm:py-4 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-emerald-500/50 dark:text-white transition-all resize-none min-h-[44px] sm:min-h-[52px]"
+                                  onInput={(e) => {
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = (e.target.scrollHeight) + 'px';
+                                  }}
+                                />
+                              </div>
+                              <button 
+                                type="submit" 
+                                disabled={!commentText.trim()}
+                                className="px-6 sm:px-8 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/30 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 shrink-0 h-[44px] sm:h-[52px]"
+                              >
+                                <span className="hidden sm:inline">Post</span>
+                                <Send size={16} className="sm:w-[18px] sm:h-[18px]" />
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="w-full py-4 sm:py-5 bg-slate-50 dark:bg-white/5 rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 text-center">
+                              <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
+                                <Lock size={14} /> Comments have been disabled
+                              </p>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
 
+                    </div>
                 </div>
             </div>
         )}
@@ -766,10 +831,6 @@ export default function Experiences() {
       <style dangerouslySetInnerHTML={{ __html: `
         .no-scrollbar::-webkit-scrollbar { display: none; } 
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @supports (padding-top: env(safe-area-inset-top)) {
-          .pt-safe { padding-top: max(1.25rem, env(safe-area-inset-top)); }
-          .pb-safe { padding-bottom: max(1.25rem, env(safe-area-inset-bottom)); }
-        }
       `}} />
     </div>
   );
