@@ -25,13 +25,15 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Relation to likes
+    liked_experiences = relationship('FarmerExperience', secondary='experience_likes', back_populates='liked_by')
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
     
-    # 👇 ONLY ONE DEFINITION OF to_dict 👇
     def to_dict(self):
         return {
             'id': self.id,
@@ -41,7 +43,7 @@ class User(db.Model):
             'role': self.role,
             'organization_id': self.organization_id,
             'is_active': self.is_active,
-            'otp_enabled': self.otp_enabled, # <--- Crucial Field
+            'otp_enabled': self.otp_enabled,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
@@ -270,14 +272,30 @@ class FarmerExperience(db.Model):
     description = db.Column(db.Text, nullable=False)
     date_recorded = db.Column(db.Date)
     interviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    interviewer = relationship('User')
+    interviewer = relationship('User', foreign_keys=[interviewer_id])
     location = db.Column(db.String(255))
     context = db.Column(db.Text)
     impact_level = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    def to_dict(self, include_relations=False):
+    # --- NEW: LIKE RELATIONSHIP ---
+    liked_by = relationship('User', secondary='experience_likes', back_populates='liked_experiences')
+
+    @property
+    def likes_count(self):
+        return len(self.liked_by)
+
+    # UPDATED: Added current_user_id to handle per-user like status
+    # In FarmerExperience class within models.py
+    # Inside FarmerExperience class in models.py
+    def to_dict(self, include_relations=False, current_user_id=None):
+        # Ensure current_user_id is strictly an integer for the comparison
+        try:
+            uid = int(current_user_id) if current_user_id else None
+        except (ValueError, TypeError):
+            uid = None
+
         data = {
             'id': self.id,
             'farmer_id': self.farmer_id,
@@ -285,17 +303,23 @@ class FarmerExperience(db.Model):
             'title': self.title,
             'description': self.description,
             'date_recorded': self.date_recorded.isoformat() if self.date_recorded else None,
-            'interviewer_id': self.interviewer_id,
             'location': self.location,
-            'context': self.context,
             'impact_level': self.impact_level,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            
+            # --- THE FIX: Real-time count and Per-user check ---
+            'likes_count': len(self.liked_by),
+            'is_liked_by_me': any(int(u.id) == uid for u in self.liked_by) if uid else False
         }
+        
         if include_relations:
-            data['farmer_name'] = self.farmer.full_name if self.farmer else None
-            data['interviewer_name'] = self.interviewer.full_name if self.interviewer else None
+            data['farmer_name'] = self.farmer.full_name if self.farmer else "Unknown"
         return data
-
+class ExperienceLike(db.Model):
+    __tablename__ = 'experience_likes'
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
+    experience_id = db.Column(db.Integer, db.ForeignKey('farmer_experiences.id'), primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 class ResearchProject(db.Model):
     __tablename__ = 'research_projects'
     id = db.Column(db.Integer, primary_key=True)

@@ -4,32 +4,32 @@ import { useAuth } from '../context/AuthContext';
 import { 
   Plus, X, Search, Filter, Wheat, 
   Dog, Bird, Fish, Trees, Box, Info, Activity, ChevronRight, Loader2,
-  Edit, Trash2, Download, Eye, ArrowUpDown, AlertCircle, Save // <-- Add Save here
+  Edit, Trash2, Download, Eye, ArrowUpDown, AlertCircle, Save
 } from 'lucide-react';
 
-// --- Skeleton Component ---
+// --- Compact Skeleton Component ---
 const ProductSkeleton = () => (
-  <div className="space-y-12 animate-pulse">
-    <div className="flex gap-6 overflow-hidden no-scrollbar">
+  <div className="space-y-8 animate-pulse">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-6 px-4 sm:px-0">
       {[...Array(6)].map((_, i) => (
-        <div key={i} className="min-w-[160px] flex-1 h-40 bg-white dark:bg-[#0b241f] rounded-[2rem] border border-slate-100 dark:border-white/5 p-6 space-y-4">
-          <div className="w-12 h-12 bg-slate-100 dark:bg-white/5 rounded-2xl mx-auto"></div>
-          <div className="h-3 w-16 bg-slate-50 dark:bg-white/5 rounded-full mx-auto"></div>
-          <div className="h-6 w-10 bg-slate-100 dark:bg-white/5 rounded-lg mx-auto"></div>
+        <div key={i} className="h-28 sm:h-40 bg-white dark:bg-[#0b241f] rounded-2xl sm:rounded-[2rem] border border-slate-100 dark:border-white/5 p-3 sm:p-6 space-y-3">
+          <div className="w-8 h-8 sm:w-12 sm:h-12 bg-slate-100 dark:bg-white/5 rounded-lg sm:rounded-2xl mx-auto"></div>
+          <div className="h-2 w-10 sm:w-16 bg-slate-50 dark:bg-white/5 rounded-full mx-auto"></div>
+          <div className="h-4 w-6 sm:w-10 bg-slate-100 dark:bg-white/5 rounded-md mx-auto"></div>
         </div>
       ))}
     </div>
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8 px-4 sm:px-0">
       {[...Array(8)].map((_, i) => (
-        <div key={i} className="bg-white dark:bg-[#0b241f] rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-8 h-72 space-y-6">
+        <div key={i} className="bg-white dark:bg-[#0b241f] rounded-2xl sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 h-56 sm:h-72 space-y-4">
           <div className="flex justify-between">
-            <div className="h-14 w-14 bg-slate-100 dark:bg-white/5 rounded-2xl"></div>
-            <div className="h-6 w-20 bg-slate-50 dark:bg-white/5 rounded-full"></div>
+            <div className="h-10 w-10 sm:h-14 sm:w-14 bg-slate-100 dark:bg-white/5 rounded-xl"></div>
+            <div className="h-4 w-16 bg-slate-50 dark:bg-white/5 rounded-full"></div>
           </div>
-          <div className="h-6 w-3/4 bg-slate-100 dark:bg-white/5 rounded-lg"></div>
-          <div className="space-y-3">
-            <div className="h-3 w-full bg-slate-50 dark:bg-white/5 rounded"></div>
-            <div className="h-3 w-5/6 bg-slate-50 dark:bg-white/5 rounded"></div>
+          <div className="h-4 w-3/4 bg-slate-100 dark:bg-white/5 rounded-lg"></div>
+          <div className="space-y-2">
+            <div className="h-2 w-full bg-slate-50 dark:bg-white/5 rounded-full"></div>
+            <div className="h-2 w-5/6 bg-slate-50 dark:bg-white/5 rounded-full"></div>
           </div>
         </div>
       ))}
@@ -42,11 +42,9 @@ export default function Products() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
-  // Modals
   const [showModal, setShowModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   
-  // State
   const [editingProduct, setEditingProduct] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [filterCategory, setFilterCategory] = useState('');
@@ -81,10 +79,8 @@ export default function Products() {
     e.preventDefault();
     setSubmitting(true);
     setError('');
-
     try {
       if (editingProduct) {
-        // FIX: Now calling the actual API update endpoint
         await productsAPI.update(editingProduct.id, formData);
       } else {
         await productsAPI.create(formData);
@@ -92,33 +88,26 @@ export default function Products() {
       closeModal();
       fetchProducts();
     } catch (err) {
-      console.error("Submit error:", err);
-      setError(err.response?.data?.error || "Failed to save commodity. Name might be duplicate.");
+      setError(err.response?.data?.error || "Failed to save commodity.");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Archive this commodity? This action cannot be undone.")) {
+    if (window.confirm("Archive this commodity?")) {
       try {
-        // FIX: Now calling the actual API delete endpoint
         await productsAPI.delete(id);
         setProducts(prev => prev.filter(p => p.id !== id));
       } catch (err) {
-        console.error("Delete error:", err);
-        alert(err.response?.data?.error || "Cannot delete commodity. It is likely linked to existing farmers.");
+        alert(err.response?.data?.error || "Cannot delete commodity.");
       }
     }
   };
 
   const handleEdit = (product) => {
     setEditingProduct(product);
-    setFormData({
-      name: product.name,
-      category: product.category,
-      description: product.description || ''
-    });
+    setFormData({ name: product.name, category: product.category, description: product.description || '' });
     setShowModal(true);
   };
 
@@ -143,72 +132,59 @@ export default function Products() {
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const link = document.createElement("a");
     link.setAttribute("href", encodeURI(csvContent));
-    link.setAttribute("download", `commodities_registry_${Date.now()}.csv`);
+    link.setAttribute("download", `commodities_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    document.body.remove();
     setTimeout(() => setIsExporting(false), 800);
   };
 
-  // --- Filtering & Sorting ---
   const filteredProducts = products
     .filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = !filterCategory || p.category === filterCategory;
       return matchesSearch && matchesCategory;
     })
-    .sort((a, b) => {
-      return sortOrder === 'asc' 
-        ? a.name.localeCompare(b.name) 
-        : b.name.localeCompare(a.name);
-    });
+    .sort((a, b) => sortOrder === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
 
   const categories = [...new Set(products.map(p => p.category))];
 
   const categoryMap = {
-    'Crops': { icon: Wheat, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', active: 'bg-emerald-500', shadow: 'shadow-emerald-200 dark:shadow-none' },
-    'Livestock': { icon: Dog, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', active: 'bg-amber-500', shadow: 'shadow-amber-200 dark:shadow-none' },
-    'Poultry': { icon: Bird, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', active: 'bg-orange-500', shadow: 'shadow-orange-200 dark:shadow-none' },
-    'Fishery': { icon: Fish, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', active: 'bg-blue-500', shadow: 'shadow-blue-200 dark:shadow-none' },
-    'Forestry': { icon: Trees, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-500/10', active: 'bg-green-500', shadow: 'shadow-green-200 dark:shadow-none' },
-    'Other': { icon: Box, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-white/5', active: 'bg-slate-500', shadow: 'shadow-slate-200 dark:shadow-none' }
+    'Crops': { icon: Wheat, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', active: 'bg-emerald-500', shadow: 'shadow-emerald-200' },
+    'Livestock': { icon: Dog, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', active: 'bg-amber-500', shadow: 'shadow-amber-200' },
+    'Poultry': { icon: Bird, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', active: 'bg-orange-500', shadow: 'shadow-orange-200' },
+    'Fishery': { icon: Fish, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', active: 'bg-blue-500', shadow: 'shadow-blue-200' },
+    'Forestry': { icon: Trees, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-500/10', active: 'bg-green-500', shadow: 'shadow-green-200' },
+    'Other': { icon: Box, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-white/5', active: 'bg-slate-500', shadow: 'shadow-slate-200' }
   };
 
   const getTheme = (cat) => categoryMap[cat] || categoryMap['Other'];
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 transition-colors duration-300 pb-20 relative">
-      <div className="max-w-[1400px] mx-auto space-y-12 animate-in fade-in duration-700">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans transition-colors duration-300 pb-20 relative overflow-x-hidden">
+      <div className="max-w-[1400px] mx-auto space-y-6 sm:space-y-10 animate-in fade-in duration-700">
         
-        {/* Header Section */}
-        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 px-4 py-6">
+        {/* Compact Header */}
+        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 px-4 pt-4 sm:pt-8">
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-emerald-600 rounded-xl text-white shadow-xl shadow-emerald-200 dark:shadow-none">
-                <Activity size={20} />
+            <div className="flex items-center gap-2 mb-1.5 sm:mb-4">
+              <div className="p-1.5 bg-emerald-600 rounded-lg text-white shadow-lg shrink-0">
+                <Activity size={16} />
               </div>
-              <span className="text-xs font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-[0.3em]">Supply Chain Registry</span>
+              <span className="text-[9px] sm:text-xs font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Supply Registry</span>
             </div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Commodity Registry</h1>
-            <p className="text-slate-500 dark:text-slate-400 font-medium mt-2">Centralized database for regional agricultural and livestock outputs.</p>
+            <h1 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Commodities</h1>
+            <p className="hidden sm:block text-slate-500 dark:text-slate-400 font-medium mt-1">Centralized database for regional agricultural outputs.</p>
           </div>
           
-          <div className="flex items-center gap-3">
-            <button 
-                onClick={handleExport}
-                disabled={isExporting}
-                className="flex items-center justify-center gap-2 px-6 py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-[1.25rem] font-black text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all shadow-sm"
-            >
-                {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                <span>Export CSV</span>
+          <div className="flex gap-2 w-full lg:w-auto">
+            <button onClick={handleExport} disabled={isExporting} className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-xl font-black text-[9px] uppercase tracking-widest text-slate-500 dark:text-slate-400 shadow-sm">
+                {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                <span>Export</span>
             </button>
             {canManage && (
-              <button 
-                onClick={() => setShowModal(true)} 
-                className="group flex items-center justify-center gap-3 px-8 py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-emerald-500 active:scale-95 transition-all"
-              >
-                <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
-                <span>Add Commodity</span>
+              <button onClick={() => setShowModal(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg">
+                <Plus size={14} /> <span>Add New</span>
               </button>
             )}
           </div>
@@ -218,9 +194,9 @@ export default function Products() {
           <div className="px-4"><ProductSkeleton /></div>
         ) : (
           <>
-            {/* Category Quick Filters */}
-            <div className="px-4 overflow-x-auto no-scrollbar">
-              <div className="flex gap-6 min-w-max pb-4">
+            {/* Shrunk Category Grid */}
+            <div className="px-4">
+              <div className="grid grid-cols-2 min-[480px]:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-6">
                 {Object.entries(categoryMap).map(([name, theme]) => {
                   const count = products.filter(p => p.category === name).length;
                   const isActive = filterCategory === name;
@@ -230,114 +206,75 @@ export default function Products() {
                     <button
                       key={name}
                       onClick={() => setFilterCategory(isActive ? '' : name)}
-                      className={`flex-1 min-w-[160px] p-6 rounded-[2.5rem] border transition-all duration-500 text-center flex flex-col items-center group relative overflow-hidden
+                      className={`min-w-0 p-3 sm:p-6 rounded-2xl sm:rounded-[2.5rem] border transition-all duration-300 text-center flex flex-col items-center group
                         ${isActive 
-                          ? `${theme.bg} border-transparent shadow-xl ${theme.shadow} -translate-y-2` 
-                          : 'bg-white dark:bg-[#0b241f] border-slate-100 dark:border-white/5 hover:border-slate-300 dark:hover:border-emerald-500/30 shadow-sm'}`}
+                          ? `${theme.bg} border-transparent shadow-md -translate-y-1` 
+                          : 'bg-white dark:bg-[#0b241f] border-slate-100 dark:border-white/5 hover:border-slate-300 shadow-sm'}`}
                     >
-                      <div className={`p-4 rounded-2xl mb-4 transition-all duration-500 ${isActive ? `${theme.active} text-white scale-110 shadow-lg` : `${theme.bg} ${theme.color} group-hover:scale-110`}`}>
-                        <Icon size={28} />
+                      <div className={`p-2.5 sm:p-4 rounded-xl sm:rounded-2xl mb-2 sm:mb-4 transition-all duration-300 ${isActive ? `${theme.active} text-white scale-105` : `${theme.bg} ${theme.color}`}`}>
+                        <Icon size={18} className="sm:w-[28px] sm:h-[28px]" />
                       </div>
-                      <span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isActive ? theme.color : 'text-slate-400 dark:text-slate-500'}`}>{name}</span>
-                      <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">{count}</span>
+                      <span className={`text-[7px] sm:text-[10px] font-black uppercase tracking-widest mb-0.5 ${isActive ? theme.color : 'text-slate-400 dark:text-slate-500'}`}>{name}</span>
+                      <span className="text-lg sm:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">{count}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Filter Architecture */}
-            <div className="px-4 flex flex-col md:flex-row gap-4">
-              <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-2 flex items-center transition-all flex-1">
+            {/* Shrunk Toolbar */}
+            <div className="px-4 flex flex-col md:flex-row gap-2 sm:gap-4">
+              <div className="bg-white dark:bg-[#0b241f] rounded-xl sm:rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-1 flex flex-col sm:flex-row items-center flex-1 gap-1">
                 <div className="relative flex-1 w-full">
-                  <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={20} />
-                  <input
-                    type="text"
-                    className="w-full pl-16 pr-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
-                    placeholder="Search commodities by name..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input type="text" className="w-full pl-10 pr-4 py-2.5 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-lg sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white outline-none" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 </div>
-                <div className="hidden md:block w-px h-8 bg-slate-100 dark:bg-white/10 mx-2"></div>
-                <div className="relative w-full md:w-64">
-                  <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
-                  <select
-                    className="w-full pl-12 pr-10 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 appearance-none focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none cursor-pointer"
-                    value={filterCategory}
-                    onChange={(e) => setFilterCategory(e.target.value)}
-                  >
-                    <option value="" className="dark:bg-[#0b241f]">All Categories</option>
+                <div className="relative w-full md:w-56">
+                  <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <select className="w-full pl-10 pr-8 py-2.5 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-lg sm:rounded-2xl text-[10px] sm:text-sm font-bold dark:text-white appearance-none outline-none" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+                    <option value="">All Categories</option>
                     {categories.map(cat => <option key={cat} value={cat} className="dark:bg-[#0b241f]">{cat}</option>)}
                   </select>
                 </div>
               </div>
-              <button 
-                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                className="bg-white dark:bg-[#0b241f] p-4 rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm hover:text-emerald-600 transition-colors"
-              >
-                <ArrowUpDown size={20} className={sortOrder === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'}/>
+              <button onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="self-end sm:self-center bg-white dark:bg-[#0b241f] p-2.5 sm:p-4 rounded-xl border border-slate-100 dark:border-white/5 shadow-sm text-slate-400 shrink-0">
+                <ArrowUpDown size={16} className={sortOrder === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'}/>
               </button>
             </div>
 
-            {/* Content Grid */}
+            {/* Shrunk Grid Cards */}
             <div className="px-4">
               {filteredProducts.length === 0 ? (
-                <div className="py-32 bg-white dark:bg-[#0b241f] rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-white/10 text-center transition-colors">
-                  <div className="p-8 bg-slate-50 dark:bg-white/5 rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-8">
-                    <Box size={48} />
-                  </div>
-                  <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Registry Entry Not Found</h3>
-                  <p className="text-slate-400 dark:text-slate-500 font-medium mt-3">Try adjusting your category or search filters.</p>
+                <div className="py-20 bg-white dark:bg-[#0b241f] rounded-3xl border-2 border-dashed border-slate-100 dark:border-white/10 text-center">
+                  <Box size={32} className="mx-auto text-slate-200 mb-4" />
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase">Empty Registry</h3>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-8">
                   {filteredProducts.map((product) => {
                     const theme = getTheme(product.category);
-                    const Icon = theme.icon;
                     return (
-                      <div key={product.id} className="group bg-white dark:bg-[#0b241f] rounded-[2.5rem] p-8 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] dark:hover:shadow-black/40 hover:-translate-y-2 transition-all duration-500 flex flex-col relative overflow-hidden h-full">
-                        {/* Interactive Background Glow */}
-                        <div className={`absolute -right-10 -top-10 w-32 h-32 rounded-full ${theme.bg} opacity-0 group-hover:opacity-40 transition-opacity duration-700 blur-3xl`} />
-                        
-                        {/* Action Menu (New Feature) */}
-                        <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
-                            <button onClick={() => handleView(product)} className="p-2 bg-white/90 dark:bg-black/60 backdrop-blur-md rounded-xl text-slate-400 hover:text-emerald-500 shadow-sm border border-slate-100 dark:border-white/10"><Eye size={16}/></button>
+                      <div key={product.id} className="group bg-white dark:bg-[#0b241f] rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col relative overflow-hidden h-full">
+                        <div className="absolute top-4 right-4 flex gap-1.5 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleView(product)} className="p-1.5 bg-white dark:bg-black/40 rounded-lg text-slate-400 border border-slate-100 dark:border-white/10"><Eye size={14} /></button>
                             {canManage && (
                                 <>
-                                    <button onClick={() => handleEdit(product)} className="p-2 bg-white/90 dark:bg-black/60 backdrop-blur-md rounded-xl text-slate-400 hover:text-blue-500 shadow-sm border border-slate-100 dark:border-white/10"><Edit size={16}/></button>
-                                    <button onClick={() => handleDelete(product.id)} className="p-2 bg-white/90 dark:bg-black/60 backdrop-blur-md rounded-xl text-slate-400 hover:text-rose-500 shadow-sm border border-slate-100 dark:border-white/10"><Trash2 size={16}/></button>
+                                    <button onClick={() => handleEdit(product)} className="p-1.5 bg-white dark:bg-black/40 rounded-lg text-slate-400 border border-slate-100 dark:border-white/10"><Edit size={14} /></button>
+                                    <button onClick={() => handleDelete(product.id)} className="p-1.5 bg-white dark:bg-black/40 rounded-lg text-slate-400 border border-slate-100 dark:border-white/10"><Trash2 size={14} /></button>
                                 </>
                             )}
                         </div>
-
-                        <div className="flex justify-between items-start mb-8 relative z-10">
-                          <div className={`p-4 rounded-2xl ${theme.bg} ${theme.color} shadow-inner group-hover:scale-110 transition-transform duration-500`}>
-                            <Icon size={28} />
+                        <div className="flex justify-between items-start mb-4 sm:mb-8 mt-4 lg:mt-0">
+                          <div className={`p-3 rounded-xl ${theme.bg} ${theme.color} shadow-inner`}>
+                            <theme.icon size={20} className="sm:w-[24px] sm:h-[24px]" />
                           </div>
-                          <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${theme.bg} ${theme.color} border-slate-100 dark:border-white/5 shadow-sm`}>
-                            {product.category}
-                          </span>
+                          <span className={`px-2.5 py-1 rounded-lg text-[7px] sm:text-[9px] font-black uppercase tracking-widest border ${theme.bg} ${theme.color} border-slate-100 dark:border-white/5`}>{product.category}</span>
                         </div>
-
-                        <h3 className="text-xl font-black text-slate-900 dark:text-white mb-3 leading-tight uppercase tracking-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">
-                          {product.name}
-                        </h3>
-                        
-                        <div className="flex-grow">
-                            <p className="text-sm font-medium text-slate-400 dark:text-slate-500 line-clamp-3 leading-relaxed mb-6 italic">
-                            "{product.description || 'System data: No commodity background provided for this entry.'}"
-                            </p>
-                        </div>
-
-                        <div className="pt-6 border-t border-slate-50 dark:border-white/5 flex items-center justify-between relative z-10">
-                          <div className="flex items-center gap-2 text-slate-300 dark:text-slate-600">
-                             <Info size={14} />
-                             <span className="text-[10px] font-black uppercase tracking-widest">ID: {product.id}</span>
-                          </div>
-                          <div className="p-2 bg-slate-50 dark:bg-white/5 rounded-full text-slate-400 dark:text-slate-500 group-hover:bg-emerald-500 group-hover:text-white dark:group-hover:bg-emerald-600 transition-all">
-                            <ChevronRight size={18} />
-                          </div>
+                        <h3 className="text-base sm:text-xl font-black text-slate-900 dark:text-white mb-2 leading-tight uppercase truncate">{product.name}</h3>
+                        <p className="text-[10px] sm:text-sm font-medium text-slate-400 dark:text-slate-500 line-clamp-2 leading-relaxed flex-grow">"{product.description || 'No background information.'}"</p>
+                        <div className="pt-4 mt-4 border-t border-slate-50 dark:border-white/5 flex items-center justify-between">
+                          <span className="text-[8px] sm:text-[10px] font-black uppercase text-slate-300">ID: {product.id}</span>
+                          <div onClick={() => handleView(product)} className="p-1.5 bg-slate-50 dark:bg-white/5 rounded-full text-slate-400 cursor-pointer"><ChevronRight size={14} /></div>
                         </div>
                       </div>
                     );
@@ -348,103 +285,70 @@ export default function Products() {
           </>
         )}
 
-        {/* VIEW MODAL (NEW) */}
+        {/* Shrunk Modals */}
         {showViewModal && selectedProduct && (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-8 overflow-hidden">
-                <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={closeModal} />
-                <div className="relative bg-white dark:bg-[#041d18] rounded-[2.5rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in zoom-in-95 duration-500 border dark:border-white/5">
-                    <div className="p-8 border-b border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50/50 dark:bg-black/20">
-                        <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-widest">Commodity Details</h3>
-                        <button onClick={closeModal} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-full text-slate-400 transition-colors"><X size={20}/></button>
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 overflow-hidden">
+                <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={closeModal} />
+                <div className="relative bg-white dark:bg-[#041d18] rounded-3xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-in zoom-in-95 border dark:border-white/5">
+                    <div className="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50/50 dark:bg-black/20">
+                        <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Commodity View</h3>
+                        <button onClick={closeModal} className="p-1.5 text-slate-400"><X size={18} /></button>
                     </div>
-                    <div className="p-8 space-y-6">
-                        <div className="text-center">
-                            <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-3xl w-20 h-20 mx-auto flex items-center justify-center mb-4">
-                                <Wheat size={40} />
-                            </div>
-                            <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase leading-tight mb-2">{selectedProduct.name}</h2>
-                            <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-lg text-[10px] font-black uppercase tracking-widest">{selectedProduct.category}</span>
+                    <div className="p-6 space-y-4 text-center">
+                        <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 rounded-2xl w-16 h-16 mx-auto flex items-center justify-center mb-2">
+                            <Wheat size={32} />
                         </div>
-                        <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Description / Specs</p>
-                            <p className="text-sm font-medium text-slate-600 dark:text-slate-300 leading-relaxed">
-                                {selectedProduct.description || "No detailed description available in the registry."}
-                            </p>
-                        </div>
+                        <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase">{selectedProduct.name}</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-white/5 p-4 rounded-xl">{selectedProduct.description || "No description provided."}</p>
                     </div>
                 </div>
             </div>
         )}
 
-        {/* CREATE/EDIT MODAL */}
         {showModal && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-8 overflow-hidden">
-            <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowModal(false)} />
-            <div className="relative bg-white dark:bg-[#041d18] rounded-[3rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-500 border dark:border-white/5">
-              
-              <div className="p-10 border-b border-slate-50 dark:border-white/5 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl z-10 shrink-0">
-                <div>
-                  <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">{editingProduct ? 'Edit Commodity' : 'Add Commodity'}</h2>
-                  <p className="text-slate-400 dark:text-slate-500 font-medium text-sm mt-1">Manage regional output registry.</p>
-                </div>
-                <button onClick={() => setShowModal(false)} className="p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-2xl transition-all text-slate-300 dark:text-slate-600">
-                  <X size={28} />
-                </button>
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-0 sm:p-4 overflow-hidden">
+            <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md" onClick={closeModal} />
+            <div className="relative bg-white dark:bg-[#041d18] rounded-none sm:rounded-3xl shadow-2xl w-full h-full sm:h-auto sm:max-w-lg flex flex-col animate-in slide-in-from-bottom-10 border dark:border-white/5">
+              <div className="p-5 border-b border-slate-50 dark:border-white/5 flex items-center justify-between pt-safe">
+                <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">{editingProduct ? 'Edit entry' : 'New Entry'}</h2>
+                <button onClick={closeModal} className="p-2 text-slate-400"><X size={20} /></button>
               </div>
-
-              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-10 space-y-10 no-scrollbar">
-                
-                {error && (
-                    <div className="p-4 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center gap-3 border border-rose-100 dark:border-rose-500/20">
-                    <AlertCircle size={18} />
-                    <span className="text-xs font-bold">{error}</span>
-                    </div>
-                )}
-
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Commodity Name</label>
-                  <input type="text" required className="w-full px-6 py-4 bg-slate-50 dark:bg-white/5 border-none rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-bold dark:text-white shadow-inner outline-none transition-all" placeholder="e.g. Arabica Coffee Beans" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+              <form onSubmit={handleSubmit} className="p-6 space-y-6 flex-1 overflow-y-auto pb-safe">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Name</label>
+                  <input type="text" required value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border-none rounded-xl text-sm font-bold dark:text-white outline-none" placeholder="Name..." />
                 </div>
-
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Classification Group</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Classification</label>
+                  <div className="grid grid-cols-2 min-[400px]:grid-cols-3 gap-2">
                     {['Crops', 'Livestock', 'Poultry', 'Fishery', 'Forestry', 'Other'].map(cat => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setFormData({...formData, category: cat})}
-                        className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${formData.category === cat ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-50 dark:bg-white/5 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10'}`}
-                      >
-                        {cat}
-                      </button>
+                      <button key={cat} type="button" onClick={() => setFormData({...formData, category: cat})} className={`py-2 rounded-lg text-[9px] font-black uppercase transition-all ${formData.category === cat ? 'bg-emerald-600 text-white' : 'bg-slate-50 dark:bg-white/5 text-slate-400'}`}>{cat}</button>
                     ))}
                   </div>
                 </div>
-
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Commodity Background</label>
-                  <textarea className="w-full px-6 py-5 bg-slate-50 dark:bg-white/5 border-none rounded-3xl focus:ring-4 focus:ring-emerald-500/10 text-sm font-medium dark:text-slate-200 shadow-inner min-h-[140px] outline-none transition-all" placeholder="Outline seasonal availability, variety specs, or regional notes..." value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Notes</label>
+                  <textarea rows={4} value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border-none rounded-xl text-sm font-medium dark:text-slate-200 outline-none" placeholder="Specs..." />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button type="button" onClick={closeModal} className="flex-1 py-3.5 text-[10px] font-black uppercase bg-slate-100 dark:bg-white/5 text-slate-400 rounded-xl">Abort</button>
+                  <button type="submit" disabled={submitting} className="flex-[2] py-3.5 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg flex items-center justify-center gap-2">
+                    {submitting ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} <span>Save</span>
+                  </button>
                 </div>
               </form>
-
-              <div className="px-10 py-8 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5 flex flex-col-reverse sm:flex-row justify-end gap-6 shrink-0">
-                <button type="button" onClick={() => setShowModal(false)} className="px-10 py-4 text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 transition-colors">Abort</button>
-                <button 
-                    type="submit" 
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                    className="px-12 py-5 bg-emerald-600 dark:bg-emerald-600 text-white dark:text-[#041d18] rounded-[1.25rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                    {submitting ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
-                    <span>{editingProduct ? 'Save Changes' : 'Record Commodity'}</span>
-                </button>
-              </div>
             </div>
           </div>
         )}
       </div>
-      <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }`}} />
+      <style dangerouslySetInnerHTML={{ __html: `
+        .no-scrollbar::-webkit-scrollbar { display: none; } 
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @supports (padding-top: env(safe-area-inset-top)) {
+          .pt-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
+          .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+        }
+      `}} />
     </div>
   );
 }

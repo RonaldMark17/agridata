@@ -594,7 +594,7 @@ def create_app(config_name='development'):
             ).update({Notification.is_read: True}, synchronize_session=False)
             
             db.session.commit()
-            log_activity('NOTIFICATION CLEARANCE', 'User', get_jwt_identity(), "Operator cleared all active alerts")
+            # log_activity('NOTIFICATION CLEARANCE', 'User', get_jwt_identity(), "Operator cleared all active alerts")
             return jsonify({"message": "All marked as read"}), 200
         except Exception as e:
             db.session.rollback()
@@ -1177,18 +1177,27 @@ def create_app(config_name='development'):
     @app.route('/api/experiences', methods=['GET'])
     @jwt_required()
     def get_experiences():
+        # Identify the user from the JWT token
+        current_user_id = get_jwt_identity()
+        
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', app.config.get('ITEMS_PER_PAGE', 20), type=int)
+        per_page = 20
         
-        pagination = FarmerExperience.query.order_by(FarmerExperience.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-        
+        pagination = FarmerExperience.query.order_by(
+            FarmerExperience.created_at.desc()
+        ).paginate(page=page, per_page=per_page, error_out=False)
+
         return jsonify({
-            'experiences': [exp.to_dict(include_relations=True) for exp in pagination.items],
+            'experiences': [
+                # CRITICAL: current_user_id must be passed here!
+                exp.to_dict(include_relations=True, current_user_id=current_user_id) 
+                for exp in pagination.items
+            ],
             'total': pagination.total,
             'pages': pagination.pages,
             'current_page': page
         }), 200
-    
+        
     @app.route('/api/experiences', methods=['POST'])
     @jwt_required()
     def create_experience():
@@ -1227,6 +1236,45 @@ def create_app(config_name='development'):
         log_activity('EXPERIENCE CREATED', 'Farmer Experience', experience.id)
         
         return jsonify({'message': 'Experience recorded successfully', 'experience': experience.to_dict()}), 201
+    
+    @app.route('/api/experiences/<int:id>/like', methods=['POST'])
+    @jwt_required()
+    def toggle_experience_like(id):
+        current_user_id = get_jwt_identity()
+        experience = FarmerExperience.query.get_or_404(id)
+        user = User.query.get(current_user_id)
+
+        if user in experience.liked_by:
+            experience.liked_by.remove(user)
+            db.session.commit()
+            
+            # --- LOG THE UNLIKE ACTION ---
+            log_activity(
+                'EXPERIENCE UNLIKED', 
+                'FarmerExperience', 
+                experience.id, 
+                f"User {user.username} removed 'Helpful' status from: {experience.title}"
+            )
+            status = "unliked"
+        else:
+            experience.liked_by.append(user)
+            db.session.commit()
+            
+            # --- LOG THE LIKE ACTION ---
+            log_activity(
+                'EXPERIENCE LIKED', 
+                'FarmerExperience', 
+                experience.id, 
+                f"User {user.username} marked as 'Helpful': {experience.title}"
+            )
+            status = "liked"
+
+        return jsonify({
+            "status": "success",
+            "action": status,
+            "likes_count": experience.likes_count,
+            "is_liked_by_me": user in experience.liked_by
+        }), 200
     
     # ============ Research Projects Routes ============
     

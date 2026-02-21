@@ -101,6 +101,7 @@ export const farmersAPI = {
 export const experiencesAPI = {
   getAll: (params) => api.get('/experiences', { params }),
   create: (data) => api.post('/experiences', data),
+  toggleLike: (id) => api.post(`/experiences/${id}/like`),
 };
 
 // Projects API
