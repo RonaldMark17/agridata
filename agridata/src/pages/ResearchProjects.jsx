@@ -39,7 +39,9 @@ export default function ResearchProjects() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [errorMessage, setErrorMessage] = useState(''); 
-  const { hasPermission } = useAuth();
+  
+  // ADDED user extract here to check role
+  const { user, hasPermission } = useAuth();
 
   // Unified Initial State
   const initialFormData = {
@@ -111,7 +113,14 @@ export default function ResearchProjects() {
     }
   };
 
+  // --- ROLE BASED LOGIC ---
   const canCreate = hasPermission(['admin', 'researcher']);
+  const isViewer = user?.role === 'viewer';
+
+  // Filter projects so viewers only see 'Completed' ones
+  const displayedProjects = isViewer 
+    ? projects.filter(project => project.status === 'Completed') 
+    : projects;
 
   const getStatusStyle = (status) => {
     const styles = {
@@ -148,7 +157,11 @@ export default function ResearchProjects() {
               <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-[0.3em]">System Research Hub</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Research Initiatives</h1>
-            <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium mt-1 sm:mt-2">Strategic monitoring and documentation of agricultural advancement.</p>
+            <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium mt-1 sm:mt-2">
+              {isViewer 
+                ? 'Viewing publicly available completed research data.'
+                : 'Strategic monitoring and documentation of agricultural advancement.'}
+            </p>
           </div>
           
           {canCreate && (
@@ -166,16 +179,20 @@ export default function ResearchProjects() {
         <div className="space-y-6 sm:space-y-8 px-4">
           {loading ? (
             <ProjectSkeleton />
-          ) : projects.length === 0 ? (
+          ) : displayedProjects.length === 0 ? (
             <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-white/5 py-20 sm:py-32 text-center transition-all">
               <div className="p-6 sm:p-8 bg-slate-50 dark:bg-white/5 rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-6 sm:mb-8">
                 <Search size={36} className="sm:w-[48px] sm:h-[48px]" />
               </div>
               <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Archives Empty</h3>
-              <p className="text-sm sm:text-base text-slate-400 dark:text-slate-500 font-medium mt-2 sm:mt-3">No initiatives found. Begin by recording your first research project.</p>
+              <p className="text-sm sm:text-base text-slate-400 dark:text-slate-500 font-medium mt-2 sm:mt-3">
+                {isViewer 
+                  ? 'No completed research initiatives found at this time.' 
+                  : 'No initiatives found. Begin by recording your first research project.'}
+              </p>
             </div>
           ) : (
-            projects.map((project) => {
+            displayedProjects.map((project) => {
               const theme = getResearchTheme(project.research_type);
               const Icon = theme.icon;
               return (

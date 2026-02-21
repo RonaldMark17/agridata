@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth(); // Added hasPermission
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -204,22 +204,27 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Geospatial Map', href: '/map', icon: MapPinned },
-    { name: 'Farmers', href: '/farmers', icon: Users },
-    { name: 'Experiences', href: '/experiences', icon: BookOpen },
-    { name: 'Research Projects', href: '/projects', icon: Beaker },
-    { name: 'Surveys', href: '/surveys', icon: ClipboardList },
-    { name: 'Barangays', href: '/barangays', icon: Map },
-    { name: 'Organizations', href: '/organizations', icon: Building2 },
-    { name: 'Products', href: '/products', icon: ShoppingBasket },
+  // --- ROLE-BASED NAVIGATION FILTERING ---
+  // Define all possible routes and which roles are allowed to see them
+  const rawNavigation = [
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'researcher', 'data_encoder', 'viewer'] },
+    { name: 'Geospatial Map', href: '/map', icon: MapPinned, roles: ['admin', 'researcher', 'data_encoder', 'viewer'] },
+    { name: 'Farmers', href: '/farmers', icon: Users, roles: ['admin', 'researcher', 'data_encoder', 'viewer'] },
+    { name: 'Experiences', href: '/experiences', icon: BookOpen, roles: ['admin', 'researcher', 'data_encoder', 'viewer'] },
+    { name: 'Research Projects', href: '/projects', icon: Beaker, roles: ['admin', 'researcher'] }, // Viewers can see completed
+    { name: 'Surveys', href: '/surveys', icon: ClipboardList, roles: ['admin', 'researcher'] },
+    { name: 'Barangays', href: '/barangays', icon: Map, roles: ['admin', 'researcher', 'data_encoder', 'viewer'] },
+    { name: 'Organizations', href: '/organizations', icon: Building2, roles: ['admin', 'researcher', 'data_encoder', 'viewer'] },
+    { name: 'Products', href: '/products', icon: ShoppingBasket, roles: ['admin', 'researcher', 'data_encoder', 'viewer'] },
+    { name: 'User Management', href: '/users', icon: UsersRound, roles: ['admin'] },
+    { name: 'Activity Logs', href: '/logs', icon: History, roles: ['admin', 'researcher', 'data_encoder'] },
   ];
 
-  if (user?.role === 'admin') {
-    navigation.push({ name: 'User Management', href: '/users', icon: UsersRound });
-    navigation.push({ name: 'Activity Logs', href: '/logs', icon: History });
-  }
+  // Filter the navigation array based on the current user's role
+  const filteredNavigation = rawNavigation.filter(item => {
+    if (!user || !user.role) return false;
+    return item.roles.includes(user.role);
+  });
 
   const pathSegments = location.pathname.split('/').filter(Boolean);
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -263,7 +268,7 @@ export default function Layout() {
             </div>
 
             <nav className="flex-1 px-3 sm:px-4 py-4 sm:py-6 space-y-1 sm:space-y-1.5 overflow-y-auto no-scrollbar">
-              {navigation.map((item) => {
+              {filteredNavigation.map((item) => {
                 const isActive = location.pathname.startsWith(item.href);
                 const Icon = item.icon;
                 return (
@@ -458,6 +463,7 @@ export default function Layout() {
                 <span className="text-[10px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 transition-colors">Add Farmer</span>
                 <div className="p-1.5 sm:p-2 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 rounded-lg sm:rounded-xl group-hover:scale-110 transition-transform"><Users size={16} className="sm:w-[18px] sm:h-[18px]"/></div>
               </button>
+              
               <button onClick={() => { navigate('/surveys'); setShowQuickActions(false); }} className="flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 bg-white dark:bg-[#0b241f] rounded-xl sm:rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all group border dark:border-white/5">
                 <span className="text-[10px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-blue-600 transition-colors">New Survey</span>
                 <div className="p-1.5 sm:p-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 rounded-lg sm:rounded-xl group-hover:scale-110 transition-transform"><ClipboardList size={16} className="sm:w-[18px] sm:h-[18px]"/></div>
