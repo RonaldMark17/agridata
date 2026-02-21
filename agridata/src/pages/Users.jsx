@@ -5,7 +5,7 @@ import {
   UserPlus, ShieldCheck, Microscope, PenTool, Eye, 
   Building, Lock, X, Edit2, Search,
   Fingerprint, Loader2, AlertCircle, 
-  Ban, CheckCircle, UserX, UserCheck, Trash2, Filter, Download, ArrowUpDown
+  Ban, CheckCircle, Trash2, Filter, Download, ArrowUpDown
 } from 'lucide-react';
 
 // --- Skeleton Component ---
@@ -13,19 +13,19 @@ const UserSkeleton = () => (
   <>
     {[...Array(6)].map((_, i) => (
       <tr key={i} className="animate-pulse border-b border-slate-50 dark:border-white/5">
-        <td className="px-4 py-4 sm:px-8 sm:py-6">
-          <div className="flex items-center gap-3 sm:gap-5">
-            <div className="h-10 w-10 sm:h-12 sm:w-12 bg-slate-100 dark:bg-white/5 rounded-xl sm:rounded-2xl shrink-0"></div>
+        <td className="px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 bg-slate-100 dark:bg-white/5 rounded-xl shrink-0"></div>
             <div className="space-y-2 flex-1 min-w-0">
-              <div className="h-3 sm:h-4 w-24 sm:w-40 bg-slate-100 dark:bg-white/5 rounded"></div>
-              <div className="h-2 sm:h-3 w-16 sm:w-24 bg-slate-50 dark:bg-white/5 rounded"></div>
+              <div className="h-3 sm:h-4 w-24 sm:w-32 bg-slate-100 dark:bg-white/5 rounded"></div>
+              <div className="h-2 sm:h-3 w-16 sm:w-20 bg-slate-50 dark:bg-white/5 rounded"></div>
             </div>
           </div>
         </td>
-        <td className="px-4 py-4 sm:px-8 sm:py-6"><div className="h-5 sm:h-6 w-16 sm:w-24 bg-slate-50 dark:bg-white/5 rounded-md sm:rounded-xl"></div></td>
-        <td className="px-4 py-4 sm:px-8 sm:py-6"><div className="h-3 sm:h-4 w-20 sm:w-32 bg-slate-50 dark:bg-white/5 rounded"></div></td>
-        <td className="px-4 py-4 sm:px-8 sm:py-6"><div className="h-4 sm:h-6 w-12 sm:w-20 bg-slate-50 dark:bg-white/5 rounded-full"></div></td>
-        <td className="px-4 py-4 sm:px-8 sm:py-6 text-right"><div className="h-8 w-20 sm:h-10 sm:w-24 bg-slate-50 dark:bg-white/5 rounded-md sm:rounded-xl ml-auto"></div></td>
+        <td className="px-4 py-4 sm:px-6 sm:py-5"><div className="h-6 sm:h-7 w-20 sm:w-24 bg-slate-50 dark:bg-white/5 rounded-md sm:rounded-lg"></div></td>
+        <td className="px-4 py-4 sm:px-6 sm:py-5"><div className="h-3 sm:h-4 w-24 sm:w-32 bg-slate-50 dark:bg-white/5 rounded"></div></td>
+        <td className="px-4 py-4 sm:px-6 sm:py-5"><div className="h-5 sm:h-6 w-16 sm:w-20 bg-slate-50 dark:bg-white/5 rounded-full"></div></td>
+        <td className="px-4 py-4 sm:px-6 sm:py-5 text-right"><div className="h-8 w-20 sm:h-10 sm:w-24 bg-slate-50 dark:bg-white/5 rounded-lg sm:rounded-xl ml-auto"></div></td>
       </tr>
     ))}
   </>
@@ -41,11 +41,9 @@ export default function Users() {
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   
-  // Auth & Permissions
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  // Filter & Sort State
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [sortOrder, setSortOrder] = useState('asc'); 
@@ -86,7 +84,7 @@ export default function Users() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!isAdmin) return; // Guard
+    if (!isAdmin) return; 
 
     setSubmitting(true);
     setTransactionError('');
@@ -270,7 +268,7 @@ export default function Users() {
             
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 flex-1">
               <div className="relative flex-[2] sm:max-w-sm">
-                  <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={14} className="sm:w-[16px] sm:h-[16px] absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                  <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={14} />
                   <input 
                     type="text" 
                     placeholder="Search identity..."
@@ -281,7 +279,7 @@ export default function Users() {
               </div>
               <div className="flex gap-2">
                 <div className="relative flex-1 sm:w-48">
-                    <Filter className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={12} className="sm:w-[16px] sm:h-[16px] absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                    <Filter className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={12} />
                     <select 
                         value={roleFilter}
                         onChange={(e) => setRoleFilter(e.target.value)}
@@ -294,26 +292,27 @@ export default function Users() {
                     onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
                     className="p-2.5 sm:p-3 bg-slate-50 dark:bg-white/5 rounded-lg sm:rounded-xl text-slate-400 hover:text-emerald-600 transition-colors shrink-0"
                 >
-                    <ArrowUpDown size={14} className={`sm:w-[16px] sm:h-[16px] transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`}/>
+                    <ArrowUpDown size={14} className={`transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`}/>
                 </button>
               </div>
             </div>
 
             <div className="hidden sm:flex items-center gap-1.5 text-[9px] sm:text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-100 dark:border-emerald-500/20 tracking-widest uppercase shrink-0">
-              <Fingerprint size={12} className="sm:w-[14px] sm:h-[14px]" /> Monitoring Active
+              <Fingerprint size={12} /> Monitoring Active
             </div>
           </div>
 
           {/* FLUID HORIZONTAL SCROLL TABLE */}
-          <div className="overflow-x-auto w-full">
-            <table className="w-full text-left whitespace-nowrap min-w-[800px]">
+          <div className="overflow-x-auto w-full no-scrollbar">
+            {/* Removed table-fixed and adjusted padding to naturally fit columns without overlapping */}
+            <table className="w-full text-left min-w-[700px] sm:min-w-[900px] whitespace-nowrap">
               <thead>
-                <tr className="bg-slate-50/50 dark:bg-white/5 text-slate-400 dark:text-slate-500 text-[9px] sm:text-[10px] uppercase font-black tracking-widest border-b border-slate-100 dark:border-white/5">
-                  <th className="px-4 py-4 sm:px-8 sm:py-5">Identity</th>
-                  <th className="px-4 py-4 sm:px-8 sm:py-5">Privilege</th>
-                  <th className="px-4 py-4 sm:px-8 sm:py-5">Affiliation</th>
-                  <th className="px-4 py-4 sm:px-8 sm:py-5">Security</th>
-                  <th className="px-4 py-4 sm:px-8 sm:py-5 text-right">Operations</th>
+                <tr className="bg-slate-50/50 dark:bg-white/5 text-slate-400 dark:text-slate-500 text-[10px] uppercase font-black tracking-widest border-b border-slate-100 dark:border-white/5">
+                  <th className="px-4 py-4 sm:px-6 sm:py-5">Identity</th>
+                  <th className="px-4 py-4 sm:px-6 sm:py-5">Privilege</th>
+                  <th className="px-4 py-4 sm:px-6 sm:py-5">Affiliation</th>
+                  <th className="px-4 py-4 sm:px-6 sm:py-5">Security</th>
+                  <th className="px-4 py-4 sm:px-6 sm:py-5 text-right">Operations</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 dark:divide-white/5">
@@ -330,7 +329,7 @@ export default function Users() {
                     <tr key={u.id} className={`group hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all duration-300 ${!u.is_active ? 'opacity-60 grayscale' : ''}`}>
                       
                       {/* Identity Column */}
-                      <td className="px-4 py-4 sm:px-8 sm:py-5">
+                      <td className="px-4 py-4 sm:px-6 sm:py-5">
                         <div className="flex items-center gap-3 sm:gap-4">
                           <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center font-black shadow-inner border border-slate-100 dark:border-white/10 shrink-0 text-xs sm:text-sm ${u.is_active ? 'bg-slate-50 dark:bg-[#020c0a] text-emerald-700 dark:text-emerald-400' : 'bg-slate-200 dark:bg-white/10 text-slate-400'}`}>
                             {u.full_name?.charAt(0) || 'U'}
@@ -343,29 +342,30 @@ export default function Users() {
                       </td>
 
                       {/* Privilege Column */}
-                      <td className="px-4 py-4 sm:px-8 sm:py-5">
-                        <span className={`inline-block px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-wider border ${roleStyle.bg} ${roleStyle.color} ${roleStyle.border}`}>
+                      <td className="px-4 py-4 sm:px-6 sm:py-5">
+                        {/* Removed truncate max-w-full to stop "DATA EN..." issue */}
+                        <span className={`inline-block px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg text-[9px] font-black uppercase tracking-wider border ${roleStyle.bg} ${roleStyle.color} ${roleStyle.border}`}>
                           {u.role.replace('_', ' ')}
                         </span>
                       </td>
 
                       {/* Affiliation Column */}
-                      <td className="px-4 py-4 sm:px-8 sm:py-5">
-                        <div className="text-[10px] sm:text-sm font-bold text-slate-500 dark:text-slate-400 max-w-[200px] truncate">
+                      <td className="px-4 py-4 sm:px-6 sm:py-5">
+                        <div className="text-[10px] sm:text-sm font-bold text-slate-500 dark:text-slate-400 max-w-[150px] sm:max-w-[200px] truncate">
                            {orgName}
                         </div>
                       </td>
 
                       {/* Security Status Column */}
-                      <td className="px-4 py-4 sm:px-8 sm:py-5">
-                          <div className={`inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-widest ${u.is_active ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400'}`}>
-                          <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${u.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                      <td className="px-4 py-4 sm:px-6 sm:py-5">
+                          <div className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-widest ${u.is_active ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${u.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
                           <span>{u.is_active ? 'Active' : 'Locked'}</span>
                         </div>
                       </td>
 
                       {/* Operations Column */}
-                      <td className="px-4 py-4 sm:px-8 sm:py-5 text-right">
+                      <td className="px-4 py-4 sm:px-6 sm:py-5 text-right">
                         <div className="flex justify-end gap-1.5 sm:gap-2">
                           <button 
                             onClick={() => handleEdit(u)} 

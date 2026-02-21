@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dashboardAPI, activityLogsAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext'; // <-- Added Auth context
+import { useAuth } from '../context/AuthContext';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend, Label 
@@ -11,7 +11,8 @@ import {
   ArrowUpRight, Activity, MoreVertical, Download, RefreshCw, 
   Clock, Terminal, ChevronRight, Plus, UserPlus, FilePlus, ArrowDownRight,
   Sun, Map as MapIcon, Database, Server, ShieldCheck, Thermometer,
-  CloudSun, Cloud, CloudRain, CloudLightning, Loader2, AlertCircle
+  CloudSun, Cloud, CloudRain, CloudLightning, Loader2, AlertCircle, X,
+  LineChart, Compass, Coins, Ruler
 } from 'lucide-react';
 
 // --- Configuration ---
@@ -59,25 +60,18 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 // --- DYNAMIC WEATHER CONFIGURATION ---
 const getWeatherConfig = (code) => {
-  // Clear / Sunny
   if (code === 0) return { icon: Sun, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-100 dark:border-amber-500/20' };
-  // Partly Cloudy
   if (code === 1 || code === 2) return { icon: CloudSun, color: 'text-orange-500 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', border: 'border-orange-100 dark:border-orange-500/20' };
-  // Overcast / Fog
   if (code === 3 || code === 45 || code === 48) return { icon: Cloud, color: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-white/5', border: 'border-slate-200 dark:border-white/10' };
-  // Drizzle / Rain
   if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return { icon: CloudRain, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', border: 'border-blue-100 dark:border-blue-500/20' };
-  // Thunderstorm
   if (code >= 95 && code <= 99) return { icon: CloudLightning, color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10', border: 'border-purple-100 dark:border-purple-500/20' };
-  
-  // Default Fallback
   return { icon: Sun, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-100 dark:border-amber-500/20' };
 };
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth(); // <-- Retrieve current user role
-  const isViewer = user?.role === 'viewer'; // <-- Check if user is a viewer
+  const { user } = useAuth();
+  const isViewer = user?.role === 'viewer';
 
   const [stats, setStats] = useState(null);
   const [recentLogs, setRecentLogs] = useState([]);
@@ -90,6 +84,7 @@ export default function Dashboard() {
   const [timeRange, setTimeRange] = useState('all'); 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showQuickActions, setShowQuickActions] = useState(false);
+  const [showAllBarangaysModal, setShowAllBarangaysModal] = useState(false);
 
   // REAL-TIME WEATHER STATE
   const [weather, setWeather] = useState({ temp: null, code: 0, loading: true });
@@ -157,7 +152,6 @@ export default function Dashboard() {
           dbStatus: 'Secured',
           latency: currentLatency,
           isOnline: true,
-          // Simulate slight realistic fluctuations in server CPU load (12% - 28%)
           serverLoad: Math.floor(Math.random() * 16) + 12 
         }));
       } catch (error) {
@@ -172,7 +166,6 @@ export default function Dashboard() {
     };
 
     checkSystemHealth();
-    // Poll the server health every 15 seconds
     const interval = setInterval(checkSystemHealth, 15000); 
     return () => clearInterval(interval);
   }, []);
@@ -267,7 +260,7 @@ export default function Dashboard() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[10px] sm:text-xs font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest mb-0.5 sm:mb-1">
-              {greeting}, {user?.full_name?.split('') || 'User'}
+              {greeting}, {user?.full_name?.split(' ')[0] || 'User'}
             </p>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1">
                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Command Center</h1>
@@ -358,12 +351,50 @@ export default function Dashboard() {
                 <stat.icon size={24} className="sm:w-[28px] sm:h-[28px]" />
               </div>
             </div>
-            <div className={`absolute -right-6 -bottom-6 w-24 h-24 sm:w-28 sm:h-28 rounded-full ${stat.bg} opacity-10 dark:opacity-5 group-hover:scale-150 transition-transform duration-1000`} />
+            <div className={`absolute -right-6 -bottom-6 w-24 h-24 sm:w-28 sm:h-28 rounded-full ${stat.bg} opacity-10 dark:opacity-5 group-hover:scale-150 transition-transform duration-1000 pointer-events-none`} />
           </div>
         ))}
       </div>
 
-      {/* 3. PRIMARY ANALYTICS SECTION */}
+      {/* NEW: EXECUTIVE SUMMARY ANALYTICS */}
+      {stats?.summary_analysis && (
+        <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 mb-8 sm:mb-10 shadow-sm overflow-hidden relative">
+           <div className="flex items-center justify-between mb-6 sm:mb-8 relative z-10">
+              <div className="flex items-center gap-2 sm:gap-3">
+                 <div className="p-2 sm:p-2.5 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 rounded-lg sm:rounded-xl"><LineChart size={16} /></div>
+                 <div>
+                   <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Executive Data Summary</h3>
+                   <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Aggregated Platform Averages</p>
+                 </div>
+              </div>
+           </div>
+
+           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 relative z-10">
+              <div className="p-4 sm:p-5 bg-slate-50 dark:bg-black/20 rounded-2xl border border-slate-100 dark:border-white/5 flex flex-col gap-2">
+                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5"><Clock size={12}/> Avg Age</span>
+                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">{stats.summary_analysis.average_farmer_age} <span className="text-[10px] sm:text-xs text-slate-400 font-bold">YRS</span></p>
+              </div>
+              <div className="p-4 sm:p-5 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 flex flex-col gap-2">
+                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-500 tracking-widest flex items-center gap-1.5"><Coins size={12}/> Avg Income</span>
+                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">₱{stats.summary_analysis.average_annual_income.toLocaleString()}</p>
+              </div>
+              <div className="p-4 sm:p-5 bg-blue-50 dark:bg-blue-500/10 rounded-2xl border border-blue-100 dark:border-blue-500/20 flex flex-col gap-2">
+                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-blue-600 dark:text-blue-500 tracking-widest flex items-center gap-1.5"><Ruler size={12}/> Avg Land</span>
+                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">{stats.summary_analysis.average_land_size_ha} <span className="text-[10px] sm:text-xs text-blue-400 font-bold">HA</span></p>
+              </div>
+              <div className="p-4 sm:p-5 bg-amber-50 dark:bg-amber-500/10 rounded-2xl border border-amber-100 dark:border-amber-500/20 flex flex-col gap-2">
+                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-amber-600 dark:text-amber-500 tracking-widest flex items-center gap-1.5"><Compass size={12}/> Top Area</span>
+                 <p className="text-sm sm:text-base font-black text-slate-800 dark:text-white mt-auto truncate">{stats.summary_analysis.most_populated_barangay}</p>
+              </div>
+              <div className="col-span-2 lg:col-span-1 p-4 sm:p-5 bg-purple-50 dark:bg-purple-500/10 rounded-2xl border border-purple-100 dark:border-purple-500/20 flex flex-col gap-2">
+                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-purple-600 dark:text-purple-500 tracking-widest flex items-center gap-1.5"><Users size={12}/> Sys Users</span>
+                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">{stats.summary_analysis.total_system_users} <span className="text-[10px] sm:text-xs text-purple-400 font-bold">ACTIVE</span></p>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* 3. CHARTS SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 mb-8 sm:mb-10">
         
         {/* Education Pie Chart */}
@@ -419,14 +450,21 @@ export default function Dashboard() {
               <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg uppercase tracking-tight">Territorial Density</h3>
               <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5 sm:mt-1">Click bars to filter list</p>
             </div>
-            <div className="flex items-center gap-1 sm:gap-2 text-[9px] sm:text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl border border-emerald-100 dark:border-emerald-500/20 tracking-widest">
-              <Terminal size={12} className="mr-1 sm:w-[14px] sm:h-[14px]"/> LIVE STREAM
+            
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowAllBarangaysModal(true)} className="text-[10px] font-black text-slate-500 hover:text-emerald-600 uppercase tracking-widest transition-colors flex items-center gap-1 p-1">
+                View All <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px]" />
+              </button>
+              <div className="flex items-center gap-1 sm:gap-2 text-[9px] sm:text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl border border-emerald-100 dark:border-emerald-500/20 tracking-widest">
+                <Terminal size={12} className="mr-1 sm:w-[14px] sm:h-[14px]"/> LIVE STREAM
+              </div>
             </div>
           </div>
           
           <div className="flex-1 w-full min-h-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats?.product_stats || []} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+              {/* SLICE THE ARRAY TO ONLY SHOW TOP 5 IN THE CHART */}
+              <BarChart data={(stats?.product_stats || []).slice(0, 5)} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
                 <defs>
                   <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
@@ -619,6 +657,62 @@ export default function Dashboard() {
           >
             {showQuickActions ? <ArrowDownRight size={20} className="sm:w-[24px] sm:h-[24px]" /> : <Plus size={20} className="sm:w-[24px] sm:h-[24px]" />}
           </button>
+        </div>
+      )}
+
+      {/* ALL BARANGAYS MODAL */}
+      {showAllBarangaysModal && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowAllBarangaysModal(false)} />
+          <div className="relative bg-white dark:bg-[#041d18] rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in zoom-in-95 border dark:border-white/10 max-h-[85vh]">
+            
+            <div className="p-5 sm:p-8 border-b border-slate-50 dark:border-white/5 flex items-center justify-between bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl shrink-0">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">All Territories</h2>
+                <p className="text-slate-400 dark:text-slate-500 text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-1">Complete Regional Distribution</p>
+              </div>
+              <button onClick={() => setShowAllBarangaysModal(false)} className="p-2 sm:p-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-all text-slate-400">
+                <X size={20} className="sm:w-[24px] sm:h-[24px]" />
+              </button>
+            </div>
+
+            {/* KEEP THE FULL MAPPING IN THE MODAL */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 no-scrollbar">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                {(stats?.product_stats || []).map((b, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setShowAllBarangaysModal(false);
+                      handleBarClick(b);
+                    }}
+                    className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 hover:bg-emerald-50 hover:border-emerald-100 dark:hover:bg-emerald-500/10 dark:hover:border-emerald-500/20 transition-all group text-left"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 pr-2">
+                      <div className="p-2 bg-white dark:bg-[#0b241f] rounded-lg text-emerald-600 shadow-sm shrink-0">
+                        <MapPin size={14} className="sm:w-[16px] sm:h-[16px]" />
+                      </div>
+                      <span className="font-bold text-slate-700 dark:text-slate-200 text-xs sm:text-sm truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                        {b.barangay}
+                      </span>
+                    </div>
+                    <span className="text-[10px] sm:text-xs font-black text-slate-400 group-hover:text-emerald-600 transition-colors bg-white dark:bg-[#0b241f] px-2 py-1 rounded-md shadow-sm shrink-0">
+                      {b.count}
+                    </span>
+                  </button>
+                ))}
+                {(!stats?.product_stats || stats.product_stats.length === 0) && (
+                  <div className="col-span-1 sm:col-span-2 text-center p-8 text-slate-400 text-xs font-bold uppercase tracking-widest">
+                    No territorial data available
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6 border-t border-slate-50 dark:border-white/5 bg-slate-50/50 dark:bg-black/20 shrink-0 text-center">
+               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-1.5"><Terminal size={12}/> Select any territory to filter directory</p>
+            </div>
+          </div>
         </div>
       )}
 

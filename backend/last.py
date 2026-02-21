@@ -61,8 +61,13 @@
 
 #     def log_activity(action, entity_type=None, entity_id=None, details=None):
 #         try:
-#             user_id = get_jwt_identity()
-#             if not user_id:
+#             user_id = None
+#             try:
+#                 user_id = get_jwt_identity()
+#             except:
+#                 pass # Allow system/background logs if no JWT context exists
+
+#             if not user_id and request and hasattr(request, 'path') and 'login' not in request.path:
 #                 return 
 
 #             # --- REFINEMENT: Clean both Action and Entity Type ---
@@ -77,9 +82,28 @@
 #                 entity_type=formatted_entity, # Cleaned entity type
 #                 entity_id=str_entity_id,
 #                 details=details,
-#                 ip_address=request.remote_addr
+#                 ip_address=request.remote_addr if request else None
 #             )
 #             db.session.add(log)
+            
+#             # --- NEW: AUTOMATED NOTIFICATION GENERATOR ---
+#             # This makes notifications function exactly like activity logs.
+#             try:
+#                 notif_title = f"{formatted_entity} Update" if formatted_entity else f"System Event: {formatted_action}"
+#                 notif_msg = details if details else f"A new {formatted_action} action was recorded."
+                
+#                 auto_notif = Notification(
+#                     user_id=None, # Broadcast to all system admins/operators
+#                     title=notif_title,
+#                     message=notif_msg,
+#                     is_read=False,
+#                     created_at=datetime.utcnow()
+#                 )
+#                 db.session.add(auto_notif)
+#             except Exception as notif_e:
+#                 print(f"Auto-Notif Generation Error: {str(notif_e)}")
+#             # ---------------------------------------------
+            
 #             db.session.commit()
 #         except Exception as e:
 #             print(f"Logging error: {e}")
@@ -337,15 +361,9 @@
         
 #         if not user:
 #             return jsonify({'error': 'User not found'}), 404
-            
-#         # --- COMMENT THIS OUT TO ALLOW ADMINS TO TOGGLE ---
-#         # if user.role == 'admin':
-#         #     if not user.otp_enabled:
-#         #         user.otp_enabled = True
-#         #         db.session.commit()
-#         #     return jsonify({'error': 'Admins cannot disable 2FA.'}), 403
-#         # --------------------------------------------------
 
+#         # REMOVED the "admin cannot disable 2FA" 403 Forbidden block here
+        
 #         data = request.get_json()
         
 #         # Ensure we handle boolean values correctly
@@ -495,7 +513,6 @@
 
 #         # 4. Execute Queries with Filters
 #         total_farmers = apply_date_filter(Farmer.query, Farmer).count()
-#         # Barangays & Products usually don't need time filtering, but Projects/Experiences do
 #         total_barangays = Barangay.query.count() 
 #         total_products = AgriculturalProduct.query.count()
         
@@ -503,21 +520,46 @@
 #         total_projects = apply_date_filter(ResearchProject.query, ResearchProject).count()
         
 #         children_farming = FarmerChild.query.filter_by(continues_farming=True).count()
-#         total_children = FarmerChild.query.count() # Added to fix frontend reference
+#         total_children = FarmerChild.query.count() 
+        
+#         # Added for Summary Analysis
+#         total_users = User.query.count()
+#         total_surveys = SurveyQuestionnaire.query.count()
         
 #         recent_activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
         
-#         # 5. Filter Charts (Education & Geography) based on Active Farmers in that range
-#         # (Advanced: Only count farmers added in this period for the charts)
+#         # 5. Filter Charts (Education & Geography)
 #         edu_query = db.session.query(Farmer.education_level, func.count(Farmer.id))
 #         if start_date: edu_query = edu_query.filter(Farmer.created_at >= start_date)
 #         education_stats_query = edu_query.group_by(Farmer.education_level).all()
         
-#         prod_stats_query = db.session.query(Barangay.name, func.count(Farmer.id))\
-#             .join(Farmer.barangay)
+#         # Removed .limit(5) so the modal can view ALL barangays
+#         prod_stats_query = db.session.query(Barangay.name, func.count(Farmer.id)).join(Farmer.barangay)
 #         if start_date: prod_stats_query = prod_stats_query.filter(Farmer.created_at >= start_date)
-#         product_stats_result = prod_stats_query.group_by(Barangay.name)\
-#             .order_by(func.count(Farmer.id).desc()).limit(5).all()
+#         product_stats_result = prod_stats_query.group_by(Barangay.name).order_by(func.count(Farmer.id).desc()).all()
+
+#         # 6. SUMMARY DATA ANALYSIS (Executive Analytics)
+#         avg_age = apply_date_filter(db.session.query(func.avg(Farmer.age)), Farmer).scalar() or 0
+#         avg_income = apply_date_filter(db.session.query(func.avg(Farmer.annual_income)), Farmer).scalar() or 0
+#         avg_land_size = apply_date_filter(db.session.query(func.avg(Farmer.farm_size_hectares)), Farmer).scalar() or 0
+        
+#         # Format list outputs
+#         education_stats = [{'level': l or "Unknown", 'count': c} for l, c in education_stats_query]
+#         product_stats = [{'barangay': n, 'count': c} for n, c in product_stats_result]
+        
+#         # Determine top categories
+#         top_education = max(education_stats, key=lambda x: x['count'])['level'] if education_stats else "N/A"
+#         top_barangay = max(product_stats, key=lambda x: x['count'])['barangay'] if product_stats else "N/A"
+
+#         summary_analysis = {
+#             "average_farmer_age": round(float(avg_age), 1),
+#             "average_annual_income": round(float(avg_income), 2),
+#             "average_land_size_ha": round(float(avg_land_size), 2),
+#             "top_education_level": top_education,
+#             "most_populated_barangay": top_barangay,
+#             "total_system_users": total_users,
+#             "total_active_surveys": total_surveys
+#         }
 
 #         return jsonify({
 #             'total_farmers': total_farmers,
@@ -528,8 +570,9 @@
 #             'children_farming': children_farming,
 #             'total_children': total_children,
 #             'recent_activities': [log.to_dict() for log in recent_activities],
-#             'education_stats': [{'level': l, 'count': c} for l, c in education_stats_query],
-#             'product_stats': [{'barangay': n, 'count': c} for n, c in product_stats_result]
+#             'education_stats': education_stats,
+#             'product_stats': product_stats,
+#             'summary_analysis': summary_analysis
 #         }), 200
     
 #     # ============ Notification Routes ============
@@ -576,7 +619,7 @@
 #             ).update({Notification.is_read: True}, synchronize_session=False)
             
 #             db.session.commit()
-#             log_activity('NOTIFICATION CLEARANCE', 'User', get_jwt_identity(), "Operator cleared all active alerts")
+#             # log_activity('NOTIFICATION CLEARANCE', 'User', get_jwt_identity(), "Operator cleared all active alerts")
 #             return jsonify({"message": "All marked as read"}), 200
 #         except Exception as e:
 #             db.session.rollback()
@@ -594,7 +637,7 @@
 #             ).delete(synchronize_session=False)
             
 #             db.session.commit()
-#             log_activity('NOTIFICATION PURGE', 'User', get_jwt_identity(), "Permanently deleted notification history")
+#             # log_activity('NOTIFICATION PURGE', 'User', get_jwt_identity(), "Permanently deleted notification history")
 #             return jsonify({"message": "Registry cleared"}), 200
 #         except Exception as e:
 #             db.session.rollback()
@@ -1159,18 +1202,27 @@
 #     @app.route('/api/experiences', methods=['GET'])
 #     @jwt_required()
 #     def get_experiences():
+#         # Identify the user from the JWT token
+#         current_user_id = get_jwt_identity()
+        
 #         page = request.args.get('page', 1, type=int)
-#         per_page = request.args.get('per_page', app.config.get('ITEMS_PER_PAGE', 20), type=int)
+#         per_page = 20
         
-#         pagination = FarmerExperience.query.order_by(FarmerExperience.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-        
+#         pagination = FarmerExperience.query.order_by(
+#             FarmerExperience.created_at.desc()
+#         ).paginate(page=page, per_page=per_page, error_out=False)
+
 #         return jsonify({
-#             'experiences': [exp.to_dict(include_relations=True) for exp in pagination.items],
+#             'experiences': [
+#                 # CRITICAL: current_user_id must be passed here!
+#                 exp.to_dict(include_relations=True, current_user_id=current_user_id) 
+#                 for exp in pagination.items
+#             ],
 #             'total': pagination.total,
 #             'pages': pagination.pages,
 #             'current_page': page
 #         }), 200
-    
+        
 #     @app.route('/api/experiences', methods=['POST'])
 #     @jwt_required()
 #     def create_experience():
@@ -1209,6 +1261,45 @@
 #         log_activity('EXPERIENCE CREATED', 'Farmer Experience', experience.id)
         
 #         return jsonify({'message': 'Experience recorded successfully', 'experience': experience.to_dict()}), 201
+    
+#     @app.route('/api/experiences/<int:id>/like', methods=['POST'])
+#     @jwt_required()
+#     def toggle_experience_like(id):
+#         current_user_id = get_jwt_identity()
+#         experience = FarmerExperience.query.get_or_404(id)
+#         user = User.query.get(current_user_id)
+
+#         if user in experience.liked_by:
+#             experience.liked_by.remove(user)
+#             db.session.commit()
+            
+#             # --- LOG THE UNLIKE ACTION ---
+#             log_activity(
+#                 'EXPERIENCE UNLIKED', 
+#                 'FarmerExperience', 
+#                 experience.id, 
+#                 f"User {user.username} removed 'Helpful' status from: {experience.title}"
+#             )
+#             status = "unliked"
+#         else:
+#             experience.liked_by.append(user)
+#             db.session.commit()
+            
+#             # --- LOG THE LIKE ACTION ---
+#             log_activity(
+#                 'EXPERIENCE LIKED', 
+#                 'FarmerExperience', 
+#                 experience.id, 
+#                 f"User {user.username} marked as 'Helpful': {experience.title}"
+#             )
+#             status = "liked"
+
+#         return jsonify({
+#             "status": "success",
+#             "action": status,
+#             "likes_count": experience.likes_count,
+#             "is_liked_by_me": user in experience.liked_by
+#         }), 200
     
 #     # ============ Research Projects Routes ============
     
@@ -1272,43 +1363,105 @@
     
 #     # ============ Barangay Routes ============
     
-#     @app.route('/api/barangays', methods=['GET'])
+#     @app.route('/api/barangays', methods=['GET', 'POST'])
 #     @jwt_required()
-#     def get_barangays():
-#         barangays = Barangay.query.order_by(Barangay.name).all()
-#         return jsonify([b.to_dict() for b in barangays]), 200
+#     def manage_barangays():
+#         if request.method == 'GET':
+#             barangays = Barangay.query.order_by(Barangay.name).all()
+#             return jsonify([b.to_dict() for b in barangays]), 200
+            
+#         current_user_id = get_jwt_identity()
+#         current_user = User.query.get(current_user_id)
+#         if current_user.role not in ['admin', 'data_encoder']: return jsonify({'error': 'Unauthorized'}), 403
+        
+#         data = request.get_json()
+        
+#         # FIX: Ensure latitude and longitude are pulled from frontend data
+#         barangay = Barangay(
+#             name=data['name'], 
+#             municipality=data['municipality'], 
+#             province=data['province'],
+#             region=data['region'], 
+#             population=data.get('population'), 
+#             total_households=data.get('total_households'),
+#             agricultural_households=data.get('agricultural_households'),
+#             latitude=data.get('latitude'),    # <--- ADDED THIS
+#             longitude=data.get('longitude')   # <--- ADDED THIS
+#         )
+        
+#         db.session.add(barangay)
+#         db.session.commit()
+        
+#         log_activity('BARANGAY CREATED', 'Barangay', barangay.id, f"Added territory: {barangay.name}")
+#         broadcast_notification("Geographic Registry", f"New territory '{barangay.name}' added to mapping.")
+#         return jsonify({'message': 'Barangay created successfully', 'barangay': barangay.to_dict()}), 201
+    
+#     @app.route('/api/mapping/demographics', methods=['GET'])
+#     @jwt_required()
+#     def get_map_demographics():
+#         try:
+#             # Safely get all barangays
+#             barangays = Barangay.query.all()
+#             map_data = []
+            
+#             # Base coordinates for San Pablo City
+#             base_lat = 14.0673
+#             base_lng = 121.3242
+            
+#             for b in barangays:
+#                 farmer_count = Farmer.query.filter_by(barangay_id=b.id).count()
+                
+#                 # Safe top product query using SQLite compatible string aggregation
+#                 top_crop_name = "Mixed Crops"
+#                 if farmer_count > 0:
+#                     try:
+#                         # Find the most common product for this barangay
+#                         top_product = db.session.query(
+#                             AgriculturalProduct.name, 
+#                             func.count(FarmerProduct.id).label('total')
+#                         ).join(FarmerProduct, AgriculturalProduct.id == FarmerProduct.product_id)\
+#                          .join(Farmer, Farmer.id == FarmerProduct.farmer_id)\
+#                          .filter(Farmer.barangay_id == b.id)\
+#                          .group_by(AgriculturalProduct.name)\
+#                          .order_by(desc('total')).first()
+                         
+#                         if top_product:
+#                             top_crop_name = top_product[0]
+#                     except:
+#                         pass # Fallback to "Mixed Crops" if query fails
+                
+#                 # Check if lat/lng exist in DB, otherwise generate pseudo-coordinates around San Pablo
+#                 lat = getattr(b, 'latitude', None)
+#                 lng = getattr(b, 'longitude', None)
+                
+#                 if not lat or not lng:
+#                     # Random visual spread for demonstration (within ~5km of center)
+#                     lat = base_lat + (random.uniform(-0.04, 0.04))
+#                     lng = base_lng + (random.uniform(-0.04, 0.04))
+
+#                 if farmer_count > 0:
+#                     map_data.append({
+#                         "id": b.id,
+#                         "name": b.name,
+#                         "lat": lat,
+#                         "lng": lng,
+#                         "farmer_count": farmer_count,
+#                         "top_product": top_crop_name
+#                     })
+                    
+#             return jsonify(map_data), 200
+#         except Exception as e:
+#             print(f"Mapping Error: {str(e)}")
+#             traceback.print_exc()
+#             return jsonify({'error': 'Failed to load map data'}), 500
+        
+        
     
 #     @app.route('/api/organizations', methods=['GET'])
 #     @jwt_required()
 #     def get_organizations():
 #         organizations = Organization.query.order_by(Organization.name).all()
 #         return jsonify([o.to_dict() for o in organizations]), 200
-    
-#     @app.route('/api/barangays', methods=['POST'])
-#     @jwt_required()
-#     def create_barangay():
-#         current_user_id = get_jwt_identity()
-#         current_user = User.query.get(current_user_id)
-        
-#         if current_user.role not in ['admin', 'data_encoder']:
-#             return jsonify({'error': 'Unauthorized'}), 403
-        
-#         data = request.get_json()
-        
-#         barangay = Barangay(
-#             name=data['name'],
-#             municipality=data['municipality'],
-#             province=data['province'],
-#             region=data['region'],
-#             population=data.get('population'),
-#             total_households=data.get('total_households'),
-#             agricultural_households=data.get('agricultural_households')
-#         )
-        
-#         db.session.add(barangay)
-#         db.session.commit()
-#         log_activity('BARANGAY CREATED', 'Barangay', barangay.id, f"Added territory: {barangay.name}")
-#         return jsonify({'message': 'Barangay created successfully', 'barangay': barangay.to_dict()}), 201
     
 #     # ============ Products Routes ============
     
@@ -1506,6 +1659,7 @@
 #             return jsonify({'error': 'System Protocol: Cannot delete active admin account'}), 400
 
 #         user_to_delete = User.query.get_or_404(id)
+#         user_name = user_to_delete.username
         
 #         try:
 #             # 3. UNLINK RELATED RECORDS (The Fix)

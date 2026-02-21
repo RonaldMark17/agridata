@@ -4,10 +4,12 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/api';
 
 const api = axios.create({
   baseURL: API_URL,
-  // Removed 'Content-Type': 'application/json' to allow automatic detection (needed for file uploads)
+  // Removed explicit 'Content-Type' to allow Axios to set boundaries for file uploads automatically
+  timeout: 15000, 
 });
 
-// Request interceptor to add auth token
+// --- REQUEST INTERCEPTOR ---
+// Automatically attaches the JWT token to every outgoing request
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
@@ -16,26 +18,29 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle token refresh
+// --- RESPONSE INTERCEPTOR ---
+// Handles 401 errors by attempting to refresh the token automatically
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // FIX: Added `originalRequest.url !== '/auth/refresh'` to prevent infinite loops 
-    // if the refresh token itself is expired and returns a 401.
-    if (error.response?.status === 401 && !originalRequest._retry && originalRequest.url !== '/auth/refresh') {
+    // Safety check: ensure url exists before checking includes
+    const isRefreshPath = originalRequest.url && originalRequest.url.includes('/auth/refresh');
+
+    // We check if the error is 401 and ensure we aren't already retrying 
+    // or trying to refresh the refresh token itself.
+    if (error.response?.status === 401 && !originalRequest._retry && !isRefreshPath) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = localStorage.getItem('refresh_token');
-        if (!refreshToken) throw new Error("No refresh token");
+        if (!refreshToken) throw new Error("No refresh token stored");
 
+        // Use a clean axios instance to avoid interceptor recursion
         const response = await axios.post(`${API_URL}/auth/refresh`, {}, {
           headers: { Authorization: `Bearer ${refreshToken}` }
         });
@@ -43,12 +48,12 @@ api.interceptors.response.use(
         const { access_token } = response.data;
         localStorage.setItem('access_token', access_token);
 
+        // Update the failed request and retry it
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return api(originalRequest);
       } catch (refreshError) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
+        // If refresh fails, clear everything and force re-login
+        localStorage.clear(); 
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }
@@ -56,6 +61,8 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ============ API MODULES ============
 
 // Auth API
 export const authAPI = {
@@ -65,7 +72,7 @@ export const authAPI = {
   
   // Password Reset Flow
   requestOtp: (email) => api.post('/auth/forgot-password', { email }),
-  verifyOtpReset: (data) => api.post('/auth/verify-otp-reset', data), // FIX: Added missing route to match backend
+  verifyOtpReset: (data) => api.post('/auth/verify-otp-reset', data), 
   resetPassword: (data) => api.post('/auth/reset-password', data),
   
   // Login OTP Verification
@@ -101,7 +108,15 @@ export const farmersAPI = {
 export const experiencesAPI = {
   getAll: (params) => api.get('/experiences', { params }),
   create: (data) => api.post('/experiences', data),
+  // Used for toggling comment sections (locking discussions)
+  update: (id, data) => api.put(`/experiences/${id}`, data),
   toggleLike: (id) => api.post(`/experiences/${id}/like`),
+  
+  // Comment Management
+  addComment: (id, data) => api.post(`/experiences/${id}/comments`, data),
+  updateComment: (expId, commentId, data) => api.put(`/experiences/${expId}/comments/${commentId}`, data),
+  deleteComment: (expId, commentId) => api.delete(`/experiences/${expId}/comments/${commentId}`),
+  toggleCommentLike: (expId, commentId) => api.post(`/experiences/${expId}/comments/${commentId}/like`),
 };
 
 // Projects API

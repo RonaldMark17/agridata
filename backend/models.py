@@ -1,9 +1,23 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy.orm import relationship
 
 db = SQLAlchemy()
+
+# --- ASSOCIATION TABLES (Defined first to avoid reference errors) ---
+
+experience_likes = db.Table('experience_likes',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('experience_id', db.Integer, db.ForeignKey('farmer_experiences.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('created_at', db.DateTime, default=datetime.utcnow)
+)
+
+comment_likes = db.Table('comment_likes',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('comment_id', db.Integer, db.ForeignKey('experience_comments.id', ondelete='CASCADE'), primary_key=True)
+)
+
+# --- MODELS ---
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -25,8 +39,7 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relation to likes
-    liked_experiences = relationship('FarmerExperience', secondary='experience_likes', back_populates='liked_by')
+    liked_experiences = db.relationship('FarmerExperience', secondary=experience_likes, back_populates='liked_by')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -134,13 +147,13 @@ class Farmer(db.Model):
     birth_date = db.Column(db.Date)
     
     barangay_id = db.Column(db.Integer, db.ForeignKey('barangays.id'), nullable=False)
-    barangay = relationship('Barangay', backref='farmers')
+    barangay = db.relationship('Barangay', backref='farmers')
     
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'))
-    organization = relationship('Organization', backref='farmers')
+    organization = db.relationship('Organization', backref='farmers')
     
     data_encoder_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    data_encoder = relationship('User', backref='farmers_encoded')
+    data_encoder = db.relationship('User', backref='farmers_encoded')
     
     address = db.Column(db.Text)
     contact_number = db.Column(db.String(50))
@@ -157,8 +170,6 @@ class Farmer(db.Model):
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Added Civil Status
     civil_status = db.Column(db.String(20), default='Single')
 
     @property
@@ -214,9 +225,9 @@ class FarmerProduct(db.Model):
     __tablename__ = 'farmer_products'
     id = db.Column(db.Integer, primary_key=True)
     farmer_id = db.Column(db.Integer, db.ForeignKey('farmers.id', ondelete='CASCADE'), nullable=False)
-    farmer = relationship('Farmer', backref=db.backref('products', cascade='all, delete-orphan'))
+    farmer = db.relationship('Farmer', backref=db.backref('products', cascade='all, delete-orphan'))
     product_id = db.Column(db.Integer, db.ForeignKey('agricultural_products.id'), nullable=False)
-    product = relationship('AgriculturalProduct')
+    product = db.relationship('AgriculturalProduct')
     production_volume = db.Column(db.Numeric(10, 2))
     unit = db.Column(db.String(50))
     is_primary = db.Column(db.Boolean, default=False)
@@ -238,7 +249,7 @@ class FarmerChild(db.Model):
     __tablename__ = 'farmer_children'
     id = db.Column(db.Integer, primary_key=True)
     farmer_id = db.Column(db.Integer, db.ForeignKey('farmers.id', ondelete='CASCADE'), nullable=False)
-    farmer = relationship('Farmer', backref=db.backref('children', cascade='all, delete-orphan'))
+    farmer = db.relationship('Farmer', backref=db.backref('children', cascade='all, delete-orphan'))
     name = db.Column(db.String(255))
     age = db.Column(db.Integer)
     gender = db.Column(db.String(20))
@@ -262,39 +273,64 @@ class FarmerChild(db.Model):
             'notes': self.notes
         }
 
+class ExperienceComment(db.Model):
+    __tablename__ = 'experience_comments'
+    id = db.Column(db.Integer, primary_key=True)
+    experience_id = db.Column(db.Integer, db.ForeignKey('farmer_experiences.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User') 
+    liked_by = db.relationship('User', secondary=comment_likes, backref=db.backref('liked_comments', lazy='dynamic'))
+
+    def to_dict(self, current_user_id=None):
+        try:
+            uid = int(current_user_id) if current_user_id else None
+        except:
+            uid = None
+
+        likes_list = self.liked_by if self.liked_by is not None else []
+
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'user_name': self.user.full_name if self.user else 'Unknown',
+            'text': self.text,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'likes_count': len(likes_list),
+            'is_liked_by_me': any(int(u.id) == uid for u in likes_list) if uid else False
+        }
+
 class FarmerExperience(db.Model):
     __tablename__ = 'farmer_experiences'
     id = db.Column(db.Integer, primary_key=True)
     farmer_id = db.Column(db.Integer, db.ForeignKey('farmers.id', ondelete='CASCADE'), nullable=False)
-    farmer = relationship('Farmer', backref=db.backref('experiences', cascade='all, delete-orphan'))
+    farmer = db.relationship('Farmer', backref=db.backref('experiences', cascade='all, delete-orphan'))
     experience_type = db.Column(db.String(50), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False)
     date_recorded = db.Column(db.Date)
     interviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    interviewer = relationship('User', foreign_keys=[interviewer_id])
+    interviewer = db.relationship('User', foreign_keys=[interviewer_id])
     location = db.Column(db.String(255))
     context = db.Column(db.Text)
     impact_level = db.Column(db.String(20))
+    comments_enabled = db.Column(db.Boolean, default=True) 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # --- NEW: LIKE RELATIONSHIP ---
-    liked_by = relationship('User', secondary='experience_likes', back_populates='liked_experiences')
+    liked_by = db.relationship('User', secondary=experience_likes, back_populates='liked_experiences')
+    comments = db.relationship('ExperienceComment', backref='experience', cascade='all, delete-orphan', order_by='ExperienceComment.created_at.asc()')
 
-    @property
-    def likes_count(self):
-        return len(self.liked_by)
-
-    # UPDATED: Added current_user_id to handle per-user like status
-    # In FarmerExperience class within models.py
-    # Inside FarmerExperience class in models.py
     def to_dict(self, include_relations=False, current_user_id=None):
-        # Ensure current_user_id is strictly an integer for the comparison
         try:
             uid = int(current_user_id) if current_user_id else None
         except (ValueError, TypeError):
             uid = None
+
+        likes_list = self.liked_by if self.liked_by is not None else []
+        comments_list = self.comments if self.comments is not None else []
 
         data = {
             'id': self.id,
@@ -305,31 +341,30 @@ class FarmerExperience(db.Model):
             'date_recorded': self.date_recorded.isoformat() if self.date_recorded else None,
             'location': self.location,
             'impact_level': self.impact_level,
+            'comments_enabled': self.comments_enabled,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             
-            # --- THE FIX: Real-time count and Per-user check ---
-            'likes_count': len(self.liked_by),
-            'is_liked_by_me': any(int(u.id) == uid for u in self.liked_by) if uid else False
+            'likes_count': len(likes_list),
+            'is_liked_by_me': any(int(u.id) == uid for u in likes_list) if uid else False,
+            
+            'comments_count': len(comments_list),
+            'comments': [c.to_dict(current_user_id=uid) for c in comments_list]
         }
         
         if include_relations:
             data['farmer_name'] = self.farmer.full_name if self.farmer else "Unknown"
         return data
-class ExperienceLike(db.Model):
-    __tablename__ = 'experience_likes'
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
-    experience_id = db.Column(db.Integer, db.ForeignKey('farmer_experiences.id'), primary_key=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class ResearchProject(db.Model):
     __tablename__ = 'research_projects'
     id = db.Column(db.Integer, primary_key=True)
     project_code = db.Column(db.String(50), unique=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
-    principal_investigator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    principal_investigator = relationship('User')
+    principal_investigator_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    principal_investigator = db.relationship('User')
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'))
-    organization = relationship('Organization')
+    organization = db.relationship('Organization')
     start_date = db.Column(db.Date)
     end_date = db.Column(db.Date)
     status = db.Column(db.String(50), default='Planning')
@@ -372,7 +407,7 @@ class SurveyQuestionnaire(db.Model):
     description = db.Column(db.Text)
     category = db.Column(db.String(50), nullable=False, default='General') 
     target_group = db.Column(db.String(255))
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -393,8 +428,8 @@ class SurveyQuestionnaire(db.Model):
 class ActivityLog(db.Model):
     __tablename__ = 'activity_logs'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    user = relationship('User')
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    user = db.relationship('User')
     action = db.Column(db.String(255), nullable=False)
     entity_type = db.Column(db.String(100))
     entity_id = db.Column(db.String(100)) 
@@ -417,7 +452,7 @@ class ActivityLog(db.Model):
 class Notification(db.Model):
     __tablename__ = 'notifications'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=True) 
     title = db.Column(db.String(255), nullable=False)
     message = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False)
