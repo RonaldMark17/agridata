@@ -423,7 +423,7 @@ export default function Layout() {
                 </div>
               </section>
 
-              <button onClick={() => { setSettingsOpen(false); setShowLogoutConfirm(true); }} className="w-full py-4 sm:py-5 bg-rose-500 text-white rounded-xl sm:rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-rose-600 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3"><LogOut size={16} className="sm:w-[18px] sm:h-[18px]" /><span>Terminate Session</span></button>
+              {/* <button onClick={() => { setSettingsOpen(false); setShowLogoutConfirm(true); }} className="w-full py-4 sm:py-5 bg-rose-500 text-white rounded-xl sm:rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-rose-600 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3"><LogOut size={16} className="sm:w-[18px] sm:h-[18px]" /><span>Terminate Session</span></button> */}
             </div>
           </div>
         </div>
