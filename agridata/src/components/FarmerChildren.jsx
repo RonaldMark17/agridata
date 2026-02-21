@@ -231,7 +231,7 @@ export default function FarmerChildren({ farmerId, children = [], onUpdate }) {
                 <div className="md:col-span-2 space-y-1.5 sm:space-y-2">
                   <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal Full Name</label>
                   <div className="relative">
-                    <User className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={14} className="sm:w-[16px] sm:h-[16px] absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" />
+                    <User size={14} className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 sm:w-[16px] sm:h-[16px]" />
                     <input required type="text" name="name" value={formData.name} onChange={handleInputChange}
                       className="w-full pl-10 sm:pl-12 pr-4 sm:pr-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-inner focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all" />
                   </div>

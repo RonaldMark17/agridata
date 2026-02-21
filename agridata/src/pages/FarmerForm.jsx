@@ -340,7 +340,7 @@ export default function FarmerForm() {
                   <div className="space-y-2 sm:space-y-3">
                     <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Reference Code</label>
                     <div className="relative">
-                      <Hash className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={14} className="sm:w-[16px] sm:h-[16px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" />
+                      <Hash size={14} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 sm:w-[16px] sm:h-[16px]" />
                       <input required type="text" name="farmer_code" value={formData.farmer_code ?? ''} onChange={handleChange} readOnly
                         className="w-full pl-10 sm:pl-14 pr-4 sm:pr-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none opacity-70 cursor-not-allowed" />
                     </div>
@@ -348,7 +348,7 @@ export default function FarmerForm() {
                   <div className="space-y-2 sm:space-y-3">
                     <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Affiliation</label>
                     <div className="relative">
-                      <Building2 className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={14} className="sm:w-[16px] sm:h-[16px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" />
+                      <Building2 size={14} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 sm:w-[16px] sm:h-[16px]" />
                       <select required name="organization_id" value={formData.organization_id ?? ''} onChange={handleChange}
                         className="w-full pl-10 sm:pl-14 pr-4 sm:pr-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none appearance-none">
                         <option value="">Select Organization...</option>
@@ -437,7 +437,7 @@ export default function FarmerForm() {
                 <div className="space-y-2 sm:space-y-3 sm:col-span-2 md:col-span-1">
                   <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Communication Link</label>
                   <div className="relative">
-                    <Phone className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={14} className="sm:w-[16px] sm:h-[16px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" />
+                    <Phone size={14} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 sm:w-[16px] sm:h-[16px]" />
                     <input type="text" name="contact_number" value={formData.contact_number ?? ''} onChange={handleChange}
                       className="w-full pl-10 sm:pl-14 pr-4 sm:pr-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none transition-all" placeholder="+63 000 000 0000" />
                   </div>

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Eye, EyeOff, Sprout, Loader2, Lock, Mail, Activity, ArrowRight, ShieldCheck, Smartphone } from 'lucide-react';
+import { Eye, EyeOff, Sprout, Loader2, Lock, Mail, Activity, ArrowRight, ShieldCheck, Smartphone, ShieldAlert } from 'lucide-react';
 
 export default function Login() {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
@@ -13,35 +13,83 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // --- SMART SECURITY LOCKOUT (Per-User Tracking) ---
+  const [attemptsRecord, setAttemptsRecord] = useState({}); // { 'email@test.com': { count: 3, lockedUntil: 170000000 } }
+  const [now, setNow] = useState(Date.now());
+  const MAX_ATTEMPTS = 3;
+  const LOCKOUT_DURATION_MS = 30000; // 30 seconds
+
   const navigate = useNavigate();
   const { login, verifyOtp } = useAuth(); 
+
+  // Ticking clock to drive the countdown UI smoothly
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Check the current status of the typed username
+  const currentUserKey = credentials.username.trim().toLowerCase();
+  const currentRecord = attemptsRecord[currentUserKey] || { count: 0, lockedUntil: null };
+  const isLocked = currentRecord.lockedUntil && currentRecord.lockedUntil > now;
+  const remainingSeconds = isLocked ? Math.ceil((currentRecord.lockedUntil - now) / 1000) : 0;
 
   // STEP 1: Submit Username/Password
   const handleCredentialSubmit = async (e) => {
     e.preventDefault();
+    if (isLocked) return;
+
     setError('');
     setLoading(true);
     
+    // If the lock expired, we treat their current attempt count as 0
+    let activeCount = currentRecord.count;
+    if (currentRecord.lockedUntil && currentRecord.lockedUntil <= now) {
+      activeCount = 0;
+    }
+
     try {
       const response = await login(credentials); 
       
-      // FIX: Strict Checks. Only navigate/switch if we explicitly got a success response.
+      // On Success: Clear security record for this user
+      setAttemptsRecord(prev => {
+        const newRecord = { ...prev };
+        delete newRecord[currentUserKey];
+        return newRecord;
+      });
+      
       if (response?.otp_required) {
         setStep('otp'); 
       } else if (response?.access_token || response?.user) {
-        // Only navigate if we actually have a token/user
         navigate('/dashboard'); 
       } else {
-        // If response is empty (e.g. error swallowed), do not navigate.
-        // The catch block below usually handles 401s, but this catches logic gaps.
-        if (!error) setError('Invalid credentials or server response.');
+        triggerFailedAttempt(activeCount, 'Invalid credentials or server response.');
       }
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.error || 'Authentication failed. Please check your credentials.');
-      // Do NOT navigate on error
+      triggerFailedAttempt(activeCount, err.response?.data?.error || 'Authentication failed. Please check your credentials.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Helper: Manage failed attempts per username
+  const triggerFailedAttempt = (currentCount, errorMessage) => {
+    const newCount = currentCount + 1;
+    const willLock = newCount >= MAX_ATTEMPTS;
+
+    setAttemptsRecord(prev => ({
+      ...prev,
+      [currentUserKey]: {
+        count: newCount,
+        lockedUntil: willLock ? Date.now() + LOCKOUT_DURATION_MS : null
+      }
+    }));
+
+    if (willLock) {
+      setError(`Too many failed attempts for ${credentials.username}. Account temporarily locked.`);
+    } else {
+      setError(`${errorMessage} (${MAX_ATTEMPTS - newCount} attempts remaining)`);
     }
   };
 
@@ -57,7 +105,6 @@ export default function Login() {
         otp: otp 
       });
       
-      // FIX: Strict Check for token before navigating
       if (response?.access_token) {
         navigate('/dashboard');
       } else {
@@ -73,6 +120,8 @@ export default function Login() {
 
   const handleChange = (e) => {
     setCredentials({ ...credentials, [e.target.name]: e.target.value });
+    // Clear API errors when they type, unless they are currently locked out
+    if (error && !isLocked) setError('');
   };
 
   return (
@@ -139,10 +188,13 @@ export default function Login() {
             </p>
           </header>
 
-          {error && (
-            <div className="mb-8 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 animate-in slide-in-from-top-2">
-              <Activity size={18} />
-              <p className="text-xs font-black uppercase tracking-widest">{error}</p>
+          {/* Dynamic Error / Lockout Banner */}
+          {(error || isLocked) && (
+            <div className={`mb-8 p-4 border rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2 ${isLocked ? 'bg-red-50 border-red-200 text-red-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
+              {isLocked ? <ShieldAlert size={18} className="shrink-0" /> : <Activity size={18} className="shrink-0" />}
+              <p className="text-[11px] leading-relaxed font-black uppercase tracking-widest">
+                {isLocked ? `Security Lock Active. Wait ${remainingSeconds}s.` : error}
+              </p>
             </div>
           )}
 
@@ -153,12 +205,13 @@ export default function Login() {
                 <div className="space-y-3">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Identity Handle</label>
                   <div className="relative group">
-                    <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={18} />
+                    <Mail className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-red-300' : 'text-slate-300 group-focus-within:text-emerald-500'}`} size={18} />
+                    {/* Notice: Username input is NEVER disabled, so they can backspace and fix it! */}
                     <input
                       name="username"
                       type="text"
                       required
-                      className="w-full pl-14 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner"
+                      className={`w-full pl-14 pr-6 py-4 bg-slate-50 border rounded-2xl text-sm font-bold text-slate-700 transition-all outline-none shadow-inner ${isLocked ? 'border-red-200 focus:ring-4 focus:ring-red-500/10' : 'border-transparent focus:ring-4 focus:ring-emerald-500/5'}`}
                       placeholder="Username or email"
                       value={credentials.username}
                       onChange={handleChange}
@@ -172,20 +225,22 @@ export default function Login() {
                     <Link to="/forgot-password" className="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700">Lost Key?</Link>
                   </div>
                   <div className="relative group">
-                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={18} />
+                    <Lock className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-slate-200' : 'text-slate-300 group-focus-within:text-emerald-500'}`} size={18} />
                     <input
                       name="password"
                       type={showPassword ? "text" : "password"}
                       required
-                      className="w-full pl-14 pr-14 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner"
+                      disabled={isLocked}
+                      className="w-full pl-14 pr-14 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner disabled:opacity-40 disabled:cursor-not-allowed"
                       placeholder="••••••••"
                       value={credentials.password}
                       onChange={handleChange}
                     />
                     <button
                       type="button"
+                      disabled={isLocked}
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 transition-colors"
+                      className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -195,10 +250,16 @@ export default function Login() {
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-3 py-5 bg-slate-900 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-slate-200 hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
+                disabled={loading || isLocked}
+                className={`w-full flex items-center justify-center gap-3 py-5 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all ${
+                  isLocked 
+                    ? 'bg-red-600 shadow-red-600/20 cursor-not-allowed' 
+                    : 'bg-slate-900 shadow-slate-200 hover:bg-slate-800 active:scale-95 disabled:opacity-50'
+                }`}
               >
-                {loading ? (
+                {isLocked ? (
+                  <>Account Locked ({remainingSeconds}s)</>
+                ) : loading ? (
                   <Loader2 className="animate-spin" size={18} />
                 ) : (
                   <>Initialize Session <ArrowRight size={16} /></>
@@ -221,7 +282,7 @@ export default function Login() {
                     className="w-full pl-14 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-black text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner tracking-[0.5em]"
                     placeholder="000000"
                     value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))} // Digits only
+                    onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))} 
                     autoFocus
                   />
                 </div>

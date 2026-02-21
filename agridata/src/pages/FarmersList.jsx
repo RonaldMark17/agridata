@@ -224,7 +224,7 @@ export default function FarmersList() {
         <div className="px-4">
           <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm p-3 flex flex-col xl:flex-row items-center gap-3 sm:gap-4 transition-all">
             <div className="relative w-full xl:flex-1">
-              <Search className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} className="sm:w-[20px] sm:h-[20px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <Search size={18} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 sm:w-[20px] sm:h-[20px]" />
               <input
                 type="text"
                 placeholder="Query database by name or code..."

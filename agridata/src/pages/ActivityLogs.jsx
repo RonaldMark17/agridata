@@ -207,7 +207,7 @@ export default function ActivityLogs() {
               
               {/* Search Engine */}
               <div className="relative flex-[1.5] w-full">
-                <Search className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} className="sm:w-[18px] sm:h-[18px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                <Search size={16} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 sm:w-[18px] sm:h-[18px]" />
                 <input 
                   type="text"
                   placeholder="Search operator or detail..."
@@ -219,7 +219,7 @@ export default function ActivityLogs() {
 
               <div className="flex flex-row gap-3 w-full xl:flex-1">
                 <div className="relative flex-1">
-                  <Filter className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={14} className="sm:w-[16px] sm:h-[16px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                  <Filter size={14} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 sm:w-[16px] sm:h-[16px]" />
                   <select
                     className="w-full pl-10 sm:pl-14 pr-8 sm:pr-10 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-[9px] sm:text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 appearance-none focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none cursor-pointer"
                     value={filterAction}
@@ -231,7 +231,7 @@ export default function ActivityLogs() {
                 </div>
                 
                 <div className="relative flex-1">
-                  <CalendarRange className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={14} className="sm:w-[16px] sm:h-[16px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                  <CalendarRange size={14} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 sm:w-[16px] sm:h-[16px]" /> 
                   <select
                     className="w-full pl-10 sm:pl-14 pr-8 sm:pr-10 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-[9px] sm:text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 appearance-none focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none cursor-pointer"
                     value={dateFilter}

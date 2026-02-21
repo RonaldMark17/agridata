@@ -4,7 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { mappingAPI } from '../services/api';
 import { 
-  MapPinned, Users, Sprout, Loader2, Maximize, 
+  MapPinned, Users, Sprout, Maximize, 
   Layers, Search, Navigation, Globe, Sun, Moon 
 } from 'lucide-react';
 
@@ -211,11 +211,49 @@ export default function GeospatialMapping() {
     );
   };
 
+  // --- PREMIUM SKELETON LOADER (Color Corrected) ---
   if (!isMounted || loading) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center">
-        <Loader2 className="animate-spin text-emerald-600 mb-4" size={40} />
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Calibrating Satellites...</p>
+      <div className="space-y-6 sm:space-y-8 pb-20 w-full animate-in fade-in duration-500">
+        {/* Header Skeleton */}
+        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 px-2 sm:px-4">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg animate-pulse"></div>
+              <div className="w-32 h-3 bg-slate-200 dark:bg-[#0b241f] rounded animate-pulse"></div>
+            </div>
+            <div className="w-64 sm:w-80 h-8 sm:h-10 bg-slate-200 dark:bg-[#0b241f] rounded-xl animate-pulse"></div>
+            <div className="w-48 sm:w-64 h-4 bg-slate-200 dark:bg-[#0b241f] rounded animate-pulse"></div>
+          </div>
+          
+          {/* Stat Card Skeleton */}
+          <div className="w-full sm:w-[200px] h-[72px] sm:h-[84px] bg-white dark:bg-[#0b241f] rounded-[1.25rem] sm:rounded-[1.5rem] animate-pulse border border-slate-100 dark:border-white/5 shadow-sm"></div>
+        </header>
+
+        {/* Map Area Skeleton */}
+        <div className="relative h-[600px] max-h-[70vh] sm:max-h-none sm:h-[75vh] w-full rounded-[2rem] sm:rounded-[3rem] bg-slate-100 dark:bg-[#020c0a] animate-pulse border-[4px] sm:border-8 border-white dark:border-[#0b241f] shadow-xl overflow-hidden">
+          
+          {/* Floating UI Skeletons inside Map */}
+          <div className="absolute inset-0 z-10 flex flex-col justify-between p-3 sm:p-6 pointer-events-none">
+            
+            {/* Top Tools Skeleton */}
+            <div className="flex justify-between items-start gap-3 w-full">
+              {/* Search Bar Skeleton */}
+              <div className="w-full max-w-[240px] sm:max-w-xs h-10 sm:h-12 bg-white/70 dark:bg-[#0b241f]/70 backdrop-blur-md rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/5"></div>
+              
+              {/* Action Buttons Skeleton */}
+              <div className="flex flex-col gap-2">
+                <div className="w-10 sm:w-12 h-10 sm:h-12 bg-white/70 dark:bg-[#0b241f]/70 backdrop-blur-md rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/5"></div>
+                <div className="w-10 sm:w-12 h-10 sm:h-12 bg-white/70 dark:bg-[#0b241f]/70 backdrop-blur-md rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/5"></div>
+              </div>
+            </div>
+
+            {/* Legend Skeleton */}
+            <div className="flex justify-between items-end gap-3 w-full pb-8 sm:pb-0">
+              <div className="w-32 sm:w-48 h-32 sm:h-40 bg-white/70 dark:bg-[#0b241f]/70 backdrop-blur-md rounded-[1.25rem] sm:rounded-3xl mb-8 sm:mb-0 border border-slate-200 dark:border-white/5"></div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -237,7 +275,7 @@ export default function GeospatialMapping() {
         </div>
 
         <div className="flex items-center gap-4 flex-wrap mt-2 lg:mt-0 w-full sm:w-auto">
-          <div className="bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 rounded-[1.25rem] sm:rounded-[1.5rem] px-4 py-3 sm:px-6 sm:py-4 shadow-sm flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
+          <div className="bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 rounded-[1.25rem] sm:rounded-[1.5rem] px-4 py-3 sm:px-6 sm:py-4 shadow-sm flex items-center gap-3 sm:gap-4 w-full sm:w-auto hover:border-emerald-500/30 transition-colors">
             <div className="p-2 sm:p-3 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg sm:rounded-xl">
               <Users size={18} className="sm:w-[20px] sm:h-[20px]"/>
             </div>
@@ -249,16 +287,16 @@ export default function GeospatialMapping() {
         </div>
       </header>
 
-      {/* Map Container: Scaled for mobile devices specifically */}
+      {/* Map Container */}
       <div className="relative h-[600px] max-h-[70vh] sm:max-h-none sm:h-[75vh] w-full rounded-[2rem] sm:rounded-[3rem] overflow-hidden border-[4px] sm:border-8 border-white dark:border-[#0b241f] shadow-xl sm:shadow-2xl z-0 bg-slate-100 dark:bg-[#020c0a] isolate">
         
-        {/* CLEAN FLEX OVERLAY FOR CONTROLS (Fixes Mobile Overlap) */}
+        {/* CLEAN FLEX OVERLAY FOR CONTROLS */}
         <div className="absolute inset-0 z-[1000] pointer-events-none flex flex-col justify-between p-3 sm:p-6">
            
            {/* TOP ROW: Search & Tools */}
            <div className="flex justify-between items-start gap-3 w-full">
              
-             {/* SEARCH BAR (Scales cleanly) */}
+             {/* SEARCH BAR */}
              <div className="pointer-events-auto flex-1 max-w-[240px] sm:max-w-xs bg-white/90 dark:bg-black/70 backdrop-blur-md rounded-xl sm:rounded-2xl shadow-xl border border-slate-200 dark:border-white/20 flex items-center px-3 py-2.5 sm:px-4 sm:py-3">
                <Search size={16} className="text-slate-500 dark:text-slate-400 mr-2 sm:mr-3 shrink-0" />
                <select 
@@ -276,9 +314,9 @@ export default function GeospatialMapping() {
              {/* MAP TOGGLES */}
              <div className="pointer-events-auto flex flex-col gap-2 shrink-0">
                <button 
-                  onClick={() => setMapTheme(prev => prev === 'satellite' ? (isDarkMode ? 'dark' : 'light') : 'satellite')} 
-                  className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shadow-xl border border-slate-200 dark:border-white/20 backdrop-blur-md transition-all ${mapTheme === 'satellite' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white/90 dark:bg-black/60 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10'}`} 
-                  title="Toggle Satellite View"
+                 onClick={() => setMapTheme(prev => prev === 'satellite' ? (isDarkMode ? 'dark' : 'light') : 'satellite')} 
+                 className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shadow-xl border border-slate-200 dark:border-white/20 backdrop-blur-md transition-all ${mapTheme === 'satellite' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white/90 dark:bg-black/60 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10'}`} 
+                 title="Toggle Satellite View"
                >
                  <Globe size={18} className="sm:w-[20px] sm:h-[20px]" />
                </button>
@@ -305,7 +343,6 @@ export default function GeospatialMapping() {
                  </div>
                </div>
              )}
-             {/* Leaflet injects zoom controls automatically. Custom CSS repositions it to avoid mobile nav bars */}
            </div>
         </div>
 
@@ -314,7 +351,7 @@ export default function GeospatialMapping() {
           center={mapCenter} 
           zoom={mapZoom} 
           scrollWheelZoom={true}
-          zoomControl={false} // Disable default so we can place it bottom-right
+          zoomControl={false} 
           style={{ height: '100%', width: '100%', backgroundColor: 'transparent' }}
         >
           <ZoomControl position="bottomright" />
@@ -338,7 +375,7 @@ export default function GeospatialMapping() {
         </MapContainer>
       </div>
 
-      {/* Global CSS Map Overrides targeted for Mobile & Dark Mode */}
+      {/* Global CSS Map Overrides */}
       <style dangerouslySetInnerHTML={{ __html: `
         .leaflet-container { font-family: inherit; touch-action: none; }
         .leaflet-popup-content-wrapper { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
@@ -352,12 +389,10 @@ export default function GeospatialMapping() {
         }
         .leaflet-tooltip-top:before { border-top-color: ${isDarkMode ? '#041d18' : '#ffffff'} !important; }
         
-        /* Custom Scrollbar for Legend */
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.5); border-radius: 4px; }
         
-        /* Mobile adjustment for Leaflet Zoom/Attribution Controls */
         .leaflet-bottom.leaflet-right { margin-bottom: 2rem !important; margin-right: 0.5rem !important; z-index: 999 !important; }
         @media (min-width: 640px) {
             .leaflet-bottom.leaflet-right { margin-bottom: 1rem !important; margin-right: 1rem !important; }

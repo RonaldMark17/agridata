@@ -322,7 +322,7 @@ export default function Barangays() {
         <div className="px-4 flex flex-col md:flex-row gap-3 sm:gap-4">
           <div className="bg-white dark:bg-[#0b241f] rounded-xl sm:rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-1.5 sm:p-2 flex items-center transition-colors flex-1 w-full">
             <div className="relative flex-1 w-full">
-              <Search className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} className="sm:w-[20px] sm:h-[20px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <Search size={18} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 sm:w-[20px] sm:h-[20px]" />
               <input
                 type="text"
                 className="w-full pl-12 sm:pl-16 pr-4 sm:pr-6 py-3 sm:py-4 bg-transparent border-none focus:ring-0 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600 outline-none"

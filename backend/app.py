@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import JWTManager, create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt
 from werkzeug.utils import secure_filename
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import os
 import io
 import csv
@@ -16,7 +16,8 @@ from config import config
 from models import (
     db, User, Organization, Barangay, AgriculturalProduct, Farmer, 
     FarmerProduct, FarmerChild, FarmerExperience, ResearchProject,
-    SurveyQuestionnaire, ActivityLog, Notification, ExperienceComment
+    SurveyQuestionnaire, ActivityLog, Notification, ExperienceComment,
+    TokenBlocklist # <--- ADD THIS HERE
 )
 
 def create_app(config_name='development'):
@@ -27,6 +28,10 @@ def create_app(config_name='development'):
     app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
     # Ensure UPLOAD_FOLDER is set
     app.config['UPLOAD_FOLDER'] = os.path.join(app.root_path, 'static', 'uploads')
+    
+    app.config["JWT_TOKEN_LOCATION"] = ["headers"]
+    app.config["JWT_BLACKLIST_ENABLED"] = True
+    app.config["JWT_BLACKLIST_TOKEN_CHECKS"] = ["access", "refresh"]
 
     # Initialize extensions (SQLAlchemy)
     db.init_app(app)
@@ -39,6 +44,25 @@ def create_app(config_name='development'):
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
     jwt = JWTManager(app)
+
+    # --- NEW: JWT Blocklist Callbacks for Session Management ---
+    # --- UPDATED: Resilient Session Check ---
+    @jwt.token_in_blocklist_loader
+    def check_if_token_revoked(jwt_header, jwt_payload: dict) -> bool:
+        jti = jwt_payload["jti"]
+        try:
+            # We query the DB for the unique Token ID (jti)
+            token = TokenBlocklist.query.filter_by(jti=jti).first()
+            return token is not None
+        except Exception:
+            # If DB is temporarily unreachable during restart, don't kick user out
+            return False
+        
+    @jwt.revoked_token_loader
+    def revoked_token_callback(jwt_header, jwt_payload):
+        return jsonify(
+            {"error": "The session has expired or been terminated. Please log in again."}
+        ), 401
     
     # Add this specific handler for Preflight (OPTIONS) requests
     @app.before_request
@@ -317,6 +341,30 @@ def create_app(config_name='development'):
         except Exception as e:
             print(f"❌ LOGIN ERROR: {str(e)}")
             return jsonify({'error': 'Internal Server Error'}), 500
+            
+    # --- NEW: SECURE LOGOUT ROUTE ---
+    @app.route('/api/auth/logout', methods=['POST'])
+    @jwt_required(verify_type=False) 
+    def logout():
+        try:
+            token = get_jwt()
+            jti = token["jti"]
+            ttype = token["type"]
+            
+            # Add the token to the blocklist
+            db.session.add(TokenBlocklist(jti=jti, created_at=datetime.utcnow()))
+            db.session.commit()
+            
+            # Identify user to log
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            if user:
+                log_activity('LOGOUT SUCCESS', 'User', user.id, f"User {user.username} successfully terminated session")
+                
+            return jsonify({"message": f"{ttype.capitalize()} token successfully revoked"}), 200
+        except Exception as e:
+            print(f"Logout Error: {e}")
+            return jsonify({"error": "Failed to terminate session properly"}), 500
 
     @app.route('/api/auth/verify-otp', methods=['POST'])
     def verify_login_otp():
@@ -1325,7 +1373,7 @@ def create_app(config_name='development'):
             # --- LOG THE UNLIKE ACTION ---
             log_activity(
                 'EXPERIENCE UNLIKED', 
-                'Farmer Experience', 
+                'FarmerExperience', 
                 experience.id, 
                 f"User {user.username} removed 'Helpful' status from: {experience.title}"
             )
@@ -1794,7 +1842,6 @@ def create_app(config_name='development'):
             db.session.rollback()
             return jsonify({'error': str(e)}), 400
 
-    # ADDED DELETE ROUTE HERE
     @app.route('/api/users/<int:id>', methods=['DELETE'])
     @jwt_required()
     def delete_user(id):
@@ -1813,19 +1860,10 @@ def create_app(config_name='development'):
         user_name = user_to_delete.username
         
         try:
-            # 3. UNLINK RELATED RECORDS (The Fix)
-            # instead of crashing, we set the 'author' of these records to NULL (Unknown)
-            
-            # Unlink Farmers encoded by this user
+            # 3. UNLINK RELATED RECORDS
             Farmer.query.filter_by(data_encoder_id=id).update({'data_encoder_id': None})
-            
-            # Unlink Experiences recorded by this user
             FarmerExperience.query.filter_by(interviewer_id=id).update({'interviewer_id': None})
-            
-            # Unlink Projects led by this user
             ResearchProject.query.filter_by(principal_investigator_id=id).update({'principal_investigator_id': None})
-            
-            # Unlink Activity Logs (Keep the history, remove the link)
             ActivityLog.query.filter_by(user_id=id).update({'user_id': None})
 
             # 4. Execute Deletion
@@ -1838,9 +1876,6 @@ def create_app(config_name='development'):
             db.session.rollback()
             print(f"❌ DELETE USER ERROR: {str(e)}")
             return jsonify({'error': f'Database Constraint Error: {str(e)}'}), 500
-        
-        
-    
     
     # ============ Activity Logs Routes ============
     
@@ -1850,7 +1885,6 @@ def create_app(config_name='development'):
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
         
-        # --- FIX: Allow all authenticated roles to see logs (or at least their own) ---
         if current_user.role not in ['admin', 'researcher', 'data_encoder', 'viewer']:
             return jsonify({'error': 'Unauthorized'}), 403
         

@@ -358,7 +358,7 @@ export default function ResearchProjects() {
                   <div className="space-y-2 sm:space-y-3">
                     <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Capital Expenditure (Budget in ₱)</label>
                     <div className="relative">
-                      <DollarSign className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" size={16} className="sm:w-[18px] sm:h-[18px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" />
+                      <DollarSign size={16} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 sm:w-[18px] sm:h-[18px]" />
                       <input type="number" className="w-full pl-10 sm:pl-14 pr-4 sm:pr-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none" value={formData.budget} onChange={(e) => setFormData({ ...formData, budget: e.target.value })} placeholder="0.00" />
                     </div>
                   </div>

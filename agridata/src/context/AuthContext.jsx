@@ -1,5 +1,6 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { authAPI } from '../services/api';
+import { jwtDecode } from 'jwt-decode';
 
 const AuthContext = createContext(null);
 
@@ -12,95 +13,119 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  // FIX: Initialize state directly from localStorage to prevent "Auto-Logout" flicker on refresh
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    try {
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  
   const [loading, setLoading] = useState(true);
+
+  // Unified cleanup function to reset the app state
+  const handleCleanup = useCallback(() => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    setUser(null);
+  }, []);
 
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('access_token');
-      const savedUser = localStorage.getItem('user');
 
-      if (token && savedUser) {
+      if (token) {
         try {
-          setUser(JSON.parse(savedUser));
+          // 1. Client-side Expiry Check
+          const decoded = jwtDecode(token);
+          const currentTime = Date.now() / 1000;
           
-          // Verify token validity with backend
+          if (decoded.exp < currentTime) {
+            console.warn("JWT has expired locally.");
+            handleCleanup();
+            setLoading(false);
+            return;
+          }
+
+          // 2. Server-side Verification (Background Sync)
+          // Since we already set the User in the useState initializer, 
+          // the app stays logged in while this request happens.
           const response = await authAPI.getCurrentUser();
           
-          // Update user data with latest from server
+          // Update with the latest data from the Database
           setUser(response.data);
           localStorage.setItem('user', JSON.stringify(response.data));
+          
         } catch (error) {
-          // If token invalid or user parse fails, clear everything
-          console.error("Auth Initialization Error:", error);
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem('user');
-          setUser(null);
+          console.error("Session verification failed:", error);
+
+          // CRITICAL FIX: Only log out if the server is ALIVE and says the token is invalid (401/422).
+          // If error.response is undefined, the server is just restarting—DO NOT log out.
+          if (error.response && (error.response.status === 401 || error.response.status === 422)) {
+            handleCleanup();
+          }
         }
       }
       setLoading(false);
     };
 
     initAuth();
-  }, []);
+  }, [handleCleanup]);
 
   const login = async (credentials) => {
-    // 1. Call Login API
     const response = await authAPI.login(credentials);
     
-    // 2. Check if OTP is required (Stop here if true)
     if (response.data.otp_required) {
-        return response.data; // Login.jsx will see this and switch to OTP screen
+        return response.data;
     }
 
-    // 3. If No OTP required, log the user in immediately
-    const { access_token, refresh_token, user } = response.data;
+    const { access_token, refresh_token, user: userData } = response.data;
     
     localStorage.setItem('access_token', access_token);
     localStorage.setItem('refresh_token', refresh_token);
-    localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('user', JSON.stringify(userData));
 
-    setUser(user);
+    setUser(userData);
     return response.data;
   };
 
-  // --- NEW: VERIFY OTP FUNCTION ---
   const verifyOtp = async (data) => {
-    try {
-        const response = await authAPI.verifyOtp(data);
-        
-        // Backend returns tokens upon successful verification
-        const { access_token, refresh_token, user } = response.data;
+    const response = await authAPI.verifyOtp(data);
+    const { access_token, refresh_token, user: userData } = response.data;
 
-        localStorage.setItem('access_token', access_token);
-        localStorage.setItem('refresh_token', refresh_token);
-        localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('access_token', access_token);
+    localStorage.setItem('refresh_token', refresh_token);
+    localStorage.setItem('user', JSON.stringify(userData));
 
-        setUser(user);
-        return response.data;
-    } catch (error) {
-        throw error;
-    }
+    setUser(userData);
+    return response.data;
   };
 
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
-    setUser(null);
+  const logout = async () => {
+    try {
+      // Invalidate token on the server/blocklist
+      await authAPI.logout();
+    } catch (error) {
+      console.warn("Server logout failed, clearing local storage only.");
+    } finally {
+      handleCleanup();
+    }
   };
 
   const hasPermission = (allowedRoles) => {
     if (!user) return false;
-    return allowedRoles.includes(user.role);
+    const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+    return roles.includes(user.role);
   };
 
   const value = {
     user,
     loading,
     login,
-    verifyOtp, // Exposed for Login.jsx
+    verifyOtp,
     logout,
     hasPermission,
   };

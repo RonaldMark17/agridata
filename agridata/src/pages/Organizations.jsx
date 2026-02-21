@@ -259,7 +259,7 @@ export default function Organizations() {
           
           <div className="bg-white dark:bg-[#0b241f] rounded-xl sm:rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-1.5 sm:p-2 flex items-center transition-colors flex-[2] w-full">
             <div className="relative flex-1 w-full">
-              <Search className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} className="sm:w-[20px] sm:h-[20px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <Search size={16} className="sm:w-[20px] sm:h-[20px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
               <input 
                 type="text" 
                 placeholder="Search partner network..." 
