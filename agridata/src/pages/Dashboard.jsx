@@ -9,7 +9,8 @@ import {
   Users, MapPin, Wheat, FileText, Sprout, Baby, 
   ArrowUpRight, Activity, MoreVertical, Download, RefreshCw, 
   Clock, Terminal, ChevronRight, Plus, UserPlus, FilePlus, ArrowDownRight,
-  Sun, Map as MapIcon, Database, Server, ShieldCheck, Thermometer
+  Sun, Map as MapIcon, Database, Server, ShieldCheck, Thermometer,
+  CloudSun, Cloud, CloudRain, CloudLightning, Loader2 // <-- Loader2 added here!
 } from 'lucide-react';
 
 // --- Configuration ---
@@ -55,6 +56,23 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
+// --- DYNAMIC WEATHER CONFIGURATION ---
+const getWeatherConfig = (code) => {
+  // Clear / Sunny
+  if (code === 0) return { icon: Sun, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-100 dark:border-amber-500/20' };
+  // Partly Cloudy
+  if (code === 1 || code === 2) return { icon: CloudSun, color: 'text-orange-500 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10', border: 'border-orange-100 dark:border-orange-500/20' };
+  // Overcast / Fog
+  if (code === 3 || code === 45 || code === 48) return { icon: Cloud, color: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-white/5', border: 'border-slate-200 dark:border-white/10' };
+  // Drizzle / Rain
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return { icon: CloudRain, color: 'text-blue-500 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', border: 'border-blue-100 dark:border-blue-500/20' };
+  // Thunderstorm
+  if (code >= 95 && code <= 99) return { icon: CloudLightning, color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10', border: 'border-purple-100 dark:border-purple-500/20' };
+  
+  // Default Fallback
+  return { icon: Sun, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-100 dark:border-amber-500/20' };
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
@@ -65,9 +83,12 @@ export default function Dashboard() {
   const [systemStatus, setSystemStatus] = useState('online');
   
   // FUNCTIONAL STATE
-  const [timeRange, setTimeRange] = useState('all'); // 'all', 'month', 'year'
+  const [timeRange, setTimeRange] = useState('all'); 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showQuickActions, setShowQuickActions] = useState(false);
+
+  // REAL-TIME WEATHER STATE
+  const [weather, setWeather] = useState({ temp: null, code: 0, loading: true });
 
   // --- Theme Detection ---
   useEffect(() => {
@@ -82,6 +103,33 @@ export default function Dashboard() {
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // --- Live Weather Fetching (San Pablo City) ---
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        // Open-Meteo Free API (No key required) - Coordinates set to San Pablo City
+        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=14.0673&longitude=121.3242&current_weather=true');
+        const data = await res.json();
+        
+        if (data && data.current_weather) {
+          setWeather({
+            temp: Math.round(data.current_weather.temperature),
+            code: data.current_weather.weathercode,
+            loading: false
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch live weather:", error);
+        setWeather({ temp: null, code: 0, loading: false });
+      }
+    };
+    
+    fetchWeather();
+    // Refresh weather every 30 minutes
+    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   // --- Data Orchestration ---
@@ -164,6 +212,10 @@ export default function Dashboard() {
   // Dynamic Greeting Logic
   const hour = currentTime.getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening';
+  
+  // Weather Config Resolution
+  const wConfig = getWeatherConfig(weather.code);
+  const WeatherIcon = wConfig.icon;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] p-4 md:p-8 font-sans transition-colors duration-300 pb-24 relative">
@@ -191,10 +243,19 @@ export default function Dashboard() {
                 <span>{currentTime.toLocaleTimeString()}</span>
               </div>
               
-              {/* NEW: Weather Context Widget */}
-              <div className="hidden sm:flex items-center gap-2 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-3 py-1 rounded-lg text-xs font-bold border border-amber-100 dark:border-amber-500/20">
-                <Sun size={14} />
-                <span>32°C San Pablo</span>
+              {/* DYNAMIC Weather Context Widget */}
+              <div className={`hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-bold border transition-colors duration-500 ${wConfig.color} ${wConfig.bg} ${wConfig.border}`}>
+                {weather.loading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Locating...</span>
+                  </>
+                ) : (
+                  <>
+                    <WeatherIcon size={14} />
+                    <span>{weather.temp !== null ? `${weather.temp}°C San Pablo` : 'Weather N/A'}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -468,7 +529,7 @@ export default function Dashboard() {
         {showQuickActions && (
           <div className="flex flex-col gap-3 animate-in slide-in-from-bottom-4">
             
-            {/* NEW: Map Quick Link */}
+            {/* Map Quick Link */}
             <button onClick={() => navigate('/map')} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#0b241f] rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all group">
               <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 transition-colors">Live Map</span>
               <div className="p-2 bg-amber-100 dark:bg-amber-500/20 text-amber-600 rounded-xl group-hover:scale-110 transition-transform"><MapIcon size={18}/></div>

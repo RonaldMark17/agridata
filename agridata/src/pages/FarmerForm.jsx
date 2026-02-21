@@ -27,6 +27,7 @@ export default function FarmerForm() {
   const [imagePreview, setImagePreview] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // FIX: Added children aggregates to the initial state
   const [formData, setFormData] = useState({
     farmer_code: '', 
     first_name: '',
@@ -48,7 +49,10 @@ export default function FarmerForm() {
     annual_income: 0,
     income_source: 'Farming',
     profile_image: null,
-    products: []
+    products: [],
+    children: [],
+    number_of_children: 0,
+    children_farming_involvement: false
   });
 
   const [calculatedAge, setCalculatedAge] = useState(0);
@@ -74,6 +78,45 @@ export default function FarmerForm() {
       setCalculatedAge(age >= 0 ? age : 0);
     }
   }, [formData.birth_date]);
+
+  // --- NEW: AUTO-SYNC CHILDREN METRICS TO DATABASE ---
+  useEffect(() => {
+    // Only run this if we are editing an existing farmer and children data exists
+    if (isEditMode && formData.children) {
+      const calculatedChildrenCount = formData.children.length;
+      
+      // Check if ANY child has continues_farming set to true
+      const calculatedInvolvement = formData.children.some(
+        c => c.continues_farming === true || c.continues_farming === 1 || String(c.continues_farming) === 'true'
+      );
+
+      // If there is a mismatch between our calculated data and the form data, update it!
+      if (formData.number_of_children !== calculatedChildrenCount || formData.children_farming_involvement !== calculatedInvolvement) {
+        
+        // 1. Update the local React state
+        setFormData(prev => ({
+          ...prev,
+          number_of_children: calculatedChildrenCount,
+          children_farming_involvement: calculatedInvolvement
+        }));
+
+        // 2. Silently PATCH the database so the Farmers table is immediately accurate
+        const patchAggregatesToDB = async () => {
+          try {
+            const syncData = new FormData();
+            syncData.append('number_of_children', calculatedChildrenCount);
+            syncData.append('children_farming_involvement', calculatedInvolvement);
+            await farmersAPI.update(id, syncData);
+          } catch (err) {
+            console.error("Failed to auto-sync children metrics to DB", err);
+          }
+        };
+        
+        patchAggregatesToDB();
+      }
+    }
+  }, [formData.children, isEditMode, id, formData.number_of_children, formData.children_farming_involvement]);
+  // ---------------------------------------------------
 
   const generateFarmerCode = () => {
     const random = Math.floor(1000 + Math.random() * 9000);
@@ -108,6 +151,7 @@ export default function FarmerForm() {
         barangay_id: data.barangay?.id || data.barangay_id || '',
         organization_id: data.organization?.id || data.organization_id || '',
         products: data.products || [],
+        children: data.children || [], // Added children mapping
         profile_image: null
       });
     } catch (err) { setError('Could not load details.'); }
@@ -178,6 +222,8 @@ export default function FarmerForm() {
       Object.keys(formData).forEach(key => {
         if (key === 'products') {
           data.append('products', JSON.stringify(formData.products));
+        } else if (key === 'children') {
+          // Skip appending children array here, it's managed by FarmerChildren component
         } else if (key === 'profile_image') {
           if (formData.profile_image instanceof File) {
             data.append('profile_image', formData.profile_image);
@@ -244,7 +290,6 @@ export default function FarmerForm() {
           </div>
         )}
 
-        {/* FIX 2: Wrapper DIV replaces the outermost form tag to prevent nesting issues */}
         <div className="space-y-10">
 
           <form id="farmer-profile-form" onSubmit={handleSubmit} className="space-y-10">
@@ -291,7 +336,6 @@ export default function FarmerForm() {
                   <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Core Specifications</h3>
                 </div>
 
-                {/* FIX 1: Added ?? '' to all values */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Reference Code</label>

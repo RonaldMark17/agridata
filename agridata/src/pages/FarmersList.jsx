@@ -5,7 +5,9 @@ import { useAuth } from '../context/AuthContext';
 import { 
   Search, Filter, Download, Plus, ChevronLeft, ChevronRight, 
   Eye, Edit, MapPin, Ruler, Trash2, X, Calendar, Loader2, ArrowUpDown,
-  Phone, Briefcase, DollarSign, Globe, LayoutList, LayoutGrid, PieChart, TrendingUp, Activity, User
+  Phone, Briefcase, DollarSign, Globe, LayoutList, LayoutGrid, PieChart, 
+  TrendingUp, Activity, User, Wheat, Baby, GraduationCap, Tag,
+  Building, BookOpen, Clock, FileText
 } from 'lucide-react';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace(/\/api\/?$/, '');
@@ -59,9 +61,7 @@ export default function FarmersList() {
 
   const navigate = useNavigate();
   
-  // --- FIX: Direct User Role Check ---
   const { user } = useAuth();
-  // Safe checks that won't crash if user is null during loading
   const canEdit = user && ['admin', 'researcher', 'data_encoder'].includes(user.role);
   const canDelete = user && user.role === 'admin';
 
@@ -88,7 +88,6 @@ export default function FarmersList() {
       
       const response = await farmersAPI.getAll(params);
       
-      // Safety check in case API response format differs
       if (response.data && response.data.farmers) {
         setFarmers(response.data.farmers);
         setTotalPages(response.data.pages || 1);
@@ -152,11 +151,11 @@ export default function FarmersList() {
     return `${API_BASE_URL}/static/uploads/${cleanPath}?t=${Date.now()}`;
   };
 
-  // Helper for status badges
   const getStatusColor = (status) => {
     switch(status?.toLowerCase()) {
       case 'owner': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30';
       case 'tenant': return 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 border-amber-200 dark:border-amber-500/30';
+      case 'lessee': return 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border-blue-200 dark:border-blue-500/30';
       default: return 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-400 border-slate-200 dark:border-white/10';
     }
   };
@@ -234,7 +233,6 @@ export default function FarmersList() {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
-              {/* View Toggle */}
               <div className="flex bg-slate-50 dark:bg-white/5 p-1.5 rounded-[1.5rem] border border-slate-100 dark:border-white/5">
                 <button 
                   onClick={() => setViewMode('list')}
@@ -306,7 +304,9 @@ export default function FarmersList() {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight">{farmer.full_name}</p>
+                              <p className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight">
+                                {farmer.full_name} {farmer.suffix && <span className="text-xs text-slate-400 font-bold ml-1">{farmer.suffix}</span>}
+                              </p>
                               <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest mt-1 inline-flex items-center bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-100 dark:border-emerald-500/20">
                                #{farmer.farmer_code}
                               </p>
@@ -351,7 +351,9 @@ export default function FarmersList() {
                         )}
                       </div>
                       <div>
-                        <h3 className="font-black text-slate-900 dark:text-white leading-tight">{farmer.full_name}</h3>
+                        <h3 className="font-black text-slate-900 dark:text-white leading-tight">
+                          {farmer.full_name} {farmer.suffix && <span className="text-xs text-slate-400">{farmer.suffix}</span>}
+                        </h3>
                         <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mt-1">{farmer.barangay?.name}</p>
                       </div>
                     </div>
@@ -394,7 +396,7 @@ export default function FarmersList() {
           <div className="fixed inset-0 z-[1000] flex items-center justify-end overflow-hidden">
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowViewModal(false)} />
             
-            <div className="relative bg-white dark:bg-[#041d18] h-[96%] w-full max-w-xl shadow-2xl flex flex-col transform animate-in slide-in-from-right duration-500 rounded-l-[3.5rem] mr-0 my-auto border-y border-l border-slate-100 dark:border-white/5">
+            <div className="relative bg-white dark:bg-[#041d18] h-[96%] w-full max-w-2xl shadow-2xl flex flex-col transform animate-in slide-in-from-right duration-500 rounded-l-[3.5rem] mr-0 my-auto border-y border-l border-slate-100 dark:border-white/5">
               <div className="p-10 flex justify-between items-center border-b border-slate-50 dark:border-white/5 bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl shrink-0 rounded-tl-[3.5rem]">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 shadow-inner"><Activity size={20}/></div>
@@ -404,6 +406,7 @@ export default function FarmersList() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-12 space-y-12 no-scrollbar">
+                
                 {/* Visual Identity */}
                 <div className="text-center space-y-6">
                   <div className="h-40 w-40 mx-auto rounded-[3rem] bg-slate-50 dark:bg-white/5 flex items-center justify-center text-5xl font-black text-emerald-700 dark:text-emerald-400 shadow-inner border-8 border-white dark:border-[#0b241f] ring-1 ring-slate-100 dark:ring-white/5 overflow-hidden transition-all">
@@ -414,9 +417,19 @@ export default function FarmersList() {
                     )}
                   </div>
                   <div>
-                    <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-tight">{selectedFarmer.full_name}</h3>
-                    <div className="inline-flex items-center gap-3 mt-4 px-4 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-full border border-emerald-100 dark:border-emerald-500/20">
-                      <span className="text-emerald-700 dark:text-emerald-400 font-black uppercase tracking-widest text-[10px]">Reference: {selectedFarmer.farmer_code}</span>
+                    <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-tight">
+                      {selectedFarmer.full_name} {selectedFarmer.suffix && <span className="text-lg text-slate-400">{selectedFarmer.suffix}</span>}
+                    </h3>
+                    <div className="flex items-center justify-center gap-3 mt-4">
+                        <div className="inline-flex items-center px-4 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-full border border-emerald-100 dark:border-emerald-500/20">
+                          <span className="text-emerald-700 dark:text-emerald-400 font-black uppercase tracking-widest text-[10px]">Code: {selectedFarmer.farmer_code}</span>
+                        </div>
+                        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-50 dark:bg-blue-500/10 rounded-full border border-blue-100 dark:border-blue-500/20">
+                          <Building size={12} className="text-blue-600 dark:text-blue-400" />
+                          <span className="text-blue-700 dark:text-blue-400 font-black uppercase tracking-widest text-[10px] truncate max-w-[150px]">
+                              {selectedFarmer.organization?.name || 'Independent'}
+                          </span>
+                        </div>
                     </div>
                   </div>
                 </div>
@@ -444,7 +457,8 @@ export default function FarmersList() {
                             <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-2xl text-slate-400 dark:text-slate-500 shadow-inner"><Calendar size={20}/></div>
                             <div>
                                 <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Birth & Demographics</p>
-                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedFarmer.age}y • {selectedFarmer.gender} • Born {selectedFarmer.birth_date || 'N/A'}</p>
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedFarmer.age}y • {selectedFarmer.gender} • {selectedFarmer.civil_status}</p>
+                                <p className="text-[11px] text-slate-400 font-medium mt-1">Born: {selectedFarmer.birth_date || 'N/A'}</p>
                             </div>
                         </div>
                         <div className="flex items-start gap-6">
@@ -455,26 +469,196 @@ export default function FarmersList() {
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-1 truncate italic">{selectedFarmer.address || 'Location data not specified'}</p>
                             </div>
                         </div>
+                        <div className="flex items-start gap-6">
+                            <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-2xl text-slate-400 dark:text-slate-500 shadow-inner"><GraduationCap size={20}/></div>
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Education Level</p>
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedFarmer.education_level || 'N/A'}</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                {/* Economic Profile Block */}
-                <div className="space-y-6 pb-12">
+                {/* Economic & Yield Matrix */}
+                <div className="space-y-6">
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600/50 dark:text-emerald-500/30 ml-2">Economic Matrix</p>
                     <div className="bg-emerald-900/5 dark:bg-emerald-500/5 p-8 rounded-[2.5rem] border border-emerald-500/10 dark:border-emerald-500/20 space-y-6">
+                        
                         <div className="flex items-start gap-6">
                             <div className="p-3 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-2xl shadow-inner"><DollarSign size={20}/></div>
                             <div>
                                 <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest mb-1">Gross Annual Income</p>
                                 <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(selectedFarmer.annual_income)}</p>
-                                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-tighter mt-1 opacity-60">Source: {selectedFarmer.income_source}</p>
+                                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-tighter mt-1 opacity-80">Source: {selectedFarmer.income_source}</p>
                             </div>
+                        </div>
+
+                        <div className="pt-6 border-t border-emerald-500/10">
+                           <div className="flex items-center gap-2 mb-4 text-emerald-800 dark:text-emerald-500 font-black text-[10px] uppercase tracking-widest">
+                              <Briefcase size={12}/> Occupations
+                           </div>
+                           <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-white/60 dark:bg-black/20 p-4 rounded-2xl">
+                                 <p className="text-[9px] text-slate-500 uppercase font-black tracking-wider mb-1">Primary</p>
+                                 <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedFarmer.primary_occupation || 'Farming'}</p>
+                              </div>
+                              <div className="bg-white/60 dark:bg-black/20 p-4 rounded-2xl">
+                                 <p className="text-[9px] text-slate-500 uppercase font-black tracking-wider mb-1">Secondary</p>
+                                 <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{selectedFarmer.secondary_occupation || 'None'}</p>
+                              </div>
+                           </div>
                         </div>
                     </div>
                 </div>
+
+                {/* Crop Yield Data */}
+                <div className="space-y-6">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-600/50 dark:text-amber-500/30 ml-2">Agricultural Yield</p>
+                    <div className="bg-amber-50 dark:bg-amber-500/5 p-8 rounded-[2.5rem] border border-amber-500/10 dark:border-amber-500/20">
+                        {selectedFarmer.products && selectedFarmer.products.length > 0 ? (
+                           <div className="space-y-3">
+                              {selectedFarmer.products.map((p, i) => (
+                                 <div key={i} className="flex items-center justify-between p-4 bg-white/60 dark:bg-black/20 rounded-2xl">
+                                    <div className="flex items-center gap-3">
+                                       <Wheat size={16} className="text-amber-600 dark:text-amber-500"/>
+                                       <div>
+                                          <p className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                             {p.product_name} 
+                                             {p.is_primary && <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[8px] rounded-md uppercase tracking-wider font-black">Primary</span>}
+                                          </p>
+                                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Est. Price: ₱{p.selling_price || 0}</p>
+                                       </div>
+                                    </div>
+                                    <div className="text-right">
+                                       <p className="font-black text-amber-700 dark:text-amber-500">{p.production_volume}</p>
+                                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.unit}</p>
+                                    </div>
+                                 </div>
+                              ))}
+                           </div>
+                        ) : (
+                           <p className="text-sm font-medium text-slate-500 italic text-center py-4">No yield data recorded.</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* NEW: Recorded Experiences */}
+                <div className="space-y-6">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-600/50 dark:text-indigo-500/30 ml-2">Field Experiences</p>
+                    <div className="bg-indigo-50 dark:bg-indigo-500/5 p-8 rounded-[2.5rem] border border-indigo-500/10 dark:border-indigo-500/20">
+                        {selectedFarmer.experiences && selectedFarmer.experiences.length > 0 ? (
+                           <div className="space-y-4">
+                              {selectedFarmer.experiences.map((exp, i) => (
+                                 <div key={i} className="p-5 bg-white/60 dark:bg-black/20 rounded-2xl border border-indigo-100 dark:border-white/5">
+                                     <div className="flex justify-between items-start mb-3">
+                                         <span className="px-3 py-1 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 text-[9px] font-black uppercase tracking-widest rounded-lg">
+                                             {exp.experience_type}
+                                         </span>
+                                         <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Clock size={10}/> {new Date(exp.date_recorded).toLocaleDateString()}</span>
+                                     </div>
+                                     <p className="font-bold text-slate-800 dark:text-slate-200 text-sm mb-1.5">{exp.title}</p>
+                                     <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">{exp.description}</p>
+                                     {exp.impact_level && (
+                                         <p className="text-[10px] font-black text-indigo-500 dark:text-indigo-400 mt-4 uppercase tracking-widest">Impact Level: {exp.impact_level}</p>
+                                     )}
+                                 </div>
+                              ))}
+                           </div>
+                        ) : (
+                           <p className="text-sm font-medium text-slate-500 italic text-center py-4">No field experiences logged.</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* UPDATED: Family & Succession */}
+                <div className="space-y-6 pb-12">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600/50 dark:text-blue-500/30 ml-2">Family & Succession</p>
+                    <div className="bg-blue-50 dark:bg-blue-500/5 p-8 rounded-[2.5rem] border border-blue-500/10 dark:border-blue-500/20">
+                        <div className="flex items-center justify-between mb-8 pb-6 border-b border-blue-500/10">
+                           <div className="flex items-center gap-4">
+                              <div className="p-3 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-2xl shadow-inner"><Baby size={20}/></div>
+                              <div>
+                                <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-tight">Institutional Lineage Registry</h4>
+                                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1">Descendants: {selectedFarmer.number_of_children || 0}</p>
+                              </div>
+                           </div>
+                           <div className="text-right">
+                             <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Succession Status</p>
+                             <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${selectedFarmer.children_farming_involvement ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' : 'bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-400'}`}>
+                                {selectedFarmer.children_farming_involvement ? 'Active Continuity' : 'No Succession'}
+                             </span>
+                           </div>
+                        </div>
+                        
+                        {selectedFarmer.children && selectedFarmer.children.length > 0 ? (
+                           <div className="space-y-4">
+                              {selectedFarmer.children.map((c, i) => (
+                                 <div key={i} className="p-5 bg-white/60 dark:bg-black/20 rounded-2xl flex flex-col gap-3">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-bold text-slate-800 dark:text-white text-sm flex items-center gap-2">
+                                                {c.name}
+                                                {c.continues_farming && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 text-[8px] uppercase tracking-widest rounded-md border border-emerald-200 dark:border-emerald-500/30">Successor</span>}
+                                            </p>
+                                            <p className="text-[10px] text-slate-500 mt-0.5">{c.age}y • {c.gender} • {c.education_level}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-1">Involvement</p>
+                                            <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{c.involvement_level || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Expanded Child Details */}
+                                    {(c.current_occupation || c.notes) && (
+                                        <div className="pt-3 border-t border-blue-500/10 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {c.current_occupation && (
+                                                <div>
+                                                    <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest">Current Occupation</p>
+                                                    <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5">{c.current_occupation}</p>
+                                                </div>
+                                            )}
+                                            {c.notes && (
+                                                <div>
+                                                    <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest">Remarks</p>
+                                                    <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5 italic line-clamp-2">"{c.notes}"</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                 </div>
+                              ))}
+                           </div>
+                        ) : (
+                           <div className="p-6 text-center border-2 border-dashed border-blue-500/20 rounded-2xl bg-white/40 dark:bg-black/10">
+                              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                                {selectedFarmer.number_of_children > 0 
+                                  ? `Census indicates ${selectedFarmer.number_of_children} descendant(s), but no detailed profiles have been appended.`
+                                  : 'No lineage or descendant data on record.'}
+                              </p>
+                           </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* UPDATED: System Meta Footer */}
+                <div className="pt-10 pb-6 flex flex-col items-center justify-center text-center space-y-3 border-t border-slate-100 dark:border-white/5">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                        <Globe size={14} />
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em]">System Registry Data</p>
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-3 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                        <span className="bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 px-4 py-2 rounded-xl">DB ID: #{selectedFarmer.id}</span>
+                        <span className="bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 px-4 py-2 rounded-xl">Encoded By: {selectedFarmer.data_encoder_id || 'System Auth'}</span>
+                        <span className="bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 px-4 py-2 rounded-xl">Registered: {new Date(selectedFarmer.created_at).toLocaleString()}</span>
+                        {selectedFarmer.updated_at && (
+                            <span className="bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 px-4 py-2 rounded-xl">Last Revision: {new Date(selectedFarmer.updated_at).toLocaleString()}</span>
+                        )}
+                    </div>
+                </div>
+
               </div>
 
-              <div className="px-10 py-10 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5 flex gap-6 shrink-0 rounded-bl-[3.5rem]">
+              <div className="px-10 py-8 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5 flex gap-6 shrink-0 rounded-bl-[3.5rem]">
                 <button 
                   onClick={() => { setShowViewModal(false); navigate(`/farmers/${selectedFarmer.id}/edit`); }}
                   className="flex-1 py-5 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 dark:hover:bg-emerald-400 active:scale-95 transition-all flex items-center justify-center gap-3"
