@@ -941,7 +941,7 @@ def create_app(config_name='development'):
                         if not p.get('product_name'): continue
                         prod = AgriculturalProduct.query.filter(func.lower(AgriculturalProduct.name) == func.lower(p['product_name'].strip())).first()
                         if not prod:
-                            prod = AgriculturalProduct(name=p['product_name'].strip(), category='Crop')
+                            prod = AgriculturalProduct(name=p['product_name'].strip(), category=p.get('category', 'Others'))
                             db.session.add(prod)
                             db.session.commit()
                         db.session.add(FarmerProduct(farmer_id=farmer.id, product_id=prod.id, production_volume=p.get('production_volume', 0), unit=p.get('unit', 'kg'), is_primary=p.get('is_primary', False)))

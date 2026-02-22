@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { dashboardAPI, activityLogsAPI } from '../services/api';
+import { dashboardAPI, activityLogsAPI, productsAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -75,6 +75,7 @@ export default function Dashboard() {
 
   const [stats, setStats] = useState(null);
   const [recentLogs, setRecentLogs] = useState([]);
+  const [commodities, setCommodities] = useState([]); // NEW STATE FOR COMMODITIES
   const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -185,6 +186,16 @@ export default function Dashboard() {
         setRecentLogs([]); 
       }
 
+      // FETCH FUNCTIONAL COMMODITIES 
+      try {
+        const prodRes = await productsAPI.getAll();
+        // Limit to top 4 for the UI card layout
+        setCommodities(prodRes.data.slice(0, 4));
+      } catch (prodError) {
+        console.warn("Could not load products", prodError);
+        setCommodities([]);
+      }
+
       setSystemStatus('online');
     } catch (error) {
       console.error('Command Center Sync Error:', error);
@@ -264,7 +275,7 @@ export default function Dashboard() {
             </p>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1">
                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Command Center</h1>
-               <div className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5 shrink-0 ${systemStatus === 'online' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+               <div className={`px-2 py-0.5 sm:px-2.5 py-1 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5 shrink-0 ${systemStatus === 'online' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
                  <span className={`w-1.5 h-1.5 rounded-full ${systemStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
                  {systemStatus.toUpperCase()}
                </div>
@@ -536,7 +547,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Quick Product Reference */}
+        {/* FUNCTIONAL Product/Commodity Reference */}
         <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
           <div className="flex items-center justify-between mb-6 sm:mb-8">
              <div className="flex items-center gap-2 sm:gap-3">
@@ -549,18 +560,24 @@ export default function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-4">
-             {['Rice', 'Corn', 'Coconut', 'Coffee'].map((crop, i) => (
-               <div key={i} className="p-4 sm:p-6 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-2xl sm:rounded-3xl border border-emerald-100/50 dark:border-emerald-500/10 flex flex-col gap-2 sm:gap-3 hover:scale-105 transition-transform duration-300">
-                  <div className="flex items-center justify-between">
-                     <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 uppercase tracking-widest">Prevalent</span>
-                     <Sprout size={14} className="text-emerald-400 sm:w-[16px] sm:h-[16px]" />
-                  </div>
-                  <p className="text-lg sm:text-xl font-black text-slate-800 dark:text-slate-200">{crop}</p>
-                  <div className="h-1.5 w-full bg-emerald-100 dark:bg-emerald-950 rounded-full overflow-hidden">
-                     <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${80 - (i*15)}%` }} />
-                  </div>
+             {commodities.length > 0 ? (
+               commodities.map((crop, i) => (
+                 <div key={crop.id || i} className="p-4 sm:p-6 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-2xl sm:rounded-3xl border border-emerald-100/50 dark:border-emerald-500/10 flex flex-col gap-2 sm:gap-3 hover:scale-105 transition-transform duration-300">
+                    <div className="flex items-center justify-between">
+                       <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 uppercase tracking-widest truncate mr-2">{crop.category || 'Prevalent'}</span>
+                       <Sprout size={14} className="text-emerald-400 sm:w-[16px] sm:h-[16px] shrink-0" />
+                    </div>
+                    <p className="text-lg sm:text-xl font-black text-slate-800 dark:text-slate-200 truncate" title={crop.name}>{crop.name}</p>
+                    <div className="h-1.5 w-full bg-emerald-100 dark:bg-emerald-950 rounded-full overflow-hidden">
+                       <div className="h-full bg-emerald-500 rounded-full transition-all duration-1000" style={{ width: `${Math.max(20, 80 - (i*15))}%` }} />
+                    </div>
+                 </div>
+               ))
+             ) : (
+               <div className="col-span-1 min-[400px]:col-span-2 text-center py-6 text-slate-400 text-[10px] font-bold uppercase tracking-widest border border-dashed border-slate-200 dark:border-white/10 rounded-2xl">
+                 No Commodities Registered
                </div>
-             ))}
+             )}
           </div>
         </div>
 

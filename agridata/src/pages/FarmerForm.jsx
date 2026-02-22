@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { farmersAPI, barangaysAPI, organizationsAPI } from '../services/api';
+import { farmersAPI, barangaysAPI, organizationsAPI, productsAPI } from '../services/api';
 import {
   Save, X, Upload, Sprout, MapPin, User,
   Calendar, Phone, DollarSign, Ruler, Trash2,
@@ -19,15 +19,18 @@ export default function FarmerForm() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditMode);
   
+  // --- NEW: Unsaved Changes Tracker ---
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
   // Data Lists
   const [barangays, setBarangays] = useState([]);
   const [organizations, setOrganizations] = useState([]);
+  const [availableProducts, setAvailableProducts] = useState([]); 
 
   const [error, setError] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // FIX: Added children aggregates to the initial state
   const [formData, setFormData] = useState({
     farmer_code: '', 
     first_name: '',
@@ -57,6 +60,18 @@ export default function FarmerForm() {
 
   const [calculatedAge, setCalculatedAge] = useState(0);
 
+  // --- NEW: Browser Refresh Warning ---
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = ''; // Triggers the browser's "Leave site?" warning
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
   useEffect(() => {
     fetchDropdowns();
     if (isEditMode) {
@@ -79,28 +94,21 @@ export default function FarmerForm() {
     }
   }, [formData.birth_date]);
 
-  // --- NEW: AUTO-SYNC CHILDREN METRICS TO DATABASE ---
+  // --- AUTO-SYNC CHILDREN METRICS TO DATABASE ---
   useEffect(() => {
-    // Only run this if we are editing an existing farmer and children data exists
     if (isEditMode && formData.children) {
       const calculatedChildrenCount = formData.children.length;
-      
-      // Check if ANY child has continues_farming set to true
       const calculatedInvolvement = formData.children.some(
         c => c.continues_farming === true || c.continues_farming === 1 || String(c.continues_farming) === 'true'
       );
 
-      // If there is a mismatch between our calculated data and the form data, update it!
       if (formData.number_of_children !== calculatedChildrenCount || formData.children_farming_involvement !== calculatedInvolvement) {
-        
-        // 1. Update the local React state
         setFormData(prev => ({
           ...prev,
           number_of_children: calculatedChildrenCount,
           children_farming_involvement: calculatedInvolvement
         }));
 
-        // 2. Silently PATCH the database so the Farmers table is immediately accurate
         const patchAggregatesToDB = async () => {
           try {
             const syncData = new FormData();
@@ -111,12 +119,10 @@ export default function FarmerForm() {
             console.error("Failed to auto-sync children metrics to DB", err);
           }
         };
-        
         patchAggregatesToDB();
       }
     }
   }, [formData.children, isEditMode, id, formData.number_of_children, formData.children_farming_involvement]);
-  // ---------------------------------------------------
 
   const generateFarmerCode = () => {
     const random = Math.floor(1000 + Math.random() * 9000);
@@ -126,12 +132,14 @@ export default function FarmerForm() {
 
   const fetchDropdowns = async () => {
     try {
-      const [bRes, oRes] = await Promise.all([
+      const [bRes, oRes, pRes] = await Promise.all([
         barangaysAPI.getAll(),
-        organizationsAPI.getAll()
+        organizationsAPI.getAll(),
+        productsAPI.getAll()
       ]);
       setBarangays(bRes.data);
       setOrganizations(oRes.data);
+      setAvailableProducts(pRes.data);
     } catch (err) { console.error("Dropdown Error:", err); }
   };
 
@@ -151,7 +159,7 @@ export default function FarmerForm() {
         barangay_id: data.barangay?.id || data.barangay_id || '',
         organization_id: data.organization?.id || data.organization_id || '',
         products: data.products || [],
-        children: data.children || [], // Added children mapping
+        children: data.children || [],
         profile_image: null
       });
     } catch (err) { setError('Could not load details.'); }
@@ -161,6 +169,7 @@ export default function FarmerForm() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    setHasUnsavedChanges(true); // Flag changes
   };
 
   const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
@@ -184,25 +193,71 @@ export default function FarmerForm() {
   const processFile = (file) => {
     setFormData(prev => ({ ...prev, profile_image: file }));
     setImagePreview(URL.createObjectURL(file));
+    setHasUnsavedChanges(true);
+  };
+
+  const predictCategory = (name) => {
+    if (!name) return 'Others';
+    const lowerName = name.toLowerCase();
+    
+    const poultryLivestock = ['goat', 'pig', 'cow', 'chicken', 'duck', 'swine', 'cattle', 'carabao', 'sheep', 'quail', 'turkey', 'pork', 'beef', 'poultry', 'livestock'];
+    const fishery = ['fish', 'tilapia', 'bangus', 'shrimp', 'crab', 'seaweed', 'oyster', 'mussel', 'aquaculture'];
+    const crops = ['rice', 'corn', 'coconut', 'coffee', 'cacao', 'mango', 'banana', 'tomato', 'onion', 'garlic', 'cabbage', 'lettuce', 'crop', 'vegetable', 'fruit', 'wheat', 'soy', 'root', 'tuber'];
+
+    if (poultryLivestock.some(k => lowerName.includes(k))) return 'Poultry';
+    if (fishery.some(k => lowerName.includes(k))) return 'Fishery';
+    if (crops.some(k => lowerName.includes(k))) return 'Crop';
+    
+    return 'Others';
   };
 
   const addProduct = () => {
     setFormData(prev => ({
       ...prev,
-      products: [...prev.products, { product_name: '', is_primary: false, production_volume: 0, unit: 'kg' }]
+      products: [...prev.products, { product_name: '', is_primary: false, production_volume: 0, unit: 'kg', _isOthers: false, category: '' }]
     }));
+    setHasUnsavedChanges(true);
   };
 
+  // --- OPTIMIZED REMOVE PRODUCT ---
   const removeProduct = (index) => {
-    const newProducts = [...formData.products];
-    newProducts.splice(index, 1);
-    setFormData(prev => ({ ...prev, products: newProducts }));
+    setFormData(prev => {
+      const newProducts = [...prev.products];
+      newProducts.splice(index, 1);
+      return { ...prev, products: newProducts };
+    });
+    setHasUnsavedChanges(true); // Flag changes to prevent accidental refresh
+  };
+
+  const handleProductSelect = (index, value) => {
+    setFormData(prev => {
+      const newProducts = [...prev.products];
+      if (value === 'Others') {
+        newProducts[index]._isOthers = true;
+        newProducts[index].product_name = '';
+        newProducts[index].category = 'Others';
+      } else {
+        const selectedProd = availableProducts.find(ap => ap.name === value);
+        newProducts[index]._isOthers = false;
+        newProducts[index].product_name = value;
+        newProducts[index].category = selectedProd ? selectedProd.category : 'Crop';
+      }
+      return { ...prev, products: newProducts };
+    });
+    setHasUnsavedChanges(true);
   };
 
   const handleProductChange = (index, field, value) => {
-    const newProducts = [...formData.products];
-    newProducts[index][field] = value;
-    setFormData(prev => ({ ...prev, products: newProducts }));
+    setFormData(prev => {
+      const newProducts = [...prev.products];
+      newProducts[index][field] = value;
+      
+      if (field === 'product_name' && newProducts[index]._isOthers) {
+         newProducts[index].category = predictCategory(value);
+      }
+      return { ...prev, products: newProducts };
+    });
+    setHasUnsavedChanges(true);
   };
 
   const handleSubmit = async (e) => {
@@ -221,9 +276,10 @@ export default function FarmerForm() {
       const data = new FormData();
       Object.keys(formData).forEach(key => {
         if (key === 'products') {
-          data.append('products', JSON.stringify(formData.products));
+          const cleanProducts = formData.products.map(({ _isOthers, ...rest }) => rest);
+          data.append('products', JSON.stringify(cleanProducts));
         } else if (key === 'children') {
-          // Skip appending children array here, it's managed by FarmerChildren component
+          // Handled by child component
         } else if (key === 'profile_image') {
           if (formData.profile_image instanceof File) {
             data.append('profile_image', formData.profile_image);
@@ -240,7 +296,11 @@ export default function FarmerForm() {
       } else {
         await farmersAPI.create(data);
       }
+      
+      // Successfully saved to database - clear the unsaved warning!
+      setHasUnsavedChanges(false); 
       navigate('/farmers');
+      
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Submission failed.');
       window.scrollTo(0,0);
@@ -531,39 +591,79 @@ export default function FarmerForm() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4 sm:gap-6">
-                    {formData.products.map((product, index) => (
-                      <div key={index} className="flex flex-col lg:flex-row gap-4 sm:gap-6 items-start lg:items-end p-5 sm:p-8 bg-slate-50 dark:bg-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl group animate-in slide-in-from-right-4">
-                        <div className="flex-1 w-full space-y-2 sm:space-y-3">
-                          <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Commodity Type</label>
-                          <input type="text" placeholder="e.g. Hybrid Rice" value={product.product_name ?? ''} onChange={(e) => handleProductChange(index, 'product_name', e.target.value)}
-                            className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
-                        </div>
-                        <div className="w-full lg:w-40 space-y-2 sm:space-y-3">
-                          <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Volume</label>
-                          <input type="number" placeholder="0" value={product.production_volume ?? ''} onChange={(e) => handleProductChange(index, 'production_volume', e.target.value)}
-                            className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
-                        </div>
-                        <div className="w-full lg:w-32 space-y-2 sm:space-y-3">
-                          <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Unit</label>
-                          <select value={product.unit ?? ''} onChange={(e) => handleProductChange(index, 'unit', e.target.value)}
-                            className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none">
-                            <option value="kg">kg</option><option value="tons">tons</option><option value="sacks">sacks</option>
-                          </select>
-                        </div>
-                        <div className="flex items-center justify-between w-full lg:w-auto gap-4 sm:gap-6 pb-1 sm:pb-2 pt-2 lg:pt-0">
-                          <label className="flex items-center gap-2 sm:gap-3 cursor-pointer group/check">
-                            <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md sm:rounded-lg border-2 flex items-center justify-center transition-all ${product.is_primary ? 'bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200 dark:shadow-none' : 'border-slate-200 dark:border-white/20 bg-white dark:bg-white/5 group-hover/check:border-emerald-300'}`}>
-                              {product.is_primary && <Plus size={14} className="text-white rotate-45" />}
+                    {formData.products.map((product, index) => {
+                      const isCustomMode = product._isOthers || (product.product_name && !availableProducts.some(ap => ap.name === product.product_name));
+                      
+                      return (
+                        <div key={index} className="flex flex-col lg:flex-row gap-4 sm:gap-6 items-start lg:items-end p-5 sm:p-8 bg-slate-50 dark:bg-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl group animate-in slide-in-from-right-4">
+                          
+                          <div className="flex-1 w-full space-y-2 sm:space-y-3">
+                            <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Commodity Type</label>
+                            
+                            <div className="flex flex-col gap-2">
+                              <select 
+                                value={isCustomMode ? 'Others' : (product.product_name || '')}
+                                onChange={(e) => handleProductSelect(index, e.target.value)}
+                                className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-[#041d18] border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none"
+                              >
+                                <option value="" disabled>Select Commodity...</option>
+                                {availableProducts.map(p => (
+                                  <option key={p.id} value={p.name}>{p.name}</option>
+                                ))}
+                                <option value="Others">Others (Specify)</option>
+                              </select>
+
+                              {isCustomMode && (
+                                <div className="flex flex-col gap-1 mt-1 animate-in fade-in zoom-in-95 duration-200">
+                                  <input 
+                                    type="text" 
+                                    placeholder="Specify custom commodity (e.g. Goat, Mango)" 
+                                    value={product.product_name ?? ''} 
+                                    onChange={(e) => handleProductChange(index, 'product_name', e.target.value)}
+                                    className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-slate-50 dark:bg-[#020c0a] border border-emerald-100 dark:border-emerald-500/20 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-inner focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" 
+                                  />
+                                  {product.product_name && (
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 ml-2 mt-1 transition-all">
+                                      Auto-categorized as: {product.category || 'Others'}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            <input type="checkbox" className="hidden" checked={product.is_primary} onChange={(e) => handleProductChange(index, 'is_primary', e.target.checked)} />
-                            <span className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Primary Yield</span>
-                          </label>
-                          <button type="button" onClick={() => removeProduct(index)} className="p-2.5 sm:p-3 bg-white dark:bg-[#041d18] border border-rose-100 dark:border-rose-500/20 text-rose-400 hover:bg-rose-500 dark:hover:bg-rose-500 hover:text-white rounded-lg sm:rounded-xl transition-all shadow-sm active:scale-90">
-                            <Trash2 size={16} className="sm:w-[18px] sm:h-[18px]" />
-                          </button>
+                          </div>
+
+                          <div className="w-full lg:w-40 space-y-2 sm:space-y-3">
+                            <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Volume</label>
+                            <input type="number" placeholder="0" value={product.production_volume ?? ''} onChange={(e) => handleProductChange(index, 'production_volume', e.target.value)}
+                              className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
+                          </div>
+                          
+                          <div className="w-full lg:w-32 space-y-2 sm:space-y-3">
+                            <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Unit</label>
+                            <select value={product.unit ?? ''} onChange={(e) => handleProductChange(index, 'unit', e.target.value)}
+                              className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none">
+                              <option value="kg">kg</option>
+                              <option value="tons">tons</option>
+                              <option value="sacks">sacks</option>
+                              <option value="heads">heads</option>
+                            </select>
+                          </div>
+                          
+                          <div className="flex items-center justify-between w-full lg:w-auto gap-4 sm:gap-6 pb-1 sm:pb-2 pt-2 lg:pt-0">
+                            <label className="flex items-center gap-2 sm:gap-3 cursor-pointer group/check">
+                              <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md sm:rounded-lg border-2 flex items-center justify-center transition-all ${product.is_primary ? 'bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200 dark:shadow-none' : 'border-slate-200 dark:border-white/20 bg-white dark:bg-white/5 group-hover/check:border-emerald-300'}`}>
+                                {product.is_primary && <Plus size={14} className="text-white rotate-45" />}
+                              </div>
+                              <input type="checkbox" className="hidden" checked={product.is_primary} onChange={(e) => handleProductChange(index, 'is_primary', e.target.checked)} />
+                              <span className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Primary Yield</span>
+                            </label>
+                            <button type="button" onClick={() => removeProduct(index)} className="p-2.5 sm:p-3 bg-white dark:bg-[#041d18] border border-rose-100 dark:border-rose-500/20 text-rose-400 hover:bg-rose-500 dark:hover:bg-rose-500 hover:text-white rounded-lg sm:rounded-xl transition-all shadow-sm active:scale-90">
+                              <Trash2 size={16} className="sm:w-[18px] sm:h-[18px]" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -584,6 +684,8 @@ export default function FarmerForm() {
             <button type="button" onClick={() => navigate('/farmers')} className="w-full sm:w-auto px-8 sm:px-10 py-4 sm:py-5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 font-black text-[9px] sm:text-[10px] uppercase tracking-[0.2em] rounded-xl sm:rounded-2xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95 text-center">
               Abort Operation
             </button>
+            
+            {/* The Submit button is here. Remind user they must click this to save deletions! */}
             <button type="submit" form="farmer-profile-form" disabled={loading} className="w-full sm:w-auto px-8 sm:px-12 py-4 sm:py-5 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] font-black text-[9px] sm:text-[10px] uppercase tracking-[0.2em] rounded-xl sm:rounded-2xl shadow-xl sm:shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3 disabled:opacity-50">
               {loading ? <Loader2 size={16} className="sm:w-[18px] sm:h-[18px] animate-spin" /> : <Save size={16} className="sm:w-[18px] sm:h-[18px]" />}
               <span>{isEditMode ? 'Commit Record Changes' : 'Finalize Identity Enrollment'}</span>
