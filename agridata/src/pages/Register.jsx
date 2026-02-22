@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { 
   User, Mail, Lock, Sprout, Loader2, 
   ArrowRight, Activity, Fingerprint, ShieldCheck, 
-  ChevronLeft, Globe 
+  ChevronLeft, ShieldAlert, CheckCircle2
 } from 'lucide-react';
 
 export default function Register() {
@@ -12,204 +12,222 @@ export default function Register() {
     username: '',
     email: '',
     password: '',
+    confirmPassword: '',
     full_name: '',
-    role: 'viewer'
+    role: 'viewer',
+    terms: false
   });
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState({ score: 0, label: 'Weak' });
   
   const navigate = useNavigate();
 
+  // Password matching logic
+  const isPasswordMatch = formData.password === formData.confirmPassword && formData.confirmPassword !== '';
+
+  // Simple Password Strength Checker
+  useEffect(() => {
+    const pass = formData.password;
+    let score = 0;
+    if (pass.length > 7) score++;
+    if (/[A-Z]/.test(pass)) score++;
+    if (/[0-9]/.test(pass)) score++;
+    if (/[^A-Za-z0-9]/.test(pass)) score++;
+
+    const labels = ['Weak', 'Fair', 'Good', 'Strong', 'Secure'];
+    setPasswordStrength({ score, label: labels[score] });
+  }, [formData.password]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    if (!formData.terms) {
+      setError('You must agree to the data security protocol.');
+      return;
+    }
+    if (passwordStrength.score < 2) {
+      setError('Please create a stronger password.');
+      return;
+    }
+
     setError('');
     setLoading(true);
     try {
-      await authAPI.register(formData);
-      navigate('/login', { state: { message: 'Identity created. Requesting admin verification.' } });
+      // We don't send confirmPassword to the API
+      const { confirmPassword, terms, ...submitData } = formData;
+      await authAPI.register(submitData);
+      navigate('/login', { state: { message: 'Account created. Waiting for admin approval.' } });
     } catch (err) {
-      setError(err.response?.data?.error || 'Identity registration protocol failed.');
+      setError(err.response?.data?.error || 'Registration failed. Try a different username.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value, type, checked } = e.target;
+    setFormData({ 
+      ...formData, 
+      [name]: type === 'checkbox' ? checked : value.trim() 
+    });
   };
 
   return (
-    <div className="min-h-screen flex bg-[#F8FAFC] font-sans selection:bg-emerald-100">
-      
-      {/* LEFT SIDE: Brand Dossier (Mirror of Login) */}
-      <div className="hidden lg:flex lg:w-[55%] relative bg-[#041d18] overflow-hidden">
-        <img
-          className="absolute inset-0 h-full w-full object-cover opacity-30 grayscale-[0.4]"
-          src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?q=80&w=2070&auto=format&fit=crop"
-          alt="Registry Onboarding"
-        />
-        
-        {/* Dynamic Glow Accents */}
-        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-emerald-500/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-600/10 rounded-full blur-[100px]" />
+    <div className="min-h-screen flex bg-slate-50 font-sans selection:bg-emerald-100 relative">
+      <div className="absolute inset-0 z-0 bg-grid-slate-200/[0.4] bg-[center_top_-1px]" style={{ maskImage: 'linear-gradient(to bottom, black, transparent)' }} />
 
-        <div className="relative z-10 flex flex-col justify-between p-20 w-full">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-emerald-500 rounded-2xl shadow-2xl shadow-emerald-500/40">
-              <Sprout size={28} className="text-white" />
+      {/* LEFT SIDE: Security Info */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 overflow-hidden z-10 shadow-2xl">
+        <div className="absolute inset-0 z-0 bg-grid-slate-700/[0.2] bg-[bottom_1px_center]" style={{ maskImage: 'linear-gradient(to top, transparent, black)' }} />
+        
+        <div className="relative z-10 flex flex-col justify-between p-16 xl:p-24 w-full">
+          <Link to="/" className="flex items-center gap-3 w-fit group">
+            <div className="p-2.5 bg-emerald-600 rounded-xl shadow-md">
+              <Sprout size={24} className="text-white" />
             </div>
-            <div className="flex flex-col text-white">
-              <span className="text-2xl font-black tracking-tight uppercase">AgriData</span>
-              <span className="text-[10px] font-black text-emerald-500 tracking-[0.4em] uppercase">Systems Hub</span>
+            <div className="flex flex-col">
+              <span className="text-xl font-bold tracking-tight text-white">AgriData</span>
+              <span className="text-[9px] font-semibold text-emerald-400 uppercase tracking-widest">Secure Portal</span>
             </div>
-          </div>
-          
-          <div className="max-w-xl">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-md rounded-full border border-white/10 mb-8 text-emerald-400">
-              <Globe size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Global Network Access</span>
+          </Link>
+
+          <div className="max-w-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 backdrop-blur-md rounded-lg border border-white/10 mb-6 text-emerald-400">
+              <ShieldCheck size={14} />
+              <span className="text-[10px] font-bold uppercase tracking-widest">End-to-End Encryption</span>
             </div>
-            <h2 className="text-6xl font-black text-white leading-[1.1] tracking-tighter mb-8 uppercase">
-              Join the <br />
-              <span className="text-emerald-500 italic font-serif lowercase text-5xl">Agricultural</span> Registry.
+            <h2 className="text-4xl xl:text-5xl font-extrabold text-white leading-[1.15] mb-6">
+              Safety First. <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">Secure Access.</span>
             </h2>
-            <p className="text-slate-400 text-lg font-medium leading-relaxed">
-              Standardizing the way we collect, analyze, and deploy agricultural research. Request access to join our network of certified researchers and data analysts.
+            <p className="text-slate-400 text-sm font-medium leading-relaxed">
+              We protect your data with verified protocols. Your account will be active once an administrator confirms your identity.
             </p>
           </div>
-          
-          <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest pt-10 border-t border-white/5">
-            Institutional Provisioning Protocol v2.6.0
+
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest pt-8 border-t border-slate-800">
+            Security Version: Auth-Sec v3.1
           </div>
         </div>
       </div>
 
-      {/* RIGHT SIDE: Auth Module */}
-      <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-24 bg-white relative overflow-y-auto no-scrollbar">
-        <div className="mx-auto w-full max-w-md py-12">
+      {/* RIGHT SIDE: Register Form */}
+      <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-20 relative z-10 overflow-y-auto py-12 no-scrollbar">
+        <div className="w-full max-w-lg mx-auto bg-white p-8 sm:p-12 rounded-2xl shadow-xl border border-slate-200">
           
-          <Link to="/login" className="inline-flex items-center gap-2 text-slate-400 hover:text-emerald-600 font-black text-[10px] uppercase tracking-widest transition-all mb-12 group">
-             <ChevronLeft size={14} className="group-hover:-translate-x-1 transition-transform" /> Back to Authentication
-          </Link>
+          <button onClick={() => navigate('/login')} className="inline-flex items-center gap-2 text-slate-400 hover:text-emerald-600 font-bold text-[10px] uppercase mb-8 transition-all">
+             <ChevronLeft size={14} /> Back to Login
+          </button>
 
-          <header className="mb-10">
-            <div className="flex items-center gap-2 mb-4">
-               <div className="p-1.5 bg-emerald-50 rounded-lg text-emerald-600 shadow-inner">
-                  <Fingerprint size={16} />
-               </div>
-               <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Protocol Onboarding</span>
-            </div>
-            <h2 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Request Access</h2>
-            <p className="text-slate-400 font-medium">Provision a new digital identity for the network.</p>
+          <header className="mb-8">
+            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Create Account</h2>
+            <p className="text-sm text-slate-500 font-medium">Please fill in your details to request access.</p>
           </header>
 
           {error && (
-            <div className="mb-8 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 animate-in slide-in-from-top-2">
-              <Activity size={18} />
-              <p className="text-xs font-black uppercase tracking-widest">{error}</p>
+            <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-3 text-rose-700 animate-in fade-in">
+              <ShieldAlert size={18} className="shrink-0" />
+              <p className="text-xs font-semibold">{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-5">
-              {/* Full Name */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Legal Full Name</label>
-                <div className="relative group">
-                  <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={18} />
-                  <input
-                    name="full_name"
-                    type="text"
-                    required
-                    className="w-full pl-14 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner"
-                    placeholder="e.g. Macky Masalonga"
-                    value={formData.full_name}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-
-              {/* Username & Email Row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">System Username</label>
-                  <input
-                    name="username"
-                    type="text"
-                    required
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner"
-                    placeholder="macky_m"
-                    value={formData.username}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Work Email</label>
-                  <input
-                    name="email"
-                    type="email"
-                    required
-                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner"
-                    placeholder="name@agri.ph"
-                    value={formData.email}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-
-              {/* Password */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Create Access Key</label>
-                <div className="relative group">
-                  <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={18} />
-                  <input
-                    name="password"
-                    type="password"
-                    required
-                    className="w-full pl-14 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner"
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={handleChange}
-                  />
-                </div>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700">Full Name</label>
+              <div className="relative group">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-600" size={16} />
+                <input name="full_name" type="text" required className="w-full pl-11 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10" placeholder="e.g. Juan Dela Cruz" value={formData.full_name} onChange={handleChange} />
               </div>
             </div>
 
-            {/* Note Box */}
-            <div className="p-6 bg-emerald-900/5 rounded-3xl border border-emerald-500/10">
-              <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-2 mb-2">
-                <ShieldCheck size={14} /> Provisioning Note
-              </p>
-              <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                Requests are processed by system administrators. Standard access will be set to <span className="font-bold text-emerald-600">'Viewer'</span> level until credential audit is finalized.
-              </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Username</label>
+                <input name="username" type="text" required className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10" placeholder="User handle" value={formData.username} onChange={handleChange} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Email</label>
+                <input name="email" type="email" required className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10" placeholder="name@agency.gov" value={formData.email} onChange={handleChange} />
+              </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 py-5 bg-slate-900 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-slate-200 hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
-            >
-              {loading ? (
-                <Loader2 className="animate-spin" size={18} />
-              ) : (
-                <>Generate Identity <ArrowRight size={16} /></>
-              )}
+            {/* Password Field */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold text-slate-700">Password</label>
+                <span className={`text-[10px] font-bold uppercase ${passwordStrength.score > 2 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                   Security: {passwordStrength.label}
+                </span>
+              </div>
+              <div className="relative group">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-600" size={16} />
+                <input name="password" type="password" required className="w-full pl-11 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10" placeholder="Min. 8 characters" value={formData.password} onChange={handleChange} />
+              </div>
+              <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden flex">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className={`h-full flex-1 transition-all border-r border-white ${i < passwordStrength.score ? 'bg-emerald-500' : 'bg-transparent'}`} />
+                ))}
+              </div>
+            </div>
+
+            {/* Confirm Password Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700">Confirm Password</label>
+              <div className="relative group">
+                <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isPasswordMatch ? 'text-emerald-500' : 'text-slate-400'}`} size={16} />
+                <input 
+                  name="confirmPassword" 
+                  type="password" 
+                  required 
+                  className={`w-full pl-11 pr-10 py-3 bg-white border rounded-xl text-sm outline-none transition-all focus:ring-4 ${
+                    formData.confirmPassword === '' 
+                      ? 'border-slate-300 focus:ring-emerald-500/10' 
+                      : isPasswordMatch 
+                        ? 'border-emerald-500 focus:ring-emerald-500/10' 
+                        : 'border-rose-400 focus:ring-rose-500/10'
+                  }`} 
+                  placeholder="Repeat your password" 
+                  value={formData.confirmPassword} 
+                  onChange={handleChange} 
+                />
+                {isPasswordMatch && <CheckCircle2 size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500 animate-in zoom-in" />}
+              </div>
+            </div>
+
+            {/* Protocol Agreement */}
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="terms" checked={formData.terms} onChange={handleChange} className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                  I agree to follow the <span className="text-emerald-600 font-bold">Data Security Rules</span>. I know my activity will be monitored for safety.
+                </p>
+              </label>
+            </div>
+
+            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 py-4 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-md hover:bg-slate-800 transition-all disabled:opacity-70 active:scale-[0.98]">
+              {loading ? <Loader2 className="animate-spin" size={18} /> : <>Request Access <ArrowRight size={16} /></>}
             </button>
           </form>
 
-          <footer className="mt-12 pt-8 border-t border-slate-50 text-center">
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">
-              Existing Account? 
-              <Link to="/login" className="text-emerald-600 font-black ml-2 hover:text-emerald-700 transition-colors underline underline-offset-4">Authenticate</Link>
+          <footer className="mt-8 pt-6 border-t border-slate-100 text-center">
+            <p className="text-slate-500 font-medium text-xs">
+              Already have an account? 
+              <Link to="/login" className="text-emerald-600 font-bold ml-1.5 hover:underline">Sign In</Link>
             </p>
           </footer>
         </div>
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
+        .bg-grid-slate-200 { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='%23e2e8f0'%3E%3Cpath d='M0 .5H31.5V32'/%3E%3C/svg%3E"); }
+        .bg-grid-slate-700 { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='%23334155'%3E%3Cpath d='M0 .5H31.5V32'/%3E%3C/svg%3E"); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}} />
     </div>
   );

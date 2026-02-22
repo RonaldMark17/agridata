@@ -13,14 +13,28 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // --- SMART SECURITY LOCKOUT (Per-User Tracking) ---
-  const [attemptsRecord, setAttemptsRecord] = useState({}); // { 'email@test.com': { count: 3, lockedUntil: 170000000 } }
+  // --- SMART SECURITY LOCKOUT (Persistent Tracking) ---
+  // Initialize from localStorage so it survives page refreshes
+  const [attemptsRecord, setAttemptsRecord] = useState(() => {
+    try {
+      const saved = localStorage.getItem('agridata_auth_attempts');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
   const [now, setNow] = useState(Date.now());
   const MAX_ATTEMPTS = 3;
   const LOCKOUT_DURATION_MS = 30000; // 30 seconds
 
   const navigate = useNavigate();
   const { login, verifyOtp } = useAuth(); 
+
+  // Sync attempts to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('agridata_auth_attempts', JSON.stringify(attemptsRecord));
+  }, [attemptsRecord]);
 
   // Ticking clock to drive the countdown UI smoothly
   useEffect(() => {
@@ -120,149 +134,156 @@ export default function Login() {
 
   const handleChange = (e) => {
     setCredentials({ ...credentials, [e.target.name]: e.target.value });
-    // Clear API errors when they type, unless they are currently locked out
     if (error && !isLocked) setError('');
   };
 
   return (
-    <div className="min-h-screen flex bg-[#F8FAFC] font-sans selection:bg-emerald-100">
+    <div className="min-h-screen flex bg-slate-50 font-sans selection:bg-emerald-100 relative">
+      {/* SaaS Background Grid Pattern */}
+      <div className="absolute inset-0 z-0 bg-grid-slate-200/[0.4] bg-[center_top_-1px]" style={{ maskImage: 'linear-gradient(to bottom, black, transparent)' }} />
       
-      {/* LEFT SIDE: Brand Dossier */}
-      <div className="hidden lg:flex lg:w-[55%] relative bg-[#041d18] overflow-hidden">
-        <img
-          className="absolute inset-0 h-full w-full object-cover opacity-40 grayscale-[0.2]"
-          src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?q=80&w=2070&auto=format&fit=crop"
-          alt="Field Registry"
-        />
-        <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-emerald-500/20 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-600/10 rounded-full blur-[100px]" />
+      {/* LEFT SIDE: Brand Dossier (Enterprise Look) */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 overflow-hidden z-10 shadow-2xl">
+        <div className="absolute inset-0 z-0 bg-grid-slate-700/[0.2] bg-[bottom_1px_center]" style={{ maskImage: 'linear-gradient(to top, transparent, black)' }} />
+        
+        {/* Subtle Ambient Glows */}
+        <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[100px]" />
 
-        <div className="relative z-10 flex flex-col justify-between p-20 w-full">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-emerald-500 rounded-2xl shadow-2xl shadow-emerald-500/40">
-              <Sprout size={28} className="text-white" />
+        <div className="relative z-10 flex flex-col justify-between p-16 xl:p-24 w-full">
+          <Link to="/" className="flex items-center gap-3 w-fit group">
+            <div className="p-2.5 bg-emerald-600 rounded-xl shadow-md shrink-0 group-hover:scale-105 transition-transform">
+              <Sprout size={24} className="text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-2xl font-black tracking-tight text-white uppercase">AgriData</span>
-              <span className="text-[10px] font-black text-emerald-500 tracking-[0.4em] uppercase">Systems Hub</span>
+              <span className="text-xl font-bold tracking-tight text-white leading-none">AgriData</span>
+              <span className="text-[9px] font-semibold text-emerald-400 tracking-[0.2em] uppercase mt-1">Systems</span>
             </div>
-          </div>
+          </Link>
 
-          <div className="max-w-xl">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-md rounded-full border border-white/10 mb-8 text-emerald-400">
+          <div className="max-w-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 backdrop-blur-md rounded-lg border border-white/10 mb-6 text-emerald-400">
               <ShieldCheck size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Enterprise Security Active</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">Enterprise Security Active</span>
             </div>
-            <h2 className="text-6xl font-black text-white leading-[1.1] tracking-tighter mb-8 uppercase">
+            <h2 className="text-4xl xl:text-5xl font-extrabold text-white leading-[1.15] tracking-tight mb-6">
               The Intelligence <br />
-              <span className="text-emerald-500 italic font-serif lowercase">of</span> Agriculture.
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">of Agriculture.</span>
             </h2>
-            <p className="text-slate-400 text-lg font-medium leading-relaxed">
-              Synthesizing regional datasets into actionable agricultural insights. Securely manage yields, land metrics, and community demographics.
+            <p className="text-slate-400 text-sm xl:text-base font-medium leading-relaxed">
+              Synthesizing regional datasets into actionable agricultural insights. Securely manage yields, land metrics, and community demographics through a unified portal.
             </p>
           </div>
 
-          <div className="flex items-center justify-between border-t border-white/5 pt-10">
-            <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">© 2026 Institutional Registry</div>
-            <div className="flex gap-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              <span>Security</span>
-              <span>Privacy</span>
-              <span>Network Status</span>
+          <div className="flex items-center justify-between border-t border-slate-800 pt-8 mt-12">
+            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">© 2026 Institutional Registry</div>
+            <div className="flex gap-6 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+              <span className="hover:text-slate-300 cursor-pointer transition-colors">Security</span>
+              <span className="hover:text-slate-300 cursor-pointer transition-colors">Privacy</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* RIGHT SIDE: Dynamic Auth Module */}
-      <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-24 bg-white relative">
-        <div className="mx-auto w-full max-w-sm">
+      <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-24 xl:px-32 relative z-10">
+        
+        {/* Mobile Header (Only visible on small screens) */}
+        <div className="lg:hidden absolute top-8 left-6 flex items-center gap-2">
+          <div className="p-2 bg-emerald-600 rounded-lg shadow-sm shrink-0">
+            <Sprout size={20} className="text-white" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-lg font-bold tracking-tight text-slate-900 leading-none">AgriData</span>
+            <span className="text-[8px] font-semibold text-emerald-600 tracking-[0.2em] uppercase mt-0.5">Systems</span>
+          </div>
+        </div>
 
-          <header className="mb-12">
-            <h2 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">
-              {step === 'otp' ? 'Security Check' : 'Welcome Back'}
+        <div className="w-full max-w-sm mx-auto bg-white p-8 sm:p-10 rounded-2xl shadow-xl border border-slate-200">
+
+          <header className="mb-8">
+            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight mb-2">
+              {step === 'otp' ? 'Security Check' : 'Welcome back'}
             </h2>
-            <p className="text-slate-400 font-medium">
+            <p className="text-sm text-slate-500 font-medium">
               {step === 'otp' 
                 ? 'Enter the 6-digit code sent to your registered email.' 
-                : 'Initialize session protocol to continue.'}
+                : 'Enter your credentials to access the portal.'}
             </p>
           </header>
 
           {/* Dynamic Error / Lockout Banner */}
           {(error || isLocked) && (
-            <div className={`mb-8 p-4 border rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2 ${isLocked ? 'bg-red-50 border-red-200 text-red-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
-              {isLocked ? <ShieldAlert size={18} className="shrink-0" /> : <Activity size={18} className="shrink-0" />}
-              <p className="text-[11px] leading-relaxed font-black uppercase tracking-widest">
-                {isLocked ? `Security Lock Active. Wait ${remainingSeconds}s.` : error}
+            <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-2 border ${isLocked ? 'bg-red-50 border-red-200 text-red-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
+              {isLocked ? <ShieldAlert size={18} className="shrink-0 mt-0.5" /> : <Activity size={18} className="shrink-0 mt-0.5" />}
+              <p className="text-xs font-semibold leading-relaxed">
+                {isLocked ? `Security lock active. Please wait ${remainingSeconds} seconds before trying again.` : error}
               </p>
             </div>
           )}
 
           {/* --- VIEW 1: CREDENTIALS --- */}
           {step === 'credentials' && (
-            <form onSubmit={handleCredentialSubmit} className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Identity Handle</label>
-                  <div className="relative group">
-                    <Mail className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-red-300' : 'text-slate-300 group-focus-within:text-emerald-500'}`} size={18} />
-                    {/* Notice: Username input is NEVER disabled, so they can backspace and fix it! */}
-                    <input
-                      name="username"
-                      type="text"
-                      required
-                      className={`w-full pl-14 pr-6 py-4 bg-slate-50 border rounded-2xl text-sm font-bold text-slate-700 transition-all outline-none shadow-inner ${isLocked ? 'border-red-200 focus:ring-4 focus:ring-red-500/10' : 'border-transparent focus:ring-4 focus:ring-emerald-500/5'}`}
-                      placeholder="Username or email"
-                      value={credentials.username}
-                      onChange={handleChange}
-                    />
-                  </div>
+            <form onSubmit={handleCredentialSubmit} className="space-y-5 animate-in fade-in slide-in-from-right-8 duration-500">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Email</label>
+                <div className="relative group">
+                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-red-300' : 'text-slate-400 group-focus-within:text-emerald-600'}`} size={16} />
+                  <input
+                    name="username"
+                    type="text"
+                    required
+                    className={`w-full pl-11 pr-4 py-3 bg-white border rounded-xl text-sm font-medium text-slate-900 transition-all outline-none shadow-sm ${isLocked ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' : 'border-slate-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400'}`}
+                    placeholder="Username or email address"
+                    value={credentials.username}
+                    onChange={handleChange}
+                  />
                 </div>
+              </div>
 
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center px-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Access Key</label>
-                    <Link to="/forgot-password" className="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700">Lost Key?</Link>
-                  </div>
-                  <div className="relative group">
-                    <Lock className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-slate-200' : 'text-slate-300 group-focus-within:text-emerald-500'}`} size={18} />
-                    <input
-                      name="password"
-                      type={showPassword ? "text" : "password"}
-                      required
-                      disabled={isLocked}
-                      className="w-full pl-14 pr-14 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner disabled:opacity-40 disabled:cursor-not-allowed"
-                      placeholder="••••••••"
-                      value={credentials.password}
-                      onChange={handleChange}
-                    />
-                    <button
-                      type="button"
-                      disabled={isLocked}
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-slate-700">Password</label>
+                  <Link to="/forgot-password" className="text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors">Forgot password?</Link>
+                </div>
+                <div className="relative group">
+                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-slate-300' : 'text-slate-400 group-focus-within:text-emerald-600'}`} size={16} />
+                  <input
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    disabled={isLocked}
+                    className="w-full pl-11 pr-11 py-3 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400 transition-all outline-none shadow-sm disabled:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    placeholder="••••••••"
+                    value={credentials.password}
+                    onChange={handleChange}
+                  />
+                  <button
+                    type="button"
+                    disabled={isLocked}
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={loading || isLocked}
-                className={`w-full flex items-center justify-center gap-3 py-5 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all ${
+                className={`w-full flex items-center justify-center gap-2 py-3.5 mt-2 text-white rounded-xl font-bold text-sm shadow-md transition-all ${
                   isLocked 
                     ? 'bg-red-600 shadow-red-600/20 cursor-not-allowed' 
-                    : 'bg-slate-900 shadow-slate-200 hover:bg-slate-800 active:scale-95 disabled:opacity-50'
+                    : 'bg-slate-900 hover:bg-slate-800 hover:shadow-lg active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed'
                 }`}
               >
                 {isLocked ? (
                   <>Account Locked ({remainingSeconds}s)</>
                 ) : loading ? (
-                  <Loader2 className="animate-spin" size={18} />
+                  <Loader2 className="animate-spin" size={16} />
                 ) : (
-                  <>Initialize Session <ArrowRight size={16} /></>
+                  <>Log In <ArrowRight size={16} /></>
                 )}
               </button>
             </form>
@@ -270,16 +291,16 @@ export default function Login() {
 
           {/* --- VIEW 2: OTP VERIFICATION --- */}
           {step === 'otp' && (
-            <form onSubmit={handleOtpSubmit} className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Two-Factor Code</label>
+            <form onSubmit={handleOtpSubmit} className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Verification Code</label>
                 <div className="relative group">
-                  <Smartphone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={18} />
+                  <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-600 transition-colors" size={18} />
                   <input
                     type="text"
                     required
                     maxLength={6}
-                    className="w-full pl-14 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-black text-slate-700 focus:ring-4 focus:ring-emerald-500/5 transition-all outline-none shadow-inner tracking-[0.5em]"
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400 transition-all outline-none shadow-sm tracking-[0.5em] text-center"
                     placeholder="000000"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))} 
@@ -291,35 +312,47 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading || otp.length < 6}
-                className="w-full flex items-center justify-center gap-3 py-5 bg-emerald-600 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-emerald-200 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-emerald-500 hover:shadow-lg active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {loading ? (
-                  <Loader2 className="animate-spin" size={18} />
+                  <Loader2 className="animate-spin" size={16} />
                 ) : (
                   <>Verify & Access <ShieldCheck size={16} /></>
                 )}
               </button>
               
-              <button 
-                type="button" 
-                onClick={() => setStep('credentials')}
-                className="w-full text-center text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                Cancel and return to login
-              </button>
+              <div className="pt-2 text-center">
+                <button 
+                  type="button" 
+                  onClick={() => setStep('credentials')}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+                >
+                  Cancel and return to login
+                </button>
+              </div>
             </form>
           )}
 
           {step === 'credentials' && (
-            <footer className="mt-12 pt-8 border-t border-slate-50 text-center">
-              <p className="text-slate-400 font-bold text-xs">
-                New to the system? <br className="sm:hidden" />
-                <Link to="/register" className="text-emerald-600 uppercase tracking-widest font-black ml-1 hover:text-emerald-700 transition-colors">Apply for Onboarding</Link>
+            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+              <p className="text-slate-500 font-medium text-xs">
+                New to the system? 
+                <Link to="/register" className="text-emerald-600 font-bold ml-1.5 hover:text-emerald-700 transition-colors">Sign up</Link>
               </p>
-            </footer>
+            </div>
           )}
         </div>
       </div>
+
+      {/* Global CSS Map Overrides for Grid */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .bg-grid-slate-200 {
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='%23e2e8f0'%3E%3Cpath d='M0 .5H31.5V32'/%3E%3C/svg%3E");
+        }
+        .bg-grid-slate-700 {
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='%23334155'%3E%3Cpath d='M0 .5H31.5V32'/%3E%3C/svg%3E");
+        }
+      `}} />
     </div>
   );
 }
