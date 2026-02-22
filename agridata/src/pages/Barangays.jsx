@@ -20,6 +20,47 @@ const mapIcon = new L.Icon({
     shadowSize: [41, 41]
 });
 
+// --- COMPONENT: Smooth Count-Up Animation ---
+const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime = null;
+    const endValue = parseFloat(value) || 0;
+    
+    if (endValue === 0) {
+      setCount(0);
+      return;
+    }
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      
+      const easeProgress = 1 - Math.pow(1 - progress, 4); 
+      setCount(endValue * easeProgress);
+
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        setCount(endValue);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }, [value, duration]);
+
+  return (
+    <>
+      {prefix}
+      {count.toLocaleString('en-US', { 
+        minimumFractionDigits: decimals, 
+        maximumFractionDigits: decimals 
+      })}
+    </>
+  );
+};
+
 function LocationPicker({ position, setPosition }) {
     const map = useMapEvents({
         click(e) {
@@ -302,8 +343,8 @@ export default function Barangays() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8 px-4">
           {[
             { label: 'Mapped Units', val: barangays.length, icon: MapPin, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10' },
-            { label: 'Regional Population', val: totalPopulation.toLocaleString(), icon: Users, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
-            { label: 'Active Agri Units', val: totalAgriHouseholds.toLocaleString(), icon: Sprout, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10' },
+            { label: 'Regional Population', val: totalPopulation, icon: Users, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+            { label: 'Active Agri Units', val: totalAgriHouseholds, icon: Sprout, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10' },
           ].map((stat, i) => (
             <div key={i} className="group bg-white dark:bg-[#0b241f] p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all duration-300 flex items-center gap-4 sm:gap-6 relative overflow-hidden">
                <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl ${stat.bg} ${stat.color} shrink-0 group-hover:scale-110 transition-transform`}>
@@ -311,7 +352,9 @@ export default function Barangays() {
               </div>
               <div className="min-w-0 relative z-10">
                 <p className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5 sm:mb-1">{stat.label}</p>
-                <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">{stat.val}</p>
+                <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">
+                  <AnimatedCounter value={stat.val} duration={1000} />
+                </p>
               </div>
               <div className={`absolute -right-6 -bottom-6 w-20 h-20 sm:w-24 sm:h-24 rounded-full ${stat.bg} opacity-10 dark:opacity-5 group-hover:scale-150 transition-transform duration-700 pointer-events-none`} />
             </div>

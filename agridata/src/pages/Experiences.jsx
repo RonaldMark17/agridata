@@ -11,6 +11,47 @@ import {
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace('/api', '');
 
+// --- COMPONENT: Smooth Count-Up Animation ---
+const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime = null;
+    const endValue = parseFloat(value) || 0;
+    
+    if (endValue === 0) {
+      setCount(0);
+      return;
+    }
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      
+      const easeProgress = 1 - Math.pow(1 - progress, 4); 
+      setCount(endValue * easeProgress);
+
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        setCount(endValue);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }, [value, duration]);
+
+  return (
+    <>
+      {prefix}
+      {count.toLocaleString('en-US', { 
+        minimumFractionDigits: decimals, 
+        maximumFractionDigits: decimals 
+      })}
+    </>
+  );
+};
+
 // --- Skeleton Component (Matched to Dashboard) ---
 const ExperienceSkeleton = () => (
   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 px-3 sm:px-6 lg:px-8">
@@ -384,7 +425,7 @@ export default function Experiences() {
         <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 sm:gap-8 px-3 sm:px-6 lg:px-8 py-6">
           <div>
             <div className="flex items-center gap-2 mb-3 sm:mb-4">
-              <div className="p-1.5 sm:p-2 bg-emerald-600 rounded-lg sm:rounded-xl text-white shadow-xl shadow-emerald-200 dark:shadow-none">
+              <div className="p-1.5 sm:p-2 bg-emerald-600 rounded-lg sm:rounded-xl text-white shadow-xl shadow-emerald-200 dark:shadow-none shrink-0">
                 <BookOpen size={18} className="sm:w-[20px] sm:h-[20px]" />
               </div>
               <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-[0.3em]">Knowledge Repo</span>
@@ -395,21 +436,21 @@ export default function Experiences() {
           
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 shrink-0" size={16} />
               <input type="text" placeholder="Search insights..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-3.5 sm:py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] text-xs sm:text-sm font-bold dark:text-white outline-none"
               />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
               <button onClick={handleExport} disabled={isExporting} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-3.5 sm:py-4 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-black text-[9px] sm:text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 shadow-sm transition-colors hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50">
-                {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} <span>Export</span>
+                {isExporting ? <Loader2 size={14} className="animate-spin shrink-0" /> : <Download size={14} className="shrink-0" />} <span>Export</span>
               </button>
               {canCreate && (
                 <button 
                   onClick={() => setShowCreateModal(true)} 
                   className="flex-1 sm:flex-none group flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-[10px] uppercase tracking-[0.2em] shadow-xl sm:shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-emerald-500 active:scale-95 transition-all"
                 >
-                  <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300" /> <span>Record</span>
+                  <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300 shrink-0" /> <span>Record</span>
                 </button>
               )}
             </div>
@@ -435,7 +476,7 @@ export default function Experiences() {
           {loading ? <ExperienceSkeleton /> : filteredExperiences.length === 0 ? (
             <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-white/5 py-20 sm:py-32 text-center transition-all">
               <div className="p-6 sm:p-8 bg-slate-50 dark:bg-white/5 rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-6 sm:mb-8">
-                <Search size={36} className="sm:w-[48px] sm:h-[48px]" />
+                <Search size={36} className="sm:w-[48px] sm:h-[48px] shrink-0" />
               </div>
               <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Archives Empty</h3>
               <p className="text-sm sm:text-base text-slate-400 dark:text-slate-500 font-medium mt-2 sm:mt-3">No insights found. Begin by recording field wisdom.</p>
@@ -450,10 +491,10 @@ export default function Experiences() {
                     className="group bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-10 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl sm:hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] dark:hover:shadow-black/40 hover:-translate-y-1 transition-all duration-500 overflow-hidden relative cursor-pointer flex flex-col h-full"
                   >
                     <div className="flex justify-between items-start mb-6 sm:mb-8 relative z-10">
-                      <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] ${style.bg} ${style.color} group-hover:scale-110 transition-transform duration-500`}>
-                        <Icon size={24} className="sm:w-[28px] sm:h-[28px]" />
+                      <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] ${style.bg} ${style.color} group-hover:scale-110 transition-transform duration-500 shrink-0`}>
+                        <Icon size={24} className="sm:w-[28px] sm:h-[28px] shrink-0" />
                       </div>
-                      <span className={`px-3 py-1.5 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border ${exp.impact_level === 'High' ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:border-rose-500/20' : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/20'}`}>
+                      <span className={`px-3 py-1.5 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border shrink-0 ${exp.impact_level === 'High' ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:border-rose-500/20' : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/20'}`}>
                         {exp.impact_level}
                       </span>
                     </div>
@@ -470,7 +511,7 @@ export default function Experiences() {
 
                     <div className="pt-6 border-t border-slate-50 dark:border-white/5 flex items-center justify-between relative z-10 shrink-0 mt-auto">
                       <div className="flex items-center gap-3 pr-4 min-w-0">
-                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-emerald-600 shrink-0"><User size={14} /></div>
+                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-emerald-600 shrink-0"><User size={14} className="shrink-0" /></div>
                         <div className="min-w-0">
                             <p className="text-[10px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{exp.farmer_name}</p>
                             <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mt-0.5">{formatDate(exp.date_recorded)}</p>
@@ -479,14 +520,16 @@ export default function Experiences() {
                       
                       {/* COMMENT COUNT AND LIKE BUTTON */}
                       <div className="flex items-center gap-2 shrink-0">
-                        <div className="flex items-center gap-1.5 px-3 text-slate-400">
-                          <MessageSquare size={14} className="sm:w-[16px] sm:h-[16px]" />
-                          <span className="text-[10px] sm:text-xs font-black">{exp.comments_count || 0}</span>
+                        <div className="flex items-center gap-1.5 px-3 text-slate-400 shrink-0">
+                          <MessageSquare size={14} className="sm:w-[16px] sm:h-[16px] shrink-0" />
+                          <span className="text-[10px] sm:text-xs font-black">
+                            <AnimatedCounter value={exp.comments_count || 0} duration={1000} />
+                          </span>
                         </div>
 
                         <button 
                             onClick={(e) => toggleVote(exp.id, e)}
-                            className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl transition-all ${
+                            className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl transition-all shrink-0 ${
                                 exp.is_liked_by_me 
                                 ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600' 
                                 : 'bg-slate-50 dark:bg-white/5 text-slate-400 hover:text-blue-500'
@@ -494,9 +537,11 @@ export default function Experiences() {
                         >
                             <ThumbsUp 
                                 size={14} 
-                                className={`sm:w-[16px] sm:h-[16px] ${exp.is_liked_by_me ? 'fill-current' : ''}`} 
+                                className={`sm:w-[16px] sm:h-[16px] shrink-0 ${exp.is_liked_by_me ? 'fill-current' : ''}`} 
                             />
-                            <span className="text-[10px] sm:text-xs font-black">{exp.likes_count || 0}</span>
+                            <span className="text-[10px] sm:text-xs font-black">
+                              <AnimatedCounter value={exp.likes_count || 0} duration={1000} />
+                            </span>
                         </button>
                       </div>
                     </div>
@@ -515,10 +560,10 @@ export default function Experiences() {
             </p>
             <div className="flex gap-3 sm:gap-4 w-full sm:w-auto justify-center">
               <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="flex-1 sm:flex-none p-3 sm:p-4 flex justify-center bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 disabled:opacity-30 transition-all shadow-sm">
-                <ChevronLeft size={18} className="sm:w-[20px] sm:h-[20px]" />
+                <ChevronLeft size={18} className="sm:w-[20px] sm:h-[20px] shrink-0" />
               </button>
               <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="flex-1 sm:flex-none p-3 sm:p-4 flex justify-center bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-2xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 disabled:opacity-30 transition-all shadow-sm">
-                <ChevronRight size={18} className="sm:w-[20px] sm:h-[20px]" />
+                <ChevronRight size={18} className="sm:w-[20px] sm:h-[20px] shrink-0" />
               </button>
             </div>
           </div>
@@ -536,8 +581,8 @@ export default function Experiences() {
                   <h2 className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Record Experience</h2>
                   <p className="text-slate-400 dark:text-slate-500 font-medium text-xs sm:text-sm mt-0.5 sm:mt-1">Log field observations and success stories.</p>
                 </div>
-                <button onClick={() => setShowCreateModal(false)} className="p-2.5 sm:p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl sm:rounded-2xl transition-all text-slate-300 dark:text-slate-600">
-                  <X size={24} className="sm:w-[28px] sm:h-[28px]" />
+                <button onClick={() => setShowCreateModal(false)} className="p-2.5 sm:p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl sm:rounded-2xl transition-all text-slate-300 dark:text-slate-600 shrink-0">
+                  <X size={24} className="sm:w-[28px] sm:h-[28px] shrink-0" />
                 </button>
               </div>
 
@@ -552,7 +597,7 @@ export default function Experiences() {
 
                 <div className="space-y-6 sm:space-y-8">
                   <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600 dark:text-emerald-500 flex items-center gap-2 sm:gap-3">
-                    <Activity size={12} className="sm:w-[14px] sm:h-[14px]" /> Core Identity
+                    <Activity size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" /> Core Identity
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
                     <div className="space-y-2 sm:space-y-3">
@@ -586,7 +631,7 @@ export default function Experiences() {
 
                 <div className="space-y-6 sm:space-y-8 pb-6 sm:pb-10">
                   <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 dark:text-blue-500 flex items-center gap-2 sm:gap-3 border-t border-slate-100 dark:border-white/5 pt-8">
-                    <FileText size={12} className="sm:w-[14px] sm:h-[14px]" /> Detailed Context
+                    <FileText size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" /> Detailed Context
                   </p>
                   
                   <div className="space-y-2 sm:space-y-3">
@@ -621,7 +666,7 @@ export default function Experiences() {
                   disabled={submitting}
                   className="w-full sm:w-auto px-8 sm:px-12 py-4 sm:py-5 bg-emerald-600 dark:bg-emerald-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-xl sm:shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3 disabled:opacity-50"
                 >
-                  {submitting ? <Loader2 className="animate-spin sm:w-[18px] sm:h-[18px]" size={16} /> : <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />}
+                  {submitting ? <Loader2 className="animate-spin sm:w-[18px] sm:h-[18px] shrink-0" size={16} /> : <Plus size={16} className="sm:w-[18px] sm:h-[18px] shrink-0" />}
                   {submitting ? 'Processing...' : 'Record'}
                 </button>
               </div>
@@ -645,8 +690,8 @@ export default function Experiences() {
                             </span>
                             <h2 className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight pr-4">{selectedExperience.title}</h2>
                         </div>
-                        <button onClick={() => { setSelectedExperience(null); setCommentText(''); setEditingCommentId(null); }} className="p-2.5 sm:p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl sm:rounded-2xl transition-all text-slate-300 dark:text-slate-600">
-                          <X size={24} className="sm:w-[28px] sm:h-[28px]" />
+                        <button onClick={() => { setSelectedExperience(null); setCommentText(''); setEditingCommentId(null); }} className="p-2.5 sm:p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl sm:rounded-2xl transition-all text-slate-300 dark:text-slate-600 shrink-0">
+                          <X size={24} className="sm:w-[28px] sm:h-[28px] shrink-0" />
                         </button>
                     </div>
 
@@ -659,11 +704,11 @@ export default function Experiences() {
                           
                           <div className="grid grid-cols-2 gap-4 p-5 sm:p-6 bg-slate-50 dark:bg-black/20 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-white/5">
                               <div className="space-y-1 min-w-0">
-                                  <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><User size={12} className="sm:w-[14px] sm:h-[14px]"/> Contributor</span>
+                                  <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><User size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/> Contributor</span>
                                   <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">{selectedExperience.farmer_name}</p>
                               </div>
                               <div className="space-y-1 min-w-0 border-l border-slate-200 dark:border-white/10 pl-4">
-                                  <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={12} className="sm:w-[14px] sm:h-[14px]"/> Location</span>
+                                  <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/> Location</span>
                                   <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">{selectedExperience.location || 'N/A'}</p>
                               </div>
                           </div>
@@ -672,26 +717,28 @@ export default function Experiences() {
                           <div className="flex flex-wrap items-center gap-3 pt-2">
                             <button 
                               onClick={() => toggleVote(selectedExperience.id)} 
-                              className={`flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl sm:rounded-[1.25rem] font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all shadow-sm ${selectedExperience.is_liked_by_me ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'}`}
+                              className={`flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl sm:rounded-[1.25rem] font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all shadow-sm shrink-0 ${selectedExperience.is_liked_by_me ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'}`}
                             >
-                                <ThumbsUp size={14} className={selectedExperience.is_liked_by_me ? 'fill-current sm:w-[16px] sm:h-[16px]' : 'sm:w-[16px] sm:h-[16px]'}/> 
+                                <ThumbsUp size={14} className={`shrink-0 ${selectedExperience.is_liked_by_me ? 'fill-current sm:w-[16px] sm:h-[16px]' : 'sm:w-[16px] sm:h-[16px]'}`}/> 
                                 {selectedExperience.is_liked_by_me ? 'Helpful' : 'Mark Helpful'} 
-                                <span className="ml-1 px-2 py-1 bg-black/10 rounded-md text-[9px] sm:text-[10px]">{selectedExperience.likes_count || 0}</span>
+                                <span className="ml-1 px-2 py-1 bg-black/10 rounded-md text-[9px] sm:text-[10px]">
+                                  <AnimatedCounter value={selectedExperience.likes_count || 0} duration={1000} />
+                                </span>
                             </button>
-                            <button onClick={() => handleShare(selectedExperience)} className="flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white dark:bg-transparent border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-bold uppercase tracking-widest text-[10px] sm:text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm">
-                              <Share2 size={14} className="sm:w-[16px] sm:h-[16px]"/> Share
+                            <button onClick={() => handleShare(selectedExperience)} className="flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white dark:bg-transparent border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-bold uppercase tracking-widest text-[10px] sm:text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm shrink-0">
+                              <Share2 size={14} className="sm:w-[16px] sm:h-[16px] shrink-0"/> Share
                             </button>
                             
                             {/* DISABLE COMMENTS TOGGLE FOR ADMINS/CREATORS */}
                             {canCreate && (
                               <button 
                                 onClick={handleToggleComments} 
-                                className="flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white dark:bg-transparent border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-bold uppercase tracking-widest text-[10px] sm:text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm ml-auto"
+                                className="flex items-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white dark:bg-transparent border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-bold uppercase tracking-widest text-[10px] sm:text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm ml-auto shrink-0"
                               >
                                 {selectedExperience.comments_enabled === false ? (
-                                  <><Unlock size={14} className="text-emerald-500 sm:w-[16px] sm:h-[16px]" /> Enable</>
+                                  <><Unlock size={14} className="text-emerald-500 sm:w-[16px] sm:h-[16px] shrink-0" /> Enable</>
                                 ) : (
-                                  <><Lock size={14} className="text-rose-500 sm:w-[16px] sm:h-[16px]" /> Disable</>
+                                  <><Lock size={14} className="text-rose-500 sm:w-[16px] sm:h-[16px] shrink-0" /> Disable</>
                                 )}
                               </button>
                             )}
@@ -701,8 +748,8 @@ export default function Experiences() {
                         {/* Discussion / Comments Section */}
                         <div className="p-6 sm:p-10 flex-1 bg-slate-50 dark:bg-black/20">
                           <h4 className="flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-6 sm:mb-8">
-                            <MessageSquare size={16} className={selectedExperience.comments_enabled === false ? 'text-slate-400' : 'text-emerald-600'} /> 
-                            Discussion ({selectedExperience.comments?.length || 0})
+                            <MessageSquare size={16} className={`shrink-0 ${selectedExperience.comments_enabled === false ? 'text-slate-400' : 'text-emerald-600'}`} /> 
+                            Discussion (<AnimatedCounter value={selectedExperience.comments?.length || 0} duration={1000} />)
                           </h4>
 
                           <div className="space-y-4 sm:space-y-6">
@@ -725,12 +772,12 @@ export default function Experiences() {
 
                                         {/* Owner Actions: Edit / Delete */}
                                         {c.user_id === user?.id && editingCommentId !== c.id && (
-                                          <div className="flex gap-1.5 sm:gap-2 opacity-50 hover:opacity-100 transition-opacity">
-                                            <button onClick={() => handleEditCommentClick(c)} className="text-blue-500 hover:text-blue-600 p-1.5 bg-blue-50 dark:bg-blue-500/10 rounded-md">
-                                              <Edit2 size={12} className="sm:w-[14px] sm:h-[14px]" />
+                                          <div className="flex gap-1.5 sm:gap-2 opacity-50 hover:opacity-100 transition-opacity shrink-0">
+                                            <button onClick={() => handleEditCommentClick(c)} className="text-blue-500 hover:text-blue-600 p-1.5 bg-blue-50 dark:bg-blue-500/10 rounded-md shrink-0">
+                                              <Edit2 size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" />
                                             </button>
-                                            <button onClick={() => handleDeleteComment(c.id)} className="text-rose-500 hover:text-rose-600 p-1.5 bg-rose-50 dark:bg-rose-500/10 rounded-md">
-                                              <Trash2 size={12} className="sm:w-[14px] sm:h-[14px]" />
+                                            <button onClick={() => handleDeleteComment(c.id)} className="text-rose-500 hover:text-rose-600 p-1.5 bg-rose-50 dark:bg-rose-500/10 rounded-md shrink-0">
+                                              <Trash2 size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" />
                                             </button>
                                           </div>
                                         )}
@@ -745,8 +792,8 @@ export default function Experiences() {
                                             className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-emerald-500/50 dark:text-white transition-all resize-none min-h-[60px]"
                                           />
                                           <div className="flex justify-end gap-2">
-                                            <button onClick={handleCancelEdit} className="text-[9px] sm:text-[10px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white uppercase tracking-widest px-3 py-1.5">Cancel</button>
-                                            <button onClick={() => handleSaveEditComment(c.id)} disabled={!editCommentText.trim()} className="text-[9px] sm:text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg uppercase tracking-widest px-4 py-1.5 disabled:opacity-50 transition-colors">Save Edit</button>
+                                            <button onClick={handleCancelEdit} className="text-[9px] sm:text-[10px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white uppercase tracking-widest px-3 py-1.5 shrink-0">Cancel</button>
+                                            <button onClick={() => handleSaveEditComment(c.id)} disabled={!editCommentText.trim()} className="text-[9px] sm:text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg uppercase tracking-widest px-4 py-1.5 disabled:opacity-50 transition-colors shrink-0">Save Edit</button>
                                           </div>
                                         </div>
                                       ) : (
@@ -756,13 +803,13 @@ export default function Experiences() {
                                     </div>
                                     
                                     {/* COMMENT LIKE/DISLIKE FEATURE */}
-                                    <div className="flex items-center gap-3 px-2">
+                                    <div className="flex items-center gap-3 px-2 shrink-0">
                                       <button 
                                         onClick={() => handleToggleCommentLike(c.id)}
-                                        className={`flex items-center gap-1.5 text-[10px] font-bold transition-colors ${c.is_liked_by_me ? 'text-blue-500' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                                        className={`flex items-center gap-1.5 text-[10px] font-bold transition-colors shrink-0 ${c.is_liked_by_me ? 'text-blue-500' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
                                       >
-                                        <ThumbsUp size={12} className={c.is_liked_by_me ? 'fill-current' : ''} />
-                                        <span>{c.likes_count || 0}</span>
+                                        <ThumbsUp size={12} className={`shrink-0 ${c.is_liked_by_me ? 'fill-current' : ''}`} />
+                                        <span><AnimatedCounter value={c.likes_count || 0} duration={800} /></span>
                                       </button>
                                     </div>
                                   </div>
@@ -772,13 +819,13 @@ export default function Experiences() {
                               <div className="text-center py-10 sm:py-16 bg-white dark:bg-[#0b241f] rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-white/10 shadow-sm">
                                 {selectedExperience.comments_enabled === false ? (
                                   <>
-                                    <Lock size={28} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                                    <Lock size={28} className="mx-auto text-slate-300 dark:text-slate-600 mb-3 shrink-0" />
                                     <p className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Discussion Locked</p>
                                     <p className="text-[10px] sm:text-xs text-slate-400 mt-1 font-medium">Comments are turned off for this experience.</p>
                                   </>
                                 ) : (
                                   <>
-                                    <MessageSquare size={28} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                                    <MessageSquare size={28} className="mx-auto text-slate-300 dark:text-slate-600 mb-3 shrink-0" />
                                     <p className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">No field notes yet</p>
                                     <p className="text-[10px] sm:text-xs text-slate-400 mt-1 font-medium">Be the first to share your perspective.</p>
                                   </>
@@ -811,13 +858,13 @@ export default function Experiences() {
                                 className="px-6 sm:px-8 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/30 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 shrink-0 h-[44px] sm:h-[52px]"
                               >
                                 <span className="hidden sm:inline">Post</span>
-                                <Send size={16} className="sm:w-[18px] sm:h-[18px]" />
+                                <Send size={16} className="sm:w-[18px] sm:h-[18px] shrink-0" />
                               </button>
                             </form>
                           ) : (
                             <div className="w-full py-4 sm:py-5 bg-slate-50 dark:bg-white/5 rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 text-center">
                               <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
-                                <Lock size={14} /> Comments have been disabled
+                                <Lock size={14} className="shrink-0" /> Comments have been disabled
                               </p>
                             </div>
                           )}

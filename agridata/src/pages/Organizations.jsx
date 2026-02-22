@@ -10,6 +10,47 @@ import {
 
 const ORG_TYPES = ['Cooperative', 'Government', 'NGO', 'Private', 'Association'];
 
+// --- COMPONENT: Smooth Count-Up Animation ---
+const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime = null;
+    const endValue = parseFloat(value) || 0;
+    
+    if (endValue === 0) {
+      setCount(0);
+      return;
+    }
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      
+      const easeProgress = 1 - Math.pow(1 - progress, 4); 
+      setCount(endValue * easeProgress);
+
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        setCount(endValue);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }, [value, duration]);
+
+  return (
+    <>
+      {prefix}
+      {count.toLocaleString('en-US', { 
+        minimumFractionDigits: decimals, 
+        maximumFractionDigits: decimals 
+      })}
+    </>
+  );
+};
+
 // --- SKELETON COMPONENT ---
 const OrganizationSkeleton = () => (
   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8 px-4 sm:px-0">
@@ -226,9 +267,9 @@ export default function Organizations() {
           {canManage && (
             <button 
               onClick={() => setShowModal(true)} 
-              className="w-full lg:w-auto group flex items-center justify-center gap-3 px-6 sm:px-8 py-3.5 sm:py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-xl sm:shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-blue-500 active:scale-95 transition-all mt-2 lg:mt-0"
+              className="w-full lg:w-auto group flex items-center justify-center gap-3 px-6 sm:px-8 py-3.5 sm:py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-xl sm:shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-blue-500 active:scale-95 transition-all mt-2 lg:mt-0 shrink-0"
             >
-              <Plus size={16} className="sm:w-[18px] sm:h-[18px] group-hover:rotate-90 transition-transform duration-300" />
+              <Plus size={16} className="sm:w-[18px] sm:h-[18px] group-hover:rotate-90 transition-transform duration-300 shrink-0" />
               <span>Register Entity</span>
             </button>
           )}
@@ -247,7 +288,9 @@ export default function Organizations() {
               </div>
               <div className="min-w-0 relative z-10">
                 <p className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5 sm:mb-1">{stat.label}</p>
-                <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">{stat.val}</p>
+                <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">
+                  <AnimatedCounter value={stat.val} duration={1000} />
+                </p>
               </div>
               <div className={`absolute -right-6 -bottom-6 w-20 h-20 sm:w-24 sm:h-24 rounded-full ${stat.bg} opacity-10 dark:opacity-5 group-hover:scale-150 transition-transform duration-700 pointer-events-none`} />
             </div>
@@ -259,7 +302,7 @@ export default function Organizations() {
           
           <div className="bg-white dark:bg-[#0b241f] rounded-xl sm:rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm p-1.5 sm:p-2 flex items-center transition-colors flex-[2] w-full">
             <div className="relative flex-1 w-full">
-              <Search size={16} className="sm:w-[20px] sm:h-[20px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <Search size={16} className="sm:w-[20px] sm:h-[20px] absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 shrink-0" />
               <input 
                 type="text" 
                 placeholder="Search partner network..." 
@@ -285,10 +328,10 @@ export default function Organizations() {
 
             <div className="flex gap-2 shrink-0">
                 <button onClick={handleSort} className="p-3 sm:p-4 bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-[2rem] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-sm flex items-center justify-center w-12 sm:w-14">
-                    <ArrowUpDown size={18} className={`sm:w-[20px] sm:h-[20px] ${sortConfig.direction === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'}`}/>
+                    <ArrowUpDown size={18} className={`sm:w-[20px] sm:h-[20px] shrink-0 ${sortConfig.direction === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'}`}/>
                 </button>
                 <button onClick={handleExport} disabled={isExporting} className="p-3 sm:p-4 bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-[2rem] text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shadow-sm flex items-center justify-center w-12 sm:w-14">
-                    {isExporting ? <Loader2 className="animate-spin sm:w-[20px] sm:h-[20px]" size={18}/> : <Download size={18} className="sm:w-[20px] sm:h-[20px]" />}
+                    {isExporting ? <Loader2 className="animate-spin sm:w-[20px] sm:h-[20px] shrink-0" size={18}/> : <Download size={18} className="sm:w-[20px] sm:h-[20px] shrink-0" />}
                 </button>
             </div>
           </div>
@@ -301,7 +344,7 @@ export default function Organizations() {
           ) : paginated.length === 0 ? (
             <div className="py-20 sm:py-32 bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-white/10 text-center transition-colors">
               <div className="p-6 sm:p-8 bg-slate-50 dark:bg-white/5 rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-6 sm:mb-8">
-                <Building size={36} className="sm:w-[48px] sm:h-[48px]" />
+                <Building size={36} className="sm:w-[48px] sm:h-[48px] shrink-0" />
               </div>
               <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">No Organizations Found</h3>
               <p className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-medium mt-2 sm:mt-3 px-4">Try refining your search or filters.</p>
@@ -313,26 +356,26 @@ export default function Organizations() {
                   
                   {/* Action Menu: Conditional Rendering based on permissions */}
                   <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex gap-1.5 sm:gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 z-10">
-                    <button onClick={() => handleView(org)} className="p-1.5 sm:p-2 bg-white dark:bg-black/40 backdrop-blur-md hover:text-emerald-500 rounded-lg sm:rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10" title="View Profile"><Eye size={14} className="sm:w-[16px] sm:h-[16px]" /></button>
+                    <button onClick={() => handleView(org)} className="p-1.5 sm:p-2 bg-white dark:bg-black/40 backdrop-blur-md hover:text-emerald-500 rounded-lg sm:rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10 shrink-0" title="View Profile"><Eye size={14} className="sm:w-[16px] sm:h-[16px] shrink-0" /></button>
                     
                     {/* HIDE FOR VIEWERS */}
                     {canManage && (
                       <>
-                        <button onClick={() => handleEdit(org)} className="p-1.5 sm:p-2 bg-white dark:bg-black/40 backdrop-blur-md hover:text-blue-600 rounded-lg sm:rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10" title="Edit Entity"><Edit2 size={14} className="sm:w-[16px] sm:h-[16px]" /></button>
-                        <button onClick={() => handleDelete(org.id)} className="p-1.5 sm:p-2 bg-white dark:bg-black/40 backdrop-blur-md hover:text-rose-600 rounded-lg sm:rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10" title="Remove Entity"><Trash2 size={14} className="sm:w-[16px] sm:h-[16px]" /></button>
+                        <button onClick={() => handleEdit(org)} className="p-1.5 sm:p-2 bg-white dark:bg-black/40 backdrop-blur-md hover:text-blue-600 rounded-lg sm:rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10 shrink-0" title="Edit Entity"><Edit2 size={14} className="sm:w-[16px] sm:h-[16px] shrink-0" /></button>
+                        <button onClick={() => handleDelete(org.id)} className="p-1.5 sm:p-2 bg-white dark:bg-black/40 backdrop-blur-md hover:text-rose-600 rounded-lg sm:rounded-xl transition-colors text-slate-400 border border-slate-100 dark:border-white/10 shrink-0" title="Remove Entity"><Trash2 size={14} className="sm:w-[16px] sm:h-[16px] shrink-0" /></button>
                       </>
                     )}
                   </div>
 
                   <div className="mt-4 sm:mt-0">
                     <div className="flex items-start justify-between mb-4 sm:mb-6">
-                      <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-colors ${getTypeStyle(org.type)}`}>
-                        <Building size={20} className="sm:w-[24px] sm:h-[24px]" />
+                      <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-colors shrink-0 ${getTypeStyle(org.type)}`}>
+                        <Building size={20} className="sm:w-[24px] sm:h-[24px] shrink-0" />
                       </div>
                     </div>
 
                     <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white leading-tight mb-1.5 sm:mb-2 uppercase tracking-tight pr-12 line-clamp-2">{org.name}</h3>
-                    <span className={`inline-block px-2.5 py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-black uppercase tracking-widest border mb-3 sm:mb-4 transition-colors ${getTypeStyle(org.type)}`}>
+                    <span className={`inline-block px-2.5 py-1 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-black uppercase tracking-widest border mb-3 sm:mb-4 transition-colors shrink-0 ${getTypeStyle(org.type)}`}>
                       {org.type || 'Organization'}
                     </span>
                     
@@ -358,11 +401,11 @@ export default function Organizations() {
                 Page <span className="text-slate-900 dark:text-white">{currentPage}</span> of {totalPages}
             </p>
             <div className="flex gap-3 sm:gap-4 w-full sm:w-auto justify-center">
-                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="flex-1 sm:flex-none p-3 sm:p-4 flex justify-center bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-2xl text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30 transition-all shadow-sm">
-                <ChevronLeft size={18} className="sm:w-[20px] sm:h-[20px]" />
+                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="flex-1 sm:flex-none p-3 sm:p-4 flex justify-center bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-2xl text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30 transition-all shadow-sm shrink-0">
+                <ChevronLeft size={18} className="sm:w-[20px] sm:h-[20px] shrink-0" />
                 </button>
-                <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="flex-1 sm:flex-none p-3 sm:p-4 flex justify-center bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-2xl text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30 transition-all shadow-sm">
-                <ChevronRight size={18} className="sm:w-[20px] sm:h-[20px]" />
+                <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="flex-1 sm:flex-none p-3 sm:p-4 flex justify-center bg-white dark:bg-[#041d18] border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-2xl text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30 transition-all shadow-sm shrink-0">
+                <ChevronRight size={18} className="sm:w-[20px] sm:h-[20px] shrink-0" />
                 </button>
             </div>
             </div>
@@ -375,29 +418,29 @@ export default function Organizations() {
                 <div className="relative bg-white dark:bg-[#041d18] rounded-none sm:rounded-[3rem] shadow-2xl w-full h-full sm:h-auto sm:max-w-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-500 border-none sm:border dark:border-white/5">
                     <div className="p-6 sm:p-8 border-b border-slate-100 dark:border-white/5 flex justify-between items-start bg-slate-50/50 dark:bg-black/20 shrink-0 pt-safe">
                         <h3 className="text-[10px] sm:text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                            <Globe size={14} /> Entity Profile
+                            <Globe size={14} className="shrink-0" /> Entity Profile
                         </h3>
-                        <button onClick={closeModal} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-full text-slate-400 transition-colors shrink-0"><X size={20} className="sm:w-[24px] sm:h-[24px]" /></button>
+                        <button onClick={closeModal} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-full text-slate-400 transition-colors shrink-0"><X size={20} className="sm:w-[24px] sm:h-[24px] shrink-0" /></button>
                     </div>
                     <div className="p-6 sm:p-10 space-y-6 sm:space-y-8 overflow-y-auto no-scrollbar flex-1 pb-safe">
                         <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-6">
                             <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl sm:rounded-[1.5rem] flex items-center justify-center shrink-0 border ${getTypeStyle(selectedOrg.type)}`}>
-                                <Building size={32} className="sm:w-[48px] sm:h-[48px]" />
+                                <Building size={32} className="sm:w-[48px] sm:h-[48px] shrink-0" />
                             </div>
                             <div className="min-w-0">
                                 <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white uppercase leading-tight mb-2 tracking-tight">{selectedOrg.name}</h2>
-                                <span className={`inline-block px-3 py-1 rounded-md sm:rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest border transition-colors ${getTypeStyle(selectedOrg.type)}`}>
+                                <span className={`inline-block px-3 py-1 rounded-md sm:rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest border transition-colors shrink-0 ${getTypeStyle(selectedOrg.type)}`}>
                                     {selectedOrg.type || 'Organization'}
                                 </span>
                             </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                             <div className="p-5 sm:p-6 bg-slate-50 dark:bg-white/5 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-white/5">
-                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 sm:mb-2 flex items-center justify-center sm:justify-start gap-2"><MapPin size={14}/> Base of Operations</p>
+                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 sm:mb-2 flex items-center justify-center sm:justify-start gap-2"><MapPin size={14} className="shrink-0"/> Base of Operations</p>
                                 <p className="text-sm font-bold text-slate-800 dark:text-slate-200 text-center sm:text-left">{selectedOrg.location || 'N/A'}</p>
                             </div>
                             <div className="p-5 sm:p-6 bg-slate-50 dark:bg-white/5 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-white/5 md:col-span-2">
-                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 sm:mb-2 flex items-center justify-center sm:justify-start gap-2"><Briefcase size={14}/> Institutional Mandate</p>
+                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 sm:mb-2 flex items-center justify-center sm:justify-start gap-2"><Briefcase size={14} className="shrink-0"/> Institutional Mandate</p>
                                 <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400 leading-relaxed text-center sm:text-left">{selectedOrg.description || 'No description provided.'}</p>
                             </div>
                         </div>
@@ -459,13 +502,13 @@ export default function Organizations() {
               </form>
 
               <div className="px-6 sm:px-10 py-6 sm:py-8 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5 flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-6 shrink-0">
-                <button type="button" onClick={closeModal} className="w-full sm:w-auto px-6 sm:px-10 py-3.5 sm:py-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-600 bg-white dark:bg-transparent rounded-xl sm:rounded-none border border-slate-200 sm:border-none dark:border-white/10 hover:text-slate-600 dark:hover:text-slate-400 transition-colors text-center">Cancel</button>
+                <button type="button" onClick={closeModal} className="w-full sm:w-auto px-6 sm:px-10 py-3.5 sm:py-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-600 bg-white dark:bg-transparent rounded-xl sm:rounded-none border border-slate-200 sm:border-none dark:border-white/10 hover:text-slate-600 dark:hover:text-slate-400 transition-colors text-center shrink-0">Cancel</button>
                 <button 
                   onClick={handleSubmit} 
                   disabled={submitting}
-                  className="w-full sm:w-auto px-8 sm:px-12 py-3.5 sm:py-5 bg-blue-600 dark:bg-blue-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-xl sm:shadow-2xl shadow-blue-200 dark:shadow-none hover:bg-blue-500 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3 disabled:opacity-50"
+                  className="w-full sm:w-auto px-8 sm:px-12 py-3.5 sm:py-5 bg-blue-600 dark:bg-blue-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-xl sm:shadow-2xl shadow-blue-200 dark:shadow-none hover:bg-blue-500 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3 disabled:opacity-50 shrink-0"
                 >
-                  {submitting ? <Loader2 className="animate-spin sm:w-[18px] sm:h-[18px]" size={16} /> : <Save size={16} className="sm:w-[18px] sm:h-[18px]" />}
+                  {submitting ? <Loader2 className="animate-spin sm:w-[18px] sm:h-[18px] shrink-0" size={16} /> : <Save size={16} className="sm:w-[18px] sm:h-[18px] shrink-0" />}
                   <span>{editingOrg ? 'Save Changes' : 'Register Entity'}</span>
                 </button>
               </div>

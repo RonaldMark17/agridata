@@ -8,6 +8,47 @@ import {
   MapPin 
 } from 'lucide-react';
 
+// --- COMPONENT: Smooth Count-Up Animation ---
+const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime = null;
+    const endValue = parseFloat(value) || 0;
+    
+    if (endValue === 0) {
+      setCount(0);
+      return;
+    }
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      
+      const easeProgress = 1 - Math.pow(1 - progress, 4); 
+      setCount(endValue * easeProgress);
+
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        setCount(endValue);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }, [value, duration]);
+
+  return (
+    <>
+      {prefix}
+      {count.toLocaleString('en-US', { 
+        minimumFractionDigits: decimals, 
+        maximumFractionDigits: decimals 
+      })}
+    </>
+  );
+};
+
 // --- Skeleton Component (Responsive) ---
 const LogSkeleton = () => (
   <div className="space-y-6 animate-pulse px-2 sm:px-4">
@@ -192,7 +233,9 @@ export default function ActivityLogs() {
                 <div className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl ${filterAction === stat.key && stat.key !== '' ? 'bg-white/10 text-white' : `${stat.bg} ${stat.color}`} group-hover:scale-110 transition-transform shrink-0`}>
                   <stat.icon size={18} className="sm:w-[22px] sm:h-[22px]" />
                 </div>
-                <span className={`text-xl sm:text-3xl font-black tracking-tighter ${filterAction === stat.key && stat.key !== '' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>{stat.val}</span>
+                <span className={`text-xl sm:text-3xl font-black tracking-tighter ${filterAction === stat.key && stat.key !== '' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                  <AnimatedCounter value={stat.val} duration={1000} />
+                </span>
               </div>
               <p className={`text-[8px] sm:text-[10px] font-black uppercase tracking-widest relative z-10 truncate pr-2 ${filterAction === stat.key && stat.key !== '' ? 'text-white/70' : 'text-slate-400 dark:text-slate-500'}`}>{stat.label}</p>
               <div className={`absolute -right-4 -bottom-4 w-16 h-16 sm:w-20 sm:h-20 rounded-full ${stat.bg} opacity-10 dark:opacity-5 group-hover:scale-150 transition-transform duration-700 pointer-events-none`} />

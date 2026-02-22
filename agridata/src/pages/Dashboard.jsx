@@ -18,6 +18,48 @@ import {
 // --- Configuration ---
 const CHART_COLORS = ['#059669', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0'];
 
+// --- Smooth Count-Up Animation Component ---
+const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime = null;
+    const endValue = parseFloat(value) || 0;
+    
+    if (endValue === 0) {
+      setCount(0);
+      return;
+    }
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      
+      // Quartic ease-out function for a smooth slow-down at the end
+      const easeProgress = 1 - Math.pow(1 - progress, 4); 
+      setCount(endValue * easeProgress);
+
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        setCount(endValue);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }, [value, duration]);
+
+  return (
+    <>
+      {prefix}
+      {count.toLocaleString('en-US', { 
+        minimumFractionDigits: decimals, 
+        maximumFractionDigits: decimals 
+      })}
+    </>
+  );
+};
+
 // --- Skeleton Component ---
 const DashboardSkeleton = () => (
   <div className="space-y-6 sm:space-y-8 p-4 sm:p-8 bg-[#f8fafc] dark:bg-[#020c0a] min-h-screen animate-pulse">
@@ -75,7 +117,7 @@ export default function Dashboard() {
 
   const [stats, setStats] = useState(null);
   const [recentLogs, setRecentLogs] = useState([]);
-  const [commodities, setCommodities] = useState([]); // NEW STATE FOR COMMODITIES
+  const [commodities, setCommodities] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -186,10 +228,8 @@ export default function Dashboard() {
         setRecentLogs([]); 
       }
 
-      // FETCH FUNCTIONAL COMMODITIES 
       try {
         const prodRes = await productsAPI.getAll();
-        // Limit to top 4 for the UI card layout
         setCommodities(prodRes.data.slice(0, 4));
       } catch (prodError) {
         console.warn("Could not load products", prodError);
@@ -288,7 +328,6 @@ export default function Dashboard() {
                 <span>{currentTime.toLocaleTimeString()}</span>
               </div>
               
-              {/* DYNAMIC Weather Context Widget */}
               <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-3 sm:py-1 rounded-lg text-[10px] sm:text-xs font-bold border transition-colors duration-500 w-fit ${wConfig.color} ${wConfig.bg} ${wConfig.border}`}>
                 {weather.loading ? (
                   <>
@@ -308,7 +347,6 @@ export default function Dashboard() {
         
         {/* Right Side Control Bar */}
         <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 bg-white dark:bg-[#0b241f] p-2 rounded-2xl sm:rounded-[1.25rem] border border-slate-100 dark:border-white/5 shadow-sm w-full xl:w-auto">
-          {/* FUNCTIONAL TIME FILTER */}
           <div className="flex w-full sm:w-auto bg-slate-50 dark:bg-white/5 rounded-xl p-1 overflow-x-auto no-scrollbar">
             {['all', 'month', 'year'].map((range) => (
               <button
@@ -348,7 +386,7 @@ export default function Dashboard() {
               <div className="space-y-2 sm:space-y-4">
                 <p className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">{stat.label}</p>
                 <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tighter">
-                  {stat.value.toLocaleString()}
+                  <AnimatedCounter value={stat.value} />
                 </h3>
                 <div className="flex items-center gap-1 sm:gap-2 flex-wrap mt-1 sm:mt-0">
                   <div className={`flex items-center gap-1 text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-full ${stat.up ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600' : 'bg-rose-50 dark:bg-rose-500/10 text-rose-600'}`}>
@@ -383,15 +421,23 @@ export default function Dashboard() {
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 relative z-10">
               <div className="p-4 sm:p-5 bg-slate-50 dark:bg-black/20 rounded-2xl border border-slate-100 dark:border-white/5 flex flex-col gap-2">
                  <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5"><Clock size={12}/> Avg Age</span>
-                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">{stats.summary_analysis.average_farmer_age} <span className="text-[10px] sm:text-xs text-slate-400 font-bold">YRS</span></p>
+                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
+                   <AnimatedCounter value={stats.summary_analysis.average_farmer_age} decimals={1} /> 
+                   <span className="text-[10px] sm:text-xs text-slate-400 font-bold ml-1">YRS</span>
+                 </p>
               </div>
               <div className="p-4 sm:p-5 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 flex flex-col gap-2">
                  <span className="text-[9px] sm:text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-500 tracking-widest flex items-center gap-1.5"><Coins size={12}/> Avg Income</span>
-                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">₱{stats.summary_analysis.average_annual_income.toLocaleString()}</p>
+                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
+                   <AnimatedCounter value={stats.summary_analysis.average_annual_income} decimals={0} prefix="₱" />
+                 </p>
               </div>
               <div className="p-4 sm:p-5 bg-blue-50 dark:bg-blue-500/10 rounded-2xl border border-blue-100 dark:border-blue-500/20 flex flex-col gap-2">
                  <span className="text-[9px] sm:text-[10px] font-black uppercase text-blue-600 dark:text-blue-500 tracking-widest flex items-center gap-1.5"><Ruler size={12}/> Avg Land</span>
-                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">{stats.summary_analysis.average_land_size_ha} <span className="text-[10px] sm:text-xs text-blue-400 font-bold">HA</span></p>
+                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
+                   <AnimatedCounter value={stats.summary_analysis.average_land_size_ha} decimals={2} /> 
+                   <span className="text-[10px] sm:text-xs text-blue-400 font-bold ml-1">HA</span>
+                 </p>
               </div>
               <div className="p-4 sm:p-5 bg-amber-50 dark:bg-amber-500/10 rounded-2xl border border-amber-100 dark:border-amber-500/20 flex flex-col gap-2">
                  <span className="text-[9px] sm:text-[10px] font-black uppercase text-amber-600 dark:text-amber-500 tracking-widest flex items-center gap-1.5"><Compass size={12}/> Top Area</span>
@@ -399,7 +445,10 @@ export default function Dashboard() {
               </div>
               <div className="col-span-2 lg:col-span-1 p-4 sm:p-5 bg-purple-50 dark:bg-purple-500/10 rounded-2xl border border-purple-100 dark:border-purple-500/20 flex flex-col gap-2">
                  <span className="text-[9px] sm:text-[10px] font-black uppercase text-purple-600 dark:text-purple-500 tracking-widest flex items-center gap-1.5"><Users size={12}/> Sys Users</span>
-                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">{stats.summary_analysis.total_system_users} <span className="text-[10px] sm:text-xs text-purple-400 font-bold">ACTIVE</span></p>
+                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
+                   <AnimatedCounter value={stats.summary_analysis.total_system_users} /> 
+                   <span className="text-[10px] sm:text-xs text-purple-400 font-bold ml-1">ACTIVE</span>
+                 </p>
               </div>
            </div>
         </div>
@@ -474,7 +523,6 @@ export default function Dashboard() {
           
           <div className="flex-1 w-full min-h-0">
             <ResponsiveContainer width="100%" height="100%">
-              {/* SLICE THE ARRAY TO ONLY SHOW TOP 5 IN THE CHART */}
               <BarChart data={(stats?.product_stats || []).slice(0, 5)} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
                 <defs>
                   <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
@@ -513,13 +561,12 @@ export default function Dashboard() {
         <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
           <div className="flex items-center justify-between mb-6 sm:mb-8">
              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="p-2 sm:p-2.5 bg-slate-900 rounded-lg sm:rounded-xl text-white"><Terminal size={16} className="sm:w-[18px] sm:h-[18px]" /></div>
+                <div className="p-2 sm:p-2.5 bg-slate-900 rounded-lg sm:rounded-xl text-white shrink-0"><Terminal size={16} className="sm:w-[18px] sm:h-[18px]" /></div>
                 <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Audit Snapshot</h3>
              </div>
              
-             {/* HIDE FULL TRAIL FROM VIEWERS */}
              {!isViewer && (
-               <button onClick={() => navigate('/logs')} className="text-[9px] sm:text-[10px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest flex items-center gap-1 group">
+               <button onClick={() => navigate('/logs')} className="text-[9px] sm:text-[10px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest flex items-center gap-1 group shrink-0">
                  Full Trail <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
                </button>
              )}
@@ -551,10 +598,10 @@ export default function Dashboard() {
         <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
           <div className="flex items-center justify-between mb-6 sm:mb-8">
              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="p-2 sm:p-2.5 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-lg sm:rounded-xl"><Wheat size={16} className="sm:w-[18px] sm:h-[18px]" /></div>
+                <div className="p-2 sm:p-2.5 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-lg sm:rounded-xl shrink-0"><Wheat size={16} className="sm:w-[18px] sm:h-[18px]" /></div>
                 <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Commodities</h3>
              </div>
-             <button onClick={() => navigate('/products')} className="text-[9px] sm:text-[10px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest flex items-center gap-1 group">
+             <button onClick={() => navigate('/products')} className="text-[9px] sm:text-[10px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest flex items-center gap-1 group shrink-0">
                Registry <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
              </button>
           </div>
@@ -581,11 +628,11 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* System Analytics & Diagnostics (FUNCTIONAL) */}
+        {/* System Analytics & Diagnostics */}
         <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
           <div className="flex items-center justify-between mb-6 sm:mb-8">
              <div className="flex items-center gap-2 sm:gap-3">
-                <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl ${sysHealth.isOnline ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' : 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400'}`}>
+                <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl shrink-0 ${sysHealth.isOnline ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' : 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400'}`}>
                   <Server size={16} className="sm:w-[18px] sm:h-[18px]" />
                 </div>
                 <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">System Health</h3>
@@ -596,11 +643,11 @@ export default function Dashboard() {
             {/* DATABASE STATUS */}
             <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
               <div className="flex items-center gap-2 sm:gap-3">
-                <Database size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px]" />
+                <Database size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
                 <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">Database</span>
               </div>
               <span className={`text-[10px] sm:text-xs font-black flex items-center gap-1 ${sysHealth.isOnline ? 'text-emerald-600' : 'text-rose-500'}`}>
-                {sysHealth.isOnline ? <ShieldCheck size={12} className="sm:w-[14px] sm:h-[14px]"/> : <AlertCircle size={12} className="sm:w-[14px] sm:h-[14px]"/>}
+                {sysHealth.isOnline ? <ShieldCheck size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/> : <AlertCircle size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/>}
                 {sysHealth.dbStatus}
               </span>
             </div>
@@ -608,7 +655,7 @@ export default function Dashboard() {
             {/* API LATENCY */}
             <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
               <div className="flex items-center gap-2 sm:gap-3">
-                <Activity size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px]" />
+                <Activity size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
                 <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">API Latency</span>
               </div>
               <span className={`text-[10px] sm:text-xs font-black ${
@@ -616,7 +663,7 @@ export default function Dashboard() {
                 sysHealth.latency < 100 ? 'text-blue-600' : 
                 sysHealth.latency < 300 ? 'text-amber-500' : 'text-rose-500'
               }`}>
-                {!sysHealth.isOnline ? 'ERR' : `${sysHealth.latency}ms`} 
+                {!sysHealth.isOnline ? 'ERR' : <><AnimatedCounter value={sysHealth.latency} duration={500}/>ms</>} 
                 {sysHealth.isOnline && sysHealth.latency < 100 && ' (Opt)'}
               </span>
             </div>
@@ -624,7 +671,7 @@ export default function Dashboard() {
             {/* SERVER LOAD */}
             <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
               <div className="flex items-center gap-2 sm:gap-3">
-                <Thermometer size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px]" />
+                <Thermometer size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
                 <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">Server Load</span>
               </div>
               <div className="flex items-center gap-2">
@@ -634,7 +681,9 @@ export default function Dashboard() {
                     style={{ width: `${sysHealth.serverLoad}%` }}
                   ></div>
                 </div>
-                <span className="text-[10px] sm:text-xs font-black text-slate-500 w-8 text-right">{sysHealth.serverLoad}%</span>
+                <span className="text-[10px] sm:text-xs font-black text-slate-500 w-8 text-right">
+                  <AnimatedCounter value={sysHealth.serverLoad} duration={500}/>%
+                </span>
               </div>
             </div>
 
@@ -688,7 +737,7 @@ export default function Dashboard() {
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">All Territories</h2>
                 <p className="text-slate-400 dark:text-slate-500 text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-1">Complete Regional Distribution</p>
               </div>
-              <button onClick={() => setShowAllBarangaysModal(false)} className="p-2 sm:p-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-all text-slate-400">
+              <button onClick={() => setShowAllBarangaysModal(false)} className="p-2 sm:p-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-all text-slate-400 shrink-0">
                 <X size={20} className="sm:w-[24px] sm:h-[24px]" />
               </button>
             </div>
@@ -707,7 +756,7 @@ export default function Dashboard() {
                   >
                     <div className="flex items-center gap-3 min-w-0 pr-2">
                       <div className="p-2 bg-white dark:bg-[#0b241f] rounded-lg text-emerald-600 shadow-sm shrink-0">
-                        <MapPin size={14} className="sm:w-[16px] sm:h-[16px]" />
+                        <MapPin size={14} className="sm:w-[16px] sm:h-[16px] shrink-0" />
                       </div>
                       <span className="font-bold text-slate-700 dark:text-slate-200 text-xs sm:text-sm truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
                         {b.barangay}

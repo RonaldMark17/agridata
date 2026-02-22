@@ -42,6 +42,47 @@ const getCropColor = (cropName) => {
   return fallbackColors[hash % fallbackColors.length];
 };
 
+// --- COMPONENT: Smooth Count-Up Animation ---
+const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime = null;
+    const endValue = parseFloat(value) || 0;
+    
+    if (endValue === 0) {
+      setCount(0);
+      return;
+    }
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      
+      const easeProgress = 1 - Math.pow(1 - progress, 4); 
+      setCount(endValue * easeProgress);
+
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        setCount(endValue);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }, [value, duration]);
+
+  return (
+    <>
+      {prefix}
+      {count.toLocaleString('en-US', { 
+        minimumFractionDigits: decimals, 
+        maximumFractionDigits: decimals 
+      })}
+    </>
+  );
+};
+
 // --- COMPONENT: Map Controller for Fly-To Animation ---
 function MapController({ center, zoom }) {
   const map = useMap();
@@ -281,7 +322,10 @@ export default function GeospatialMapping() {
             </div>
             <div>
               <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Farmers Mapped</p>
-              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">{totalFarmers.toLocaleString()}</p>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">
+                {/* DYNAMIC COUNT UP ADDED HERE */}
+                <AnimatedCounter value={totalFarmers} />
+              </p>
             </div>
           </div>
         </div>

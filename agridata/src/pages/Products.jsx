@@ -1,11 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import { productsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Plus, X, Search, Filter, Wheat, 
+import {
+  Plus, X, Search, Filter, Wheat,
   Dog, Bird, Fish, Trees, Box, Info, Activity, ChevronRight, Loader2,
   Edit, Trash2, Download, Eye, ArrowUpDown, AlertCircle, Save
 } from 'lucide-react';
+
+// --- COMPONENT: Smooth Count-Up Animation ---
+const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime = null;
+    const endValue = parseFloat(value) || 0;
+    
+    if (endValue === 0) {
+      setCount(0);
+      return;
+    }
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      
+      const easeProgress = 1 - Math.pow(1 - progress, 4); 
+      setCount(endValue * easeProgress);
+
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        setCount(endValue);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }, [value, duration]);
+
+  return (
+    <>
+      {prefix}
+      {count.toLocaleString('en-US', { 
+        minimumFractionDigits: decimals, 
+        maximumFractionDigits: decimals 
+      })}
+    </>
+  );
+};
 
 // --- Compact Skeleton Component ---
 const ProductSkeleton = () => (
@@ -41,15 +82,15 @@ export default function Products() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  
+
   const [showModal, setShowModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
-  
+
   const [editingProduct, setEditingProduct] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [filterCategory, setFilterCategory] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortOrder, setSortOrder] = useState('asc'); 
+  const [sortOrder, setSortOrder] = useState('asc');
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState('');
 
@@ -163,7 +204,7 @@ export default function Products() {
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans transition-colors duration-300 pb-20 relative overflow-x-hidden">
       <div className="max-w-[1400px] mx-auto space-y-6 sm:space-y-10 animate-in fade-in duration-700">
-        
+
         {/* Compact Header */}
         <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 px-4 pt-4 sm:pt-8">
           <div>
@@ -176,18 +217,29 @@ export default function Products() {
             <h1 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Commodities</h1>
             <p className="hidden sm:block text-slate-500 dark:text-slate-400 font-medium mt-1">Centralized database for regional agricultural outputs.</p>
           </div>
-          
+
           <div className="flex gap-2 w-full lg:w-auto">
-            <button onClick={handleExport} disabled={isExporting} className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-xl font-black text-[9px] uppercase tracking-widest text-slate-500 dark:text-slate-400 shadow-sm">
-                {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                <span>Export</span>
-            </button>
+            <button 
+                            onClick={handleExport}
+                            disabled={isExporting}
+                            className="w-full sm:w-auto flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-3.5 sm:py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-black text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all shadow-sm"
+                        >
+                            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                            <span>Export CSV</span>
+                        </button>
             {canManage && (
-              <button onClick={() => setShowModal(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg">
-                <Plus size={14} /> <span>Add New</span>
+              <button onClick={() => setShowModal(true)}
+                className="w-full sm:w-auto flex-1 lg:flex-none group flex items-center justify-center gap-2 sm:gap-3 px-8 py-3.5 sm:py-4 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-xl sm:shadow-2xl shadow-slate-200 dark:shadow-none hover:bg-slate-800 dark:hover:bg-emerald-500 active:scale-95 transition-all"
+              >
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5 group-hover:rotate-90 transition-transform duration-300" />
+                <span>Add New</span>
               </button>
+
+
             )}
           </div>
+
+
         </header>
 
         {loading ? (
@@ -207,15 +259,17 @@ export default function Products() {
                       key={name}
                       onClick={() => setFilterCategory(isActive ? '' : name)}
                       className={`min-w-0 p-3 sm:p-6 rounded-2xl sm:rounded-[2.5rem] border transition-all duration-300 text-center flex flex-col items-center group
-                        ${isActive 
-                          ? `${theme.bg} border-transparent shadow-md -translate-y-1` 
+                        ${isActive
+                          ? `${theme.bg} border-transparent shadow-md -translate-y-1`
                           : 'bg-white dark:bg-[#0b241f] border-slate-100 dark:border-white/5 hover:border-slate-300 shadow-sm'}`}
                     >
                       <div className={`p-2.5 sm:p-4 rounded-xl sm:rounded-2xl mb-2 sm:mb-4 transition-all duration-300 ${isActive ? `${theme.active} text-white scale-105` : `${theme.bg} ${theme.color}`}`}>
                         <Icon size={18} className="sm:w-[28px] sm:h-[28px]" />
                       </div>
                       <span className={`text-[7px] sm:text-[10px] font-black uppercase tracking-widest mb-0.5 ${isActive ? theme.color : 'text-slate-400 dark:text-slate-500'}`}>{name}</span>
-                      <span className="text-lg sm:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">{count}</span>
+                      <span className="text-lg sm:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">
+                        <AnimatedCounter value={count} duration={1000} />
+                      </span>
                     </button>
                   );
                 })}
@@ -238,7 +292,7 @@ export default function Products() {
                 </div>
               </div>
               <button onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="self-end sm:self-center bg-white dark:bg-[#0b241f] p-2.5 sm:p-4 rounded-xl border border-slate-100 dark:border-white/5 shadow-sm text-slate-400 shrink-0">
-                <ArrowUpDown size={16} className={sortOrder === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'}/>
+                <ArrowUpDown size={16} className={sortOrder === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'} />
               </button>
             </div>
 
@@ -256,13 +310,13 @@ export default function Products() {
                     return (
                       <div key={product.id} className="group bg-white dark:bg-[#0b241f] rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col relative overflow-hidden h-full">
                         <div className="absolute top-4 right-4 flex gap-1.5 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleView(product)} className="p-1.5 bg-white dark:bg-black/40 rounded-lg text-slate-400 border border-slate-100 dark:border-white/10"><Eye size={14} /></button>
-                            {canManage && (
-                                <>
-                                    <button onClick={() => handleEdit(product)} className="p-1.5 bg-white dark:bg-black/40 rounded-lg text-slate-400 border border-slate-100 dark:border-white/10"><Edit size={14} /></button>
-                                    <button onClick={() => handleDelete(product.id)} className="p-1.5 bg-white dark:bg-black/40 rounded-lg text-slate-400 border border-slate-100 dark:border-white/10"><Trash2 size={14} /></button>
-                                </>
-                            )}
+                          <button onClick={() => handleView(product)} className="p-1.5 bg-white dark:bg-black/40 rounded-lg text-slate-400 border border-slate-100 dark:border-white/10"><Eye size={14} /></button>
+                          {canManage && (
+                            <>
+                              <button onClick={() => handleEdit(product)} className="p-1.5 bg-white dark:bg-black/40 rounded-lg text-slate-400 border border-slate-100 dark:border-white/10"><Edit size={14} /></button>
+                              <button onClick={() => handleDelete(product.id)} className="p-1.5 bg-white dark:bg-black/40 rounded-lg text-slate-400 border border-slate-100 dark:border-white/10"><Trash2 size={14} /></button>
+                            </>
+                          )}
                         </div>
                         <div className="flex justify-between items-start mb-4 sm:mb-8 mt-4 lg:mt-0">
                           <div className={`p-3 rounded-xl ${theme.bg} ${theme.color} shadow-inner`}>
@@ -287,22 +341,22 @@ export default function Products() {
 
         {/* Shrunk Modals */}
         {showViewModal && selectedProduct && (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 overflow-hidden">
-                <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={closeModal} />
-                <div className="relative bg-white dark:bg-[#041d18] rounded-3xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-in zoom-in-95 border dark:border-white/5">
-                    <div className="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50/50 dark:bg-black/20">
-                        <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Commodity View</h3>
-                        <button onClick={closeModal} className="p-1.5 text-slate-400"><X size={18} /></button>
-                    </div>
-                    <div className="p-6 space-y-4 text-center">
-                        <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 rounded-2xl w-16 h-16 mx-auto flex items-center justify-center mb-2">
-                            <Wheat size={32} />
-                        </div>
-                        <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase">{selectedProduct.name}</h2>
-                        <p className="text-xs text-slate-500 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-white/5 p-4 rounded-xl">{selectedProduct.description || "No description provided."}</p>
-                    </div>
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 overflow-hidden">
+            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={closeModal} />
+            <div className="relative bg-white dark:bg-[#041d18] rounded-3xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-in zoom-in-95 border dark:border-white/5">
+              <div className="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50/50 dark:bg-black/20">
+                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Commodity View</h3>
+                <button onClick={closeModal} className="p-1.5 text-slate-400"><X size={18} /></button>
+              </div>
+              <div className="p-6 space-y-4 text-center">
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 rounded-2xl w-16 h-16 mx-auto flex items-center justify-center mb-2">
+                  <Wheat size={32} />
                 </div>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase">{selectedProduct.name}</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-white/5 p-4 rounded-xl">{selectedProduct.description || "No description provided."}</p>
+              </div>
             </div>
+          </div>
         )}
 
         {showModal && (
@@ -316,19 +370,19 @@ export default function Products() {
               <form onSubmit={handleSubmit} className="p-6 space-y-6 flex-1 overflow-y-auto pb-safe">
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Name</label>
-                  <input type="text" required value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border-none rounded-xl text-sm font-bold dark:text-white outline-none" placeholder="Name..." />
+                  <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border-none rounded-xl text-sm font-bold dark:text-white outline-none" placeholder="Name..." />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Classification</label>
                   <div className="grid grid-cols-2 min-[400px]:grid-cols-3 gap-2">
                     {['Crops', 'Livestock', 'Poultry', 'Fishery', 'Forestry', 'Other'].map(cat => (
-                      <button key={cat} type="button" onClick={() => setFormData({...formData, category: cat})} className={`py-2 rounded-lg text-[9px] font-black uppercase transition-all ${formData.category === cat ? 'bg-emerald-600 text-white' : 'bg-slate-50 dark:bg-white/5 text-slate-400'}`}>{cat}</button>
+                      <button key={cat} type="button" onClick={() => setFormData({ ...formData, category: cat })} className={`py-2 rounded-lg text-[9px] font-black uppercase transition-all ${formData.category === cat ? 'bg-emerald-600 text-white' : 'bg-slate-50 dark:bg-white/5 text-slate-400'}`}>{cat}</button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Notes</label>
-                  <textarea rows={4} value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border-none rounded-xl text-sm font-medium dark:text-slate-200 outline-none" placeholder="Specs..." />
+                  <textarea rows={4} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border-none rounded-xl text-sm font-medium dark:text-slate-200 outline-none" placeholder="Specs..." />
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button type="button" onClick={closeModal} className="flex-1 py-3.5 text-[10px] font-black uppercase bg-slate-100 dark:bg-white/5 text-slate-400 rounded-xl">Abort</button>
@@ -341,7 +395,8 @@ export default function Products() {
           </div>
         )}
       </div>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .no-scrollbar::-webkit-scrollbar { display: none; } 
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @supports (padding-top: env(safe-area-inset-top)) {
