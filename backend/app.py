@@ -38,11 +38,11 @@ def create_app(config_name='development'):
     
     # Allow specific origin for CORS - Enhanced headers
     CORS(app, 
-     resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:5173", "https://agridata.ct.ws"]}}, 
-     supports_credentials=True,
-     allow_headers=["Content-Type", "Authorization"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
-
+         resources={r"/api/*": {"origins": "*"}}, # Allowing '*' is easiest for ngrok
+         supports_credentials=True,
+         # MUST INCLUDE "ngrok-skip-browser-warning" in allow_headers
+         allow_headers=["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
     jwt = JWTManager(app)
 
     # --- NEW: JWT Blocklist Callbacks for Session Management ---
@@ -69,9 +69,10 @@ def create_app(config_name='development'):
     def handle_preflight():
         if request.method == "OPTIONS":
             res = jsonify({'status': 'ok'})
-            res.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin"))
+            res.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin", "*"))
             res.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-            res.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+            # MUST INCLUDE "ngrok-skip-browser-warning" here as well
+            res.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,ngrok-skip-browser-warning")
             return res, 200
     
     # Create upload folder immediately
@@ -220,7 +221,91 @@ def create_app(config_name='development'):
                 except Exception as e:
                     print(f"Error deleting file {filename}: {e}")
         return False
-    
+    # --- ROOT INTERFACE (Status Page) ---
+    @app.route('/')
+    def index():
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>AgriData Core API</title>
+            <style>
+                body { 
+                    font-family: system-ui, -apple-system, sans-serif; 
+                    background-color: #020c0a; 
+                    color: white; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center; 
+                    height: 100vh; 
+                    margin: 0; 
+                }
+                .container { 
+                    text-align: center; 
+                    background-color: #0b241f; 
+                    padding: 3.5rem; 
+                    border-radius: 2.5rem; 
+                    border: 1px solid rgba(255,255,255,0.05); 
+                    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+                    max-width: 400px;
+                }
+                .status-badge { 
+                    display: inline-flex; 
+                    align-items: center; 
+                    gap: 10px; 
+                    background: rgba(16, 185, 129, 0.1); 
+                    color: #10b981; 
+                    padding: 8px 20px; 
+                    border-radius: 999px; 
+                    font-size: 0.75rem; 
+                    font-weight: 900; 
+                    letter-spacing: 0.2em; 
+                    text-transform: uppercase; 
+                    margin-bottom: 1.5rem; 
+                    border: 1px solid rgba(16, 185, 129, 0.2); 
+                }
+                .dot { 
+                    width: 8px; 
+                    height: 8px; 
+                    background-color: #10b981; 
+                    border-radius: 50%; 
+                    box-shadow: 0 0 12px #10b981; 
+                    animation: pulse 2s infinite ease-in-out; 
+                }
+                h1 { 
+                    margin: 0 0 1rem 0; 
+                    font-size: 2.5rem; 
+                    font-weight: 900;
+                    letter-spacing: -0.05em; 
+                    text-transform: uppercase;
+                }
+                p { 
+                    color: #94a3b8; 
+                    margin: 0; 
+                    font-size: 1rem; 
+                    line-height: 1.6;
+                    font-weight: 500;
+                }
+                @keyframes pulse { 
+                    0% { opacity: 1; transform: scale(1); } 
+                    50% { opacity: 0.4; transform: scale(0.8); } 
+                    100% { opacity: 1; transform: scale(1); } 
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="status-badge">
+                    <div class="dot"></div> API Online
+                </div>
+                <h1>AgriData Hub</h1>
+                <p>The core infrastructure and database routing services are currently operational.</p>
+            </div>
+        </body>
+        </html>
+        """
     
     # ============ Static File Serving (Images) ============
     @app.route('/static/uploads/<filename>')
