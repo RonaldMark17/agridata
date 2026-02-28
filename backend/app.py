@@ -567,7 +567,7 @@ def create_app(config_name='development'):
     app.config['MAIL_USE_SSL'] = False
     app.config['MAIL_USERNAME'] = 'markronald265@gmail.com'
     app.config['MAIL_PASSWORD'] = 'qlfxiqvfyodybpsz'
-    app.config['MAIL_DEFAULT_SENDER'] = 'markronald265@gmail.com'
+    app.config['MAIL_DEFAULT_SENDER'] = 'Agridata'
     mail = Mail(app)
 
     otp_storage = {} 
@@ -1996,6 +1996,6 @@ def create_app(config_name='development'):
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=True)
     
     
