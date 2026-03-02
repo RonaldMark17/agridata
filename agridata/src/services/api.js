@@ -187,7 +187,9 @@ import axios from 'axios';
 
 // Set this to your exact ngrok URL. Do not include trailing slashes.
 // Make sure to append /api so the routes map correctly.
-const API_URL = 'https://cecile-unchipped-shea.ngrok-free.dev/api';
+// const API_URL = 'https://agridata-backend-7cmk.onrender.com/api';
+// const API_URL = 'https://cecile-unchipped-shea.ngrok-free.dev/api';
+const API_URL = 'http://192.168.254.104:8080/api';
 
 const api = axios.create({
   baseURL: API_URL,
