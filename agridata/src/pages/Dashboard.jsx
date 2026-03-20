@@ -12,11 +12,12 @@ import {
   Clock, Terminal, ChevronRight, Plus, UserPlus, FilePlus, ArrowDownRight,
   Sun, Map as MapIcon, Database, Server, ShieldCheck, Thermometer,
   CloudSun, Cloud, CloudRain, CloudLightning, Loader2, AlertCircle, X,
-  LineChart, Compass, Coins, Ruler
+  LineChart, Compass, Coins, Ruler, Tractor, Wrench
 } from 'lucide-react';
 
-// --- Configuration ---
-const CHART_COLORS = ['#059669', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0'];
+// --- STRICT GREEN COLOR PALETTES ---
+const CHART_COLORS = ['#064e3b', '#047857', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0'];
+const SUCCESSION_COLORS = ['#10b981', '#94a3b8']; // Bold Green for Continuing, Muted for Opting Out
 
 // --- Smooth Count-Up Animation Component ---
 const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
@@ -35,7 +36,6 @@ const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) 
       if (!startTime) startTime = timestamp;
       const progress = Math.min((timestamp - startTime) / duration, 1);
       
-      // Quartic ease-out function for a smooth slow-down at the end
       const easeProgress = 1 - Math.pow(1 - progress, 4); 
       setCount(endValue * easeProgress);
 
@@ -98,7 +98,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     );
   }
   return null;
-};
+}
 
 // --- DYNAMIC WEATHER CONFIGURATION ---
 const getWeatherConfig = (code) => {
@@ -114,6 +114,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isViewer = user?.role === 'viewer';
+  
+  // ADDED: Check if the user is an admin
+  const isAdmin = user?.role === 'admin';
 
   const [stats, setStats] = useState(null);
   const [recentLogs, setRecentLogs] = useState([]);
@@ -295,6 +298,12 @@ export default function Dashboard() {
     { label: 'Youth in Farming', value: stats?.children_farming || 0, trend: 'Succession', up: true, icon: Baby, color: 'text-fuchsia-600 dark:text-fuchsia-400', bg: 'bg-fuchsia-50 dark:bg-fuchsia-500/10' },
   ];
 
+  // Map Data for Succession Chart
+  const successionData = [
+    { level: 'Farming', count: stats?.children_farming || 0 },
+    { level: 'Other Careers', count: Math.max(0, (stats?.total_children || 0) - (stats?.children_farming || 0)) }
+  ];
+
   const hour = currentTime.getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening';
   const wConfig = getWeatherConfig(weather.code);
@@ -314,8 +323,8 @@ export default function Dashboard() {
               {greeting}, {user?.full_name?.split(' ')[0] || 'User'}
             </p>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1">
-               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Command Center</h1>
-               <div className={`px-2 py-0.5 sm:px-2.5 py-1 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5 shrink-0 ${systemStatus === 'online' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Dashboard</h1>
+               <div className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5 shrink-0 ${systemStatus === 'online' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
                  <span className={`w-1.5 h-1.5 rounded-full ${systemStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
                  {systemStatus.toUpperCase()}
                </div>
@@ -393,7 +402,7 @@ export default function Dashboard() {
                     {stat.up ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
                     {stat.trend}
                   </div>
-                  <span className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-tighter">vs Last Session</span>
+                  <span className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-tighter">vs Last Time</span>
                 </div>
               </div>
               <div className={`p-4 sm:p-5 rounded-2xl ${stat.bg} ${stat.color} shadow-inner transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 shrink-0`}>
@@ -412,8 +421,8 @@ export default function Dashboard() {
               <div className="flex items-center gap-2 sm:gap-3">
                  <div className="p-2 sm:p-2.5 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 rounded-lg sm:rounded-xl"><LineChart size={16} /></div>
                  <div>
-                   <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Executive Data Summary</h3>
-                   <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Aggregated Platform Averages</p>
+                   <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Quick Data Overview</h3>
+                   <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Overall System Averages</p>
                  </div>
               </div>
            </div>
@@ -444,7 +453,7 @@ export default function Dashboard() {
                  <p className="text-sm sm:text-base font-black text-slate-800 dark:text-white mt-auto truncate">{stats.summary_analysis.most_populated_barangay}</p>
               </div>
               <div className="col-span-2 lg:col-span-1 p-4 sm:p-5 bg-purple-50 dark:bg-purple-500/10 rounded-2xl border border-purple-100 dark:border-purple-500/20 flex flex-col gap-2">
-                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-purple-600 dark:text-purple-500 tracking-widest flex items-center gap-1.5"><Users size={12}/> Sys Users</span>
+                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-purple-600 dark:text-purple-500 tracking-widest flex items-center gap-1.5"><Users size={12}/> Users</span>
                  <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
                    <AnimatedCounter value={stats.summary_analysis.total_system_users} /> 
                    <span className="text-[10px] sm:text-xs text-purple-400 font-bold ml-1">ACTIVE</span>
@@ -454,15 +463,15 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 3. CHARTS SECTION */}
+      {/* 3. CHARTS SECTION - ROW 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 mb-8 sm:mb-10">
         
         {/* Education Pie Chart */}
         <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col h-[400px] sm:h-[500px]">
           <div className="flex items-center justify-between mb-6 sm:mb-10">
             <div>
-              <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg uppercase tracking-tight">Academic Profile</h3>
-              <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5 sm:mt-1">Farmer education mapping</p>
+              <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg uppercase tracking-tight">Education Level</h3>
+              <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5 sm:mt-1">Farmer backgrounds</p>
             </div>
             <div className="p-1.5 sm:p-2 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg sm:rounded-xl transition-colors cursor-pointer text-slate-300">
               <MoreVertical size={18} className="sm:w-[20px] sm:h-[20px]" />
@@ -503,21 +512,64 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Succession Pie Chart (NEW) */}
+        <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col h-[400px] sm:h-[500px]">
+          <div className="flex items-center justify-between mb-6 sm:mb-10">
+            <div>
+              <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg uppercase tracking-tight">Next Generation</h3>
+              <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5 sm:mt-1">Who is still farming</p>
+            </div>
+            <div className="p-1.5 sm:p-2 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg sm:rounded-xl transition-colors cursor-pointer text-slate-300">
+              <MoreVertical size={18} className="sm:w-[20px] sm:h-[20px]" />
+            </div>
+          </div>
+          
+          <div className="flex-1 relative">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={successionData}
+                  innerRadius="65%"
+                  outerRadius="90%"
+                  paddingAngle={8}
+                  dataKey="count"
+                  nameKey="level"
+                  stroke="none"
+                >
+                  {successionData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={SUCCESSION_COLORS[index % SUCCESSION_COLORS.length]} />
+                  ))}
+                  <Label 
+                    value={stats?.total_children || 0} 
+                    position="center" 
+                    fill={isDarkMode ? "#ffffff" : "#0f172a"} 
+                    style={{ fontSize: '28px', fontWeight: '900', letterSpacing: '-0.05em' }}
+                  />
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend 
+                  verticalAlign="bottom" 
+                  iconType="circle" 
+                  wrapperStyle={{ fontSize: '10px' }}
+                  formatter={(value) => <span className="text-slate-500 dark:text-slate-400 font-black text-[9px] sm:text-[10px] uppercase tracking-wider">{value}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
         {/* Barangay Distribution Bar Chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-white/5 p-5 sm:p-8 h-[400px] sm:h-[500px] flex flex-col">
+        <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-white/5 p-5 sm:p-8 h-[400px] sm:h-[500px] flex flex-col">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6 sm:mb-10">
             <div>
-              <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg uppercase tracking-tight">Territorial Density</h3>
-              <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5 sm:mt-1">Click bars to filter list</p>
+              <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg uppercase tracking-tight">Top Areas</h3>
+              <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5 sm:mt-1">Click a bar to filter</p>
             </div>
             
             <div className="flex items-center gap-2">
               <button onClick={() => setShowAllBarangaysModal(true)} className="text-[10px] font-black text-slate-500 hover:text-emerald-600 uppercase tracking-widest transition-colors flex items-center gap-1 p-1">
                 View All <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px]" />
               </button>
-              <div className="flex items-center gap-1 sm:gap-2 text-[9px] sm:text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl border border-emerald-100 dark:border-emerald-500/20 tracking-widest">
-                <Terminal size={12} className="mr-1 sm:w-[14px] sm:h-[14px]"/> LIVE STREAM
-              </div>
             </div>
           </div>
           
@@ -552,57 +604,63 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
         </div>
+
       </div>
 
       {/* 4. LOWER INTELLIGENCE SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         
-        {/* Recent Activity Mini-Feed */}
-        <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
-          <div className="flex items-center justify-between mb-6 sm:mb-8">
-             <div className="flex items-center gap-2 sm:gap-3">
-                <div className="p-2 sm:p-2.5 bg-slate-900 rounded-lg sm:rounded-xl text-white shrink-0"><Terminal size={16} className="sm:w-[18px] sm:h-[18px]" /></div>
-                <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Audit Snapshot</h3>
-             </div>
-             
-             {!isViewer && (
-               <button onClick={() => navigate('/logs')} className="text-[9px] sm:text-[10px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest flex items-center gap-1 group shrink-0">
-                 Full Trail <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
-               </button>
-             )}
-          </div>
-          
-          <div className="space-y-3 sm:space-y-4">
-            {recentLogs.length > 0 ? recentLogs.map((log) => (
-              <div key={log.id} className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 hover:bg-white dark:hover:bg-white/[0.05] transition-all group">
-                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                   <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-white dark:bg-[#041d18] border dark:border-white/5 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors shadow-sm shrink-0">
-                      <Clock size={14} className="sm:w-[16px] sm:h-[16px]" />
-                   </div>
-                   <div className="min-w-0 pr-2">
-                      <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 truncate">{log.action}</p>
-                      <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{log.user_name} • {new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                   </div>
+        {/* Recent Activity Mini-Feed - ONLY ADMIN CAN SEE THIS */}
+        {isAdmin && (
+          <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
+            <div className="flex items-center justify-between mb-6 sm:mb-8">
+               <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="p-2 sm:p-2.5 bg-slate-900 rounded-lg sm:rounded-xl text-white shrink-0"><Terminal size={16} className="sm:w-[18px] sm:h-[18px]" /></div>
+                  <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Recent Actions</h3>
+               </div>
+               
+               {!isViewer && (
+                 <button onClick={() => navigate('/logs')} className="text-[9px] sm:text-[10px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest flex items-center gap-1 group shrink-0">
+                   View Full List <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
+                 </button>
+               )}
+            </div>
+            
+            <div className="space-y-3 sm:space-y-4">
+              {recentLogs.length > 0 ? recentLogs.map((log) => (
+                <div key={log.id} className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 hover:bg-white dark:hover:bg-white/[0.05] transition-all group">
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                     <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-white dark:bg-[#041d18] border dark:border-white/5 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors shadow-sm shrink-0">
+                        <Clock size={14} className="sm:w-[16px] sm:h-[16px]" />
+                     </div>
+                     <div className="min-w-0 pr-2">
+                        <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 truncate">{log.action}</p>
+                        <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{log.user_name} • {new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                     </div>
+                  </div>
+                  <div className="px-2 py-1 sm:px-3 sm:py-1 bg-white dark:bg-[#041d18] rounded-md sm:rounded-lg text-[8px] sm:text-[9px] font-black text-slate-400 dark:text-slate-500 border dark:border-white/5 shrink-0">
+                     #{log.id}
+                  </div>
                 </div>
-                <div className="px-2 py-1 sm:px-3 sm:py-1 bg-white dark:bg-[#041d18] rounded-md sm:rounded-lg text-[8px] sm:text-[9px] font-black text-slate-400 dark:text-slate-500 border dark:border-white/5 shrink-0">
-                   #{log.id}
-                </div>
-              </div>
-            )) : (
-              <div className="text-center py-8 sm:py-10 text-slate-400 text-xs sm:text-sm">No recent activity detected.</div>
-            )}
+              )) : (
+                <div className="text-center py-8 sm:py-10 text-slate-400 text-xs sm:text-sm">Nothing recent to show here.</div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* FUNCTIONAL Product/Commodity Reference */}
+        {/* FUNCTIONAL Product/Commodity Reference (UPDATED FOR TOOLS & EQUIP) */}
         <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
           <div className="flex items-center justify-between mb-6 sm:mb-8">
              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="p-2 sm:p-2.5 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-lg sm:rounded-xl shrink-0"><Wheat size={16} className="sm:w-[18px] sm:h-[18px]" /></div>
-                <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Commodities</h3>
+                <div className="p-2 sm:p-2.5 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-lg sm:rounded-xl shrink-0"><Tractor size={16} className="sm:w-[18px] sm:h-[18px]" /></div>
+                <div>
+                  <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Farming Assets</h3>
+                  <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Crops and tools</p>
+                </div>
              </div>
              <button onClick={() => navigate('/products')} className="text-[9px] sm:text-[10px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest flex items-center gap-1 group shrink-0">
-               Registry <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
+               See More <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
              </button>
           </div>
 
@@ -611,8 +669,11 @@ export default function Dashboard() {
                commodities.map((crop, i) => (
                  <div key={crop.id || i} className="p-4 sm:p-6 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-2xl sm:rounded-3xl border border-emerald-100/50 dark:border-emerald-500/10 flex flex-col gap-2 sm:gap-3 hover:scale-105 transition-transform duration-300">
                     <div className="flex items-center justify-between">
-                       <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 uppercase tracking-widest truncate mr-2">{crop.category || 'Prevalent'}</span>
-                       <Sprout size={14} className="text-emerald-400 sm:w-[16px] sm:h-[16px] shrink-0" />
+                       <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 uppercase tracking-widest truncate mr-2">{crop.category || 'Asset'}</span>
+                       {crop.category?.toLowerCase().includes('tool') || crop.category?.toLowerCase().includes('vehicle') ? 
+                         <Wrench size={14} className="text-emerald-400 sm:w-[16px] sm:h-[16px] shrink-0" /> : 
+                         <Sprout size={14} className="text-emerald-400 sm:w-[16px] sm:h-[16px] shrink-0" />
+                       }
                     </div>
                     <p className="text-lg sm:text-xl font-black text-slate-800 dark:text-slate-200 truncate" title={crop.name}>{crop.name}</p>
                     <div className="h-1.5 w-full bg-emerald-100 dark:bg-emerald-950 rounded-full overflow-hidden">
@@ -622,80 +683,82 @@ export default function Dashboard() {
                ))
              ) : (
                <div className="col-span-1 min-[400px]:col-span-2 text-center py-6 text-slate-400 text-[10px] font-bold uppercase tracking-widest border border-dashed border-slate-200 dark:border-white/10 rounded-2xl">
-                 No Commodities Registered
+                 Nothing added yet
                </div>
              )}
           </div>
         </div>
 
-        {/* System Analytics & Diagnostics */}
-        <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
-          <div className="flex items-center justify-between mb-6 sm:mb-8">
-             <div className="flex items-center gap-2 sm:gap-3">
-                <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl shrink-0 ${sysHealth.isOnline ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' : 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400'}`}>
-                  <Server size={16} className="sm:w-[18px] sm:h-[18px]" />
-                </div>
-                <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">System Health</h3>
-             </div>
-          </div>
-          
-          <div className="space-y-3 sm:space-y-4 flex-1">
-            {/* DATABASE STATUS */}
-            <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Database size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
-                <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">Database</span>
-              </div>
-              <span className={`text-[10px] sm:text-xs font-black flex items-center gap-1 ${sysHealth.isOnline ? 'text-emerald-600' : 'text-rose-500'}`}>
-                {sysHealth.isOnline ? <ShieldCheck size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/> : <AlertCircle size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/>}
-                {sysHealth.dbStatus}
-              </span>
+        {/* System Analytics & Diagnostics - ONLY ADMIN CAN SEE THIS */}
+        {isAdmin && (
+          <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
+            <div className="flex items-center justify-between mb-6 sm:mb-8">
+               <div className="flex items-center gap-2 sm:gap-3">
+                  <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl shrink-0 ${sysHealth.isOnline ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' : 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400'}`}>
+                    <Server size={16} className="sm:w-[18px] sm:h-[18px]" />
+                  </div>
+                  <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">System Check</h3>
+               </div>
             </div>
-
-            {/* API LATENCY */}
-            <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Activity size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
-                <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">API Latency</span>
-              </div>
-              <span className={`text-[10px] sm:text-xs font-black ${
-                !sysHealth.isOnline ? 'text-rose-500' :
-                sysHealth.latency < 100 ? 'text-blue-600' : 
-                sysHealth.latency < 300 ? 'text-amber-500' : 'text-rose-500'
-              }`}>
-                {!sysHealth.isOnline ? 'ERR' : <><AnimatedCounter value={sysHealth.latency} duration={500}/>ms</>} 
-                {sysHealth.isOnline && sysHealth.latency < 100 && ' (Opt)'}
-              </span>
-            </div>
-
-            {/* SERVER LOAD */}
-            <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Thermometer size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
-                <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">Server Load</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-12 sm:w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden hidden min-[350px]:block">
-                  <div 
-                    className={`h-full transition-all duration-1000 ${sysHealth.serverLoad > 80 ? 'bg-rose-500' : sysHealth.serverLoad > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                    style={{ width: `${sysHealth.serverLoad}%` }}
-                  ></div>
+            
+            <div className="space-y-3 sm:space-y-4 flex-1">
+              {/* DATABASE STATUS */}
+              <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Database size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">Data Storage</span>
                 </div>
-                <span className="text-[10px] sm:text-xs font-black text-slate-500 w-8 text-right">
-                  <AnimatedCounter value={sysHealth.serverLoad} duration={500}/>%
+                <span className={`text-[10px] sm:text-xs font-black flex items-center gap-1 ${sysHealth.isOnline ? 'text-emerald-600' : 'text-rose-500'}`}>
+                  {sysHealth.isOnline ? <ShieldCheck size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/> : <AlertCircle size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/>}
+                  {sysHealth.dbStatus}
+                </span>
+              </div>
+
+              {/* API LATENCY */}
+              <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Activity size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">Speed</span>
+                </div>
+                <span className={`text-[10px] sm:text-xs font-black ${
+                  !sysHealth.isOnline ? 'text-rose-500' :
+                  sysHealth.latency < 100 ? 'text-blue-600' : 
+                  sysHealth.latency < 300 ? 'text-amber-500' : 'text-rose-500'
+                }`}>
+                  {!sysHealth.isOnline ? 'Error' : <><AnimatedCounter value={sysHealth.latency} duration={500}/>ms</>} 
+                  {sysHealth.isOnline && sysHealth.latency < 100 && ' (Good)'}
+                </span>
+              </div>
+
+              {/* SERVER LOAD */}
+              <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Thermometer size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">Server Use</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-12 sm:w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden hidden min-[350px]:block">
+                    <div 
+                      className={`h-full transition-all duration-1000 ${sysHealth.serverLoad > 80 ? 'bg-rose-500' : sysHealth.serverLoad > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                      style={{ width: `${sysHealth.serverLoad}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-[10px] sm:text-xs font-black text-slate-500 w-8 text-right">
+                    <AnimatedCounter value={sysHealth.serverLoad} duration={500}/>%
+                  </span>
+                </div>
+              </div>
+
+              {/* LAST BACKUP */}
+              <div className="mt-auto pt-4 border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
+                <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Last Backup</span>
+                <span className="text-[10px] sm:text-xs font-black text-slate-600 dark:text-slate-300">
+                  {new Date(sysHealth.lastBackup).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             </div>
-
-            {/* LAST BACKUP */}
-            <div className="mt-auto pt-4 border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
-              <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Last Backup</span>
-              <span className="text-[10px] sm:text-xs font-black text-slate-600 dark:text-slate-300">
-                {new Date(sysHealth.lastBackup).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* QUICK ACTIONS FAB (HIDDEN FOR VIEWERS) */}
@@ -704,7 +767,7 @@ export default function Dashboard() {
           {showQuickActions && (
             <div className="flex flex-col gap-2 sm:gap-3 animate-in slide-in-from-bottom-4">
               <button onClick={() => navigate('/map')} className="flex items-center gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 bg-white dark:bg-[#0b241f] rounded-xl sm:rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all group border border-slate-100 dark:border-white/5">
-                <span className="text-[10px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 transition-colors">Live Map</span>
+                <span className="text-[10px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 transition-colors">Map</span>
                 <div className="p-1.5 sm:p-2 bg-amber-100 dark:bg-amber-500/20 text-amber-600 rounded-lg sm:rounded-xl group-hover:scale-110 transition-transform"><MapIcon size={14} className="sm:w-[18px] sm:h-[18px]" /></div>
               </button>
               <button onClick={() => navigate('/farmers')} className="flex items-center gap-2 sm:gap-3 px-3 py-2.5 sm:px-4 sm:py-3 bg-white dark:bg-[#0b241f] rounded-xl sm:rounded-2xl shadow-xl hover:bg-slate-50 dark:hover:bg-[#13332d] transition-all group border border-slate-100 dark:border-white/5">
@@ -734,8 +797,8 @@ export default function Dashboard() {
             
             <div className="p-5 sm:p-8 border-b border-slate-50 dark:border-white/5 flex items-center justify-between bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl shrink-0">
               <div>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">All Territories</h2>
-                <p className="text-slate-400 dark:text-slate-500 text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-1">Complete Regional Distribution</p>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">All Areas</h2>
+                <p className="text-slate-400 dark:text-slate-500 text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-1">Full List of Locations</p>
               </div>
               <button onClick={() => setShowAllBarangaysModal(false)} className="p-2 sm:p-3 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-all text-slate-400 shrink-0">
                 <X size={20} className="sm:w-[24px] sm:h-[24px]" />
@@ -769,14 +832,14 @@ export default function Dashboard() {
                 ))}
                 {(!stats?.product_stats || stats.product_stats.length === 0) && (
                   <div className="col-span-1 sm:col-span-2 text-center p-8 text-slate-400 text-xs font-bold uppercase tracking-widest">
-                    No territorial data available
+                    No area data available
                   </div>
                 )}
               </div>
             </div>
 
             <div className="p-5 sm:p-6 border-t border-slate-50 dark:border-white/5 bg-slate-50/50 dark:bg-black/20 shrink-0 text-center">
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-1.5"><Terminal size={12}/> Select any territory to filter directory</p>
+               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-1.5"><Terminal size={12}/> Click an area to see details</p>
             </div>
           </div>
         </div>

@@ -2,10 +2,10 @@ import React, { useState, useEffect, memo, useMemo } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, useMap, Marker, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { mappingAPI } from '../services/api';
+import { farmersAPI } from '../services/api';
 import { 
-  MapPinned, Users, Sprout, Maximize, 
-  Layers, Search, Navigation, Globe, Sun, Moon 
+  MapPinned, Users, Sprout, Search, Navigation, Globe, 
+  BrainCircuit, User, MapPin, TrendingDown, ShieldCheck, AlertTriangle, Loader2 
 } from 'lucide-react';
 
 // Fix Vite default icon issue for the User Location Pin
@@ -18,127 +18,79 @@ const userIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-// --- HELPER: Dynamic Crop Color Coding ---
-const getCropColor = (cropName) => {
-  const name = (cropName || '').toLowerCase();
-  
-  if (name.includes('rice') || name.includes('palay')) return { fill: '#eab308', stroke: '#ca8a04' }; // Yellow
-  if (name.includes('coconut')) return { fill: '#10b981', stroke: '#047857' }; // Emerald
-  if (name.includes('corn')) return { fill: '#f59e0b', stroke: '#d97706' }; // Amber
-  if (name.includes('coffee') || name.includes('cacao')) return { fill: '#8b5cf6', stroke: '#1d4ed8' }; // Blue
-  if (name.includes('livestock') || name.includes('poultry') || name.includes('chicken') || name.includes('cattle')) return { fill: '#f43f5e', stroke: '#be123c' }; // Rose
-  if (name.includes('mixed')) return { fill: '#94a3b8', stroke: '#475569' }; // Slate
-  
-  const fallbackColors = [
-    { fill: '#06b6d4', stroke: '#0891b2' }, // Cyan
-    { fill: '#ec4899', stroke: '#db2777' }, // Pink
-    { fill: '#84cc16', stroke: '#65a30d' }, // Lime
-    { fill: '#a855f7', stroke: '#9333ea' }, // Purple
-    { fill: '#f97316', stroke: '#ea580c' }, // Orange
-  ];
-  
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i);
-  return fallbackColors[hash % fallbackColors.length];
+// Center of Nagcarlan (Base coordinates for simulation)
+const MAP_CENTER = [14.1333, 121.4167];
+
+// --- HELPER: Risk Color Coding ---
+const getRiskColor = (level) => {
+  if (level === 'High') return { fill: '#ef4444', stroke: '#b91c1c' }; // Red
+  if (level === 'Medium') return { fill: '#f59e0b', stroke: '#b45309' }; // Amber
+  return { fill: '#10b981', stroke: '#047857' }; // Green
 };
 
 // --- COMPONENT: Smooth Count-Up Animation ---
-const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
+const AnimatedCounter = ({ value, decimals = 0, duration = 1500 }) => {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
     let startTime = null;
     const endValue = parseFloat(value) || 0;
-    
-    if (endValue === 0) {
-      setCount(0);
-      return;
-    }
+    if (endValue === 0) { setCount(0); return; }
 
     const step = (timestamp) => {
       if (!startTime) startTime = timestamp;
       const progress = Math.min((timestamp - startTime) / duration, 1);
-      
       const easeProgress = 1 - Math.pow(1 - progress, 4); 
       setCount(endValue * easeProgress);
 
-      if (progress < 1) {
-        window.requestAnimationFrame(step);
-      } else {
-        setCount(endValue);
-      }
+      if (progress < 1) window.requestAnimationFrame(step);
+      else setCount(endValue);
     };
 
     window.requestAnimationFrame(step);
   }, [value, duration]);
 
-  return (
-    <>
-      {prefix}
-      {count.toLocaleString('en-US', { 
-        minimumFractionDigits: decimals, 
-        maximumFractionDigits: decimals 
-      })}
-    </>
-  );
+  return <>{count.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}</>;
 };
 
 // --- COMPONENT: Map Controller for Fly-To Animation ---
 function MapController({ center, zoom }) {
   const map = useMap();
   useEffect(() => {
-    if (center) {
-      map.flyTo(center, zoom, { duration: 1.5, easeLinearity: 0.25 });
-    }
+    if (center) map.flyTo(center, zoom, { duration: 1.5, easeLinearity: 0.25 });
   }, [center, zoom, map]);
   return null;
 }
 
 // --- COMPONENT: Memoized Markers to prevent Context crashes ---
-const MapMarkers = memo(({ data }) => {
+const MapMarkers = memo(({ data, onSelectFarm }) => {
   return (
     <>
-      {data.map((point) => {
-        const colors = getCropColor(point.top_product);
+      {data.map((farm) => {
+        const colors = getRiskColor(farm.riskLevel);
         return (
           <CircleMarker
-            key={`marker-${point.id}`}
-            center={[point.lat, point.lng]}
-            radius={Math.max(12, Math.min((point.farmer_count || 1) * 2.5, 45))}
+            key={`marker-${farm.id}`}
+            center={[farm.lat, farm.lng]}
+            radius={farm.riskLevel === 'High' ? 14 : (farm.riskLevel === 'Medium' ? 10 : 8)}
             fillColor={colors.fill}
             color={colors.stroke}
             weight={2}
-            fillOpacity={0.7}
+            fillOpacity={farm.riskLevel === 'High' ? 0.8 : 0.6}
+            eventHandlers={{ click: () => onSelectFarm(farm) }}
           >
             <Tooltip direction="top" offset={[0, -10]} opacity={1} className="custom-tooltip">
-              <span className="font-black uppercase text-[10px] tracking-widest">{point.name}</span>
+              <span className="font-black uppercase text-[10px] tracking-widest">{farm.full_name}</span>
             </Tooltip>
             
             <Popup className="custom-popup">
-              <div className="p-4 space-y-4 font-sans bg-white dark:bg-[#041d18] rounded-2xl w-[200px] sm:w-56 shadow-2xl border border-slate-100 dark:border-white/10">
-                <div className="border-b border-slate-100 dark:border-white/10 pb-3">
-                  <h4 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight truncate">{point.name}</h4>
-                  <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Territory Sector</p>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 text-emerald-600 dark:text-emerald-400">
-                    <div className="p-2 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg"><Users size={14}/></div>
-                    <div>
-                      <p className="text-sm font-black text-slate-900 dark:text-white">{point.farmer_count || 0}</p>
-                      <p className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wider text-slate-500">Active Farmers</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-3" style={{ color: colors.fill }}>
-                    <div className="p-2 rounded-lg" style={{ backgroundColor: `${colors.fill}20` }}>
-                      <Sprout size={14}/>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-black uppercase truncate text-slate-900 dark:text-white">{point.top_product || 'Mixed Crops'}</p>
-                      <p className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wider text-slate-500">Primary Yield</p>
-                    </div>
-                  </div>
+              <div className="p-3 text-center font-sans bg-white dark:bg-[#041d18] rounded-xl shadow-lg border border-slate-100 dark:border-white/10">
+                <p className="font-black text-xs text-slate-900 dark:text-white uppercase tracking-tight">{farm.full_name}</p>
+                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">{farm.barangay?.name || 'Unknown Location'}</p>
+                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-white/10">
+                  <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: colors.fill }}>
+                    {farm.riskLevel} Risk
+                  </span>
                 </div>
               </div>
             </Popup>
@@ -149,29 +101,26 @@ const MapMarkers = memo(({ data }) => {
   );
 });
 
-export default function GeospatialMapping() {
-  const [mapData, setMapData] = useState([]);
+export default function VulnerabilityMap() {
+  const [farmers, setFarmers] = useState([]);
+  const [selectedFarm, setSelectedFarm] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [totalFarmers, setTotalFarmers] = useState(0);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Global Theme Detection
+  // Map & Controls State
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [mapTheme, setMapTheme] = useState('light'); // 'light' | 'dark' | 'satellite'
-  
-  const [mapCenter, setMapCenter] = useState([14.0673, 121.3242]); 
-  const [mapZoom, setMapZoom] = useState(12);
+  const [mapTheme, setMapTheme] = useState('light');
+  const [mapCenter, setMapCenter] = useState(MAP_CENTER); 
+  const [mapZoom, setMapZoom] = useState(13);
   const [userLocation, setUserLocation] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Define Map Tiles (Added Light Theme)
   const mapTiles = {
     light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
   };
 
-  // Sync Map Theme with Global App Theme
   useEffect(() => {
     const checkTheme = () => {
       const darkGlobal = document.documentElement.classList.contains('dark');
@@ -179,7 +128,6 @@ export default function GeospatialMapping() {
       setMapTheme(prev => prev === 'satellite' ? 'satellite' : (darkGlobal ? 'dark' : 'light'));
     };
     checkTheme(); 
-    
     const observer = new MutationObserver(checkTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
@@ -189,56 +137,72 @@ export default function GeospatialMapping() {
     setIsMounted(true);
     let isSubscribed = true;
 
-    const fetchMapData = async () => {
+    const fetchAndProcessFarmers = async () => {
       try {
-        const response = await mappingAPI.getDemographics();
-        if (isSubscribed) {
-          const data = Array.isArray(response.data) ? response.data : [];
-          setMapData(data);
-          setTotalFarmers(data.reduce((sum, point) => sum + (point.farmer_count || 0), 0));
-        }
+        const response = await farmersAPI.getAll({ per_page: 200 });
+        if (!isSubscribed) return;
+        
+        const rawFarmers = response.data.farmers || [];
+
+        // Apply Hackathon Predictive ML Heuristic
+        const processed = rawFarmers.map(farmer => {
+          let riskScore = 0;
+          let issues = [];
+
+          if (farmer.age >= 65) { riskScore += 45; issues.push("Critical Age (>65)"); }
+          else if (farmer.age >= 55) { riskScore += 25; issues.push("Aging Workforce"); }
+
+          if (!farmer.children_farming_involvement) { riskScore += 40; issues.push("No Successor"); }
+          else { riskScore -= 15; }
+
+          if (farmer.annual_income < 50000) { riskScore += 15; issues.push("Financial Vulnerability"); }
+
+          riskScore = Math.max(0, Math.min(100, riskScore));
+
+          let riskLevel = 'Low';
+          if (riskScore > 70) riskLevel = 'High';
+          else if (riskScore > 40) riskLevel = 'Medium';
+
+          return {
+            ...farmer,
+            riskScore,
+            riskLevel,
+            issues,
+            crop: farmer.products?.[0]?.product_name || "Unrecorded",
+            // SIMULATE COORDINATES FOR HACKATHON DEMO AROUND NAGCARLAN
+            lat: MAP_CENTER[0] + (Math.random() - 0.5) * 0.05,
+            lng: MAP_CENTER[1] + (Math.random() - 0.5) * 0.05,
+          };
+        });
+
+        setFarmers(processed);
+        if (processed.length > 0) setSelectedFarm(processed[0]);
       } catch (error) {
-        console.error('Failed to load map data:', error);
+        console.error("Failed to load map data", error);
       } finally {
         if (isSubscribed) setLoading(false);
       }
     };
 
-    fetchMapData();
+    fetchAndProcessFarmers();
     return () => { isSubscribed = false; };
   }, []);
-
-  const dynamicLegend = useMemo(() => {
-    const uniqueProducts = new Set();
-    mapData.forEach(point => {
-      if (point.top_product) uniqueProducts.add(point.top_product);
-    });
-
-    return Array.from(uniqueProducts)
-      .sort() 
-      .map(productName => ({
-        label: productName,
-        color: getCropColor(productName).fill
-      }));
-  }, [mapData]);
 
   const handleSearchSelect = (e) => {
     const selectedId = e.target.value;
     setSearchQuery(selectedId);
     if (!selectedId) return;
 
-    const target = mapData.find(b => b.id.toString() === selectedId);
+    const target = farmers.find(f => f.id.toString() === selectedId);
     if (target && target.lat && target.lng) {
       setMapCenter([target.lat, target.lng]);
-      setMapZoom(16); 
+      setMapZoom(17); 
+      setSelectedFarm(target);
     }
   };
 
   const handleLocateMe = () => {
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
-      return;
-    }
+    if (!navigator.geolocation) return alert("Geolocation is not supported by your browser.");
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
@@ -246,177 +210,197 @@ export default function GeospatialMapping() {
         setMapCenter([latitude, longitude]);
         setMapZoom(15);
       },
-      () => {
-        alert("Unable to retrieve your location. Please check browser permissions.");
-      }
+      () => alert("Unable to retrieve location.")
     );
   };
 
-  // --- PREMIUM SKELETON LOADER (Color Corrected) ---
   if (!isMounted || loading) {
     return (
-      <div className="space-y-6 sm:space-y-8 pb-20 w-full animate-in fade-in duration-500">
-        {/* Header Skeleton */}
-        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 px-2 sm:px-4">
+      <div className="space-y-6 pb-20 w-full animate-in fade-in duration-500">
+        <header className="flex flex-col sm:flex-row justify-between gap-4 px-2">
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg animate-pulse"></div>
-              <div className="w-32 h-3 bg-slate-200 dark:bg-[#0b241f] rounded animate-pulse"></div>
-            </div>
-            <div className="w-64 sm:w-80 h-8 sm:h-10 bg-slate-200 dark:bg-[#0b241f] rounded-xl animate-pulse"></div>
-            <div className="w-48 sm:w-64 h-4 bg-slate-200 dark:bg-[#0b241f] rounded animate-pulse"></div>
+            <div className="w-32 h-3 bg-slate-200 dark:bg-[#0b241f] rounded animate-pulse"></div>
+            <div className="w-64 h-8 bg-slate-200 dark:bg-[#0b241f] rounded-xl animate-pulse"></div>
           </div>
-          
-          {/* Stat Card Skeleton */}
-          <div className="w-full sm:w-[200px] h-[72px] sm:h-[84px] bg-white dark:bg-[#0b241f] rounded-[1.25rem] sm:rounded-[1.5rem] animate-pulse border border-slate-100 dark:border-white/5 shadow-sm"></div>
+          <div className="w-full sm:w-48 h-16 bg-white dark:bg-[#0b241f] rounded-2xl animate-pulse"></div>
         </header>
-
-        {/* Map Area Skeleton */}
-        <div className="relative h-[600px] max-h-[70vh] sm:max-h-none sm:h-[75vh] w-full rounded-[2rem] sm:rounded-[3rem] bg-slate-100 dark:bg-[#020c0a] animate-pulse border-[4px] sm:border-8 border-white dark:border-[#0b241f] shadow-xl overflow-hidden">
-          
-          {/* Floating UI Skeletons inside Map */}
-          <div className="absolute inset-0 z-10 flex flex-col justify-between p-3 sm:p-6 pointer-events-none">
-            
-            {/* Top Tools Skeleton */}
-            <div className="flex justify-between items-start gap-3 w-full">
-              {/* Search Bar Skeleton */}
-              <div className="w-full max-w-[240px] sm:max-w-xs h-10 sm:h-12 bg-white/70 dark:bg-[#0b241f]/70 backdrop-blur-md rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/5"></div>
-              
-              {/* Action Buttons Skeleton */}
-              <div className="flex flex-col gap-2">
-                <div className="w-10 sm:w-12 h-10 sm:h-12 bg-white/70 dark:bg-[#0b241f]/70 backdrop-blur-md rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/5"></div>
-                <div className="w-10 sm:w-12 h-10 sm:h-12 bg-white/70 dark:bg-[#0b241f]/70 backdrop-blur-md rounded-xl sm:rounded-2xl border border-slate-200 dark:border-white/5"></div>
-              </div>
-            </div>
-
-            {/* Legend Skeleton */}
-            <div className="flex justify-between items-end gap-3 w-full pb-8 sm:pb-0">
-              <div className="w-32 sm:w-48 h-32 sm:h-40 bg-white/70 dark:bg-[#0b241f]/70 backdrop-blur-md rounded-[1.25rem] sm:rounded-3xl mb-8 sm:mb-0 border border-slate-200 dark:border-white/5"></div>
-            </div>
-          </div>
+        <div className="relative h-[70vh] w-full rounded-[2rem] bg-slate-100 dark:bg-[#020c0a] animate-pulse border-4 border-white dark:border-[#0b241f] shadow-xl flex items-center justify-center">
+           <Loader2 className="animate-spin text-emerald-500 opacity-50" size={40} />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-700 pb-20">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-700 pb-16">
       
-      {/* Responsive Header */}
-      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 px-2 sm:px-4">
+      {/* COMPACT RESPONSIVE HEADER */}
+      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 px-2">
         <div>
-          <div className="flex items-center gap-2 mb-2 sm:mb-3">
-            <div className="p-1.5 bg-emerald-600 rounded-lg text-white shadow-lg">
-              <MapPinned size={16} />
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 bg-emerald-600 rounded-md text-white shadow-sm">
+              <MapPinned size={14} />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-[0.3em]">Geospatial Intelligence</span>
+            <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-[0.2em]">Geospatial Intelligence</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Demographic Map</h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mt-1.5 sm:mt-2">Live territorial distribution and crop analysis of agricultural sectors.</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Vulnerability Map</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">AI-driven predictive abandonment risk profiling.</p>
         </div>
 
-        <div className="flex items-center gap-4 flex-wrap mt-2 lg:mt-0 w-full sm:w-auto">
-          <div className="bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 rounded-[1.25rem] sm:rounded-[1.5rem] px-4 py-3 sm:px-6 sm:py-4 shadow-sm flex items-center gap-3 sm:gap-4 w-full sm:w-auto hover:border-emerald-500/30 transition-colors">
-            <div className="p-2 sm:p-3 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg sm:rounded-xl">
-              <Users size={18} className="sm:w-[20px] sm:h-[20px]"/>
-            </div>
-            <div>
-              <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Farmers Mapped</p>
-              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">
-                {/* DYNAMIC COUNT UP ADDED HERE */}
-                <AnimatedCounter value={totalFarmers} />
-              </p>
-            </div>
+        <div className="bg-white dark:bg-[#0b241f] border border-slate-100 dark:border-white/5 rounded-[1.25rem] px-5 py-3 shadow-sm flex items-center gap-4 w-full sm:w-auto">
+          <div className="p-2.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
+            <Users size={18} />
+          </div>
+          <div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Farmers Mapped</p>
+            <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-none">
+              <AnimatedCounter value={farmers.length} />
+            </p>
           </div>
         </div>
       </header>
 
-      {/* Map Container */}
-      <div className="relative h-[600px] max-h-[70vh] sm:max-h-none sm:h-[75vh] w-full rounded-[2rem] sm:rounded-[3rem] overflow-hidden border-[4px] sm:border-8 border-white dark:border-[#0b241f] shadow-xl sm:shadow-2xl z-0 bg-slate-100 dark:bg-[#020c0a] isolate">
+      {/* COMPACT SPLIT SCREEN LAYOUT */}
+      <div className="flex flex-col lg:flex-row h-[70vh] gap-4 lg:gap-6">
         
-        {/* CLEAN FLEX OVERLAY FOR CONTROLS */}
-        <div className="absolute inset-0 z-[1000] pointer-events-none flex flex-col justify-between p-3 sm:p-6">
-           
-           {/* TOP ROW: Search & Tools */}
-           <div className="flex justify-between items-start gap-3 w-full">
-             
-             {/* SEARCH BAR */}
-             <div className="pointer-events-auto flex-1 max-w-[240px] sm:max-w-xs bg-white/90 dark:bg-black/70 backdrop-blur-md rounded-xl sm:rounded-2xl shadow-xl border border-slate-200 dark:border-white/20 flex items-center px-3 py-2.5 sm:px-4 sm:py-3">
-               <Search size={16} className="text-slate-500 dark:text-slate-400 mr-2 sm:mr-3 shrink-0" />
-               <select 
-                 value={searchQuery}
-                 onChange={handleSearchSelect}
-                 className="bg-transparent border-none outline-none text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 w-full cursor-pointer appearance-none truncate pr-2"
-               >
-                 <option value="">Fly to Barangay...</option>
-                 {mapData.sort((a,b) => a.name.localeCompare(b.name)).map(b => (
-                   <option key={b.id} value={b.id}>{b.name}</option>
-                 ))}
-               </select>
-             </div>
+        {/* LEFT SIDE: MAP */}
+        <div className="relative w-full lg:w-2/3 h-[50vh] lg:h-full rounded-[2rem] overflow-hidden border-[4px] border-white dark:border-[#0b241f] shadow-xl z-0 bg-slate-100 dark:bg-[#020c0a] isolate">
+          
+          {/* MAP CONTROLS OVERLAY */}
+          <div className="absolute inset-0 z-[1000] pointer-events-none flex flex-col justify-between p-4 sm:p-5">
+            
+            {/* Top Row: Search & Tools */}
+            <div className="flex justify-between items-start gap-3 w-full">
+              {/* Search Bar */}
+              <div className="pointer-events-auto flex-1 max-w-[200px] sm:max-w-xs bg-white/90 dark:bg-black/70 backdrop-blur-md rounded-xl shadow-md border border-slate-200 dark:border-white/20 flex items-center px-3 py-2 sm:py-2.5">
+                <Search size={14} className="text-slate-500 mr-2 shrink-0" />
+                <select 
+                  value={searchQuery}
+                  onChange={handleSearchSelect}
+                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-700 dark:text-slate-200 w-full cursor-pointer appearance-none truncate pr-2"
+                >
+                  <option value="">Search Farmer...</option>
+                  {farmers.sort((a,b) => a.full_name.localeCompare(b.full_name)).map(f => (
+                    <option key={f.id} value={f.id}>{f.full_name}</option>
+                  ))}
+                </select>
+              </div>
 
-             {/* MAP TOGGLES */}
-             <div className="pointer-events-auto flex flex-col gap-2 shrink-0">
-               <button 
-                 onClick={() => setMapTheme(prev => prev === 'satellite' ? (isDarkMode ? 'dark' : 'light') : 'satellite')} 
-                 className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shadow-xl border border-slate-200 dark:border-white/20 backdrop-blur-md transition-all ${mapTheme === 'satellite' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white/90 dark:bg-black/60 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10'}`} 
-                 title="Toggle Satellite View"
-               >
-                 <Globe size={18} className="sm:w-[20px] sm:h-[20px]" />
-               </button>
-               <button onClick={handleLocateMe} className="bg-white/90 dark:bg-black/60 backdrop-blur-md p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shadow-xl border border-slate-200 dark:border-white/20 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-all flex justify-center" title="Find My Location">
-                 <Navigation size={18} className="sm:w-[20px] sm:h-[20px]" />
-               </button>
-             </div>
-           </div>
+              {/* Toggles */}
+              <div className="pointer-events-auto flex flex-col gap-2 shrink-0">
+                <button onClick={() => setMapTheme(prev => prev === 'satellite' ? (isDarkMode ? 'dark' : 'light') : 'satellite')} className={`p-2.5 rounded-xl shadow-md border border-slate-200 dark:border-white/20 backdrop-blur-md transition-all ${mapTheme === 'satellite' ? 'bg-indigo-600 text-white' : 'bg-white/90 dark:bg-black/60 text-slate-500'}`}>
+                  <Globe size={16} />
+                </button>
+                <button onClick={handleLocateMe} className="bg-white/90 dark:bg-black/60 backdrop-blur-md p-2.5 rounded-xl shadow-md border border-slate-200 dark:border-white/20 text-blue-600 hover:bg-blue-50 transition-all flex justify-center">
+                  <Navigation size={16} />
+                </button>
+              </div>
+            </div>
 
-           {/* BOTTOM ROW: Legend */}
-           <div className="flex justify-between items-end gap-3 w-full pb-8 sm:pb-0">
-             {dynamicLegend.length > 0 && (
-               <div className="pointer-events-auto bg-white/90 dark:bg-black/70 backdrop-blur-md p-3 sm:p-5 rounded-[1.25rem] sm:rounded-3xl shadow-xl border border-slate-200 dark:border-white/20 w-32 sm:w-48 max-h-[30vh] sm:max-h-[40vh] overflow-y-auto custom-scrollbar">
-                 <h4 className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 mb-2 sm:mb-4 border-b border-slate-200 dark:border-white/10 pb-2">Active Crops</h4>
-                 <div className="space-y-2 sm:space-y-3">
-                   {dynamicLegend.map((item, i) => (
-                     <div key={i} className="flex items-center gap-2 sm:gap-3">
-                       <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-sm shrink-0" style={{ backgroundColor: item.color }} />
-                       <span className="text-[9px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 uppercase truncate" title={item.label}>
-                         {item.label}
-                       </span>
-                     </div>
-                   ))}
-                 </div>
+            {/* Bottom Legend */}
+            <div className="pointer-events-auto bg-white/90 dark:bg-black/70 backdrop-blur-md p-3 sm:p-4 rounded-2xl shadow-md border border-slate-200 dark:border-white/20 w-fit">
+               <h4 className="text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 mb-2 border-b dark:border-white/10 pb-1">AI Risk Index</h4>
+               <div className="flex flex-col gap-1.5">
+                 <span className="flex items-center gap-2 text-[9px] font-bold text-emerald-600 dark:text-emerald-400"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> Secure (Low)</span>
+                 <span className="flex items-center gap-2 text-[9px] font-bold text-amber-600 dark:text-amber-400"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"/> Monitor (Med)</span>
+                 <span className="flex items-center gap-2 text-[9px] font-bold text-rose-600 dark:text-rose-400"><div className="w-2.5 h-2.5 rounded-full bg-rose-500"/> Critical (High)</span>
                </div>
-             )}
-           </div>
+            </div>
+          </div>
+
+          <MapContainer center={mapCenter} zoom={mapZoom} scrollWheelZoom={true} zoomControl={false} style={{ height: '100%', width: '100%', backgroundColor: 'transparent' }}>
+            <ZoomControl position="bottomright" />
+            <TileLayer key={mapTheme} url={mapTiles[mapTheme]} maxZoom={19} />
+            <MapController center={mapCenter} zoom={mapZoom} />
+            {userLocation && (
+              <Marker position={userLocation} icon={userIcon}>
+                <Popup className="font-sans font-bold">You are here</Popup>
+              </Marker>
+            )}
+            <MapMarkers data={farmers} onSelectFarm={setSelectedFarm} />
+          </MapContainer>
         </div>
 
-        {/* THE MAP INSTANCE */}
-        <MapContainer 
-          center={mapCenter} 
-          zoom={mapZoom} 
-          scrollWheelZoom={true}
-          zoomControl={false} 
-          style={{ height: '100%', width: '100%', backgroundColor: 'transparent' }}
-        >
-          <ZoomControl position="bottomright" />
-          
-          <TileLayer
-            key={mapTheme}
-            url={mapTiles[mapTheme]}
-            attribution='&copy; OpenStreetMap contributors'
-            maxZoom={19}
-          />
-          
-          <MapController center={mapCenter} zoom={mapZoom} />
+        {/* RIGHT SIDE: ML DETAILS SIDEBAR */}
+        <div className="w-full lg:w-1/3 h-[50vh] lg:h-full overflow-y-auto bg-white dark:bg-[#0b241f] rounded-[2rem] shadow-xl border border-slate-100 dark:border-white/5 p-5 sm:p-6 no-scrollbar">
+          {selectedFarm ? (
+            <div className="animate-in slide-in-from-right-4 duration-300">
+              <header className="border-b border-slate-100 dark:border-white/10 pb-3 mb-4">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight truncate">{selectedFarm.full_name}</h2>
+                <p className="text-slate-500 font-bold uppercase tracking-widest text-[9px] flex items-center gap-1.5 mt-1 truncate">
+                  <MapPin size={12}/> {selectedFarm.barangay?.name || "Unassigned"}
+                </p>
+              </header>
 
-          {userLocation && (
-            <Marker position={userLocation} icon={userIcon}>
-               <Popup className="font-sans font-bold">You are here</Popup>
-            </Marker>
+              {/* ML CARD */}
+              <div className={`p-4 sm:p-5 rounded-2xl border-2 transition-all ${
+                selectedFarm.riskLevel === 'High' ? 'bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-500/30' : 
+                selectedFarm.riskLevel === 'Medium' ? 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-500/30' : 
+                'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-500/30'}`}>
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <BrainCircuit className={selectedFarm.riskLevel === 'High' ? 'text-rose-500' : selectedFarm.riskLevel === 'Medium' ? 'text-amber-500' : 'text-emerald-500'} size={16} />
+                    <h3 className={`font-black uppercase tracking-widest text-[9px] ${
+                      selectedFarm.riskLevel === 'High' ? 'text-rose-700 dark:text-rose-400' : 
+                      selectedFarm.riskLevel === 'Medium' ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                      AI Abandonment Risk
+                    </h3>
+                  </div>
+                  <span className={`text-2xl font-black tracking-tighter ${
+                    selectedFarm.riskLevel === 'High' ? 'text-rose-600' : 
+                    selectedFarm.riskLevel === 'Medium' ? 'text-amber-600' : 'text-emerald-600'}`}>{selectedFarm.riskScore}%</span>
+                </div>
+                <p className="text-[10px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 leading-snug">
+                  {selectedFarm.riskLevel === 'High' ? "CRITICAL: High probability of abandonment in 5 yrs due to lack of succession/age." : selectedFarm.riskLevel === 'Medium' ? "WARNING: Moderate risk. Monitor yield and succession." : "STABLE: Strong indicators for long-term viability."}
+                </p>
+              </div>
+
+              {/* DEMOGRAPHICS GRID */}
+              <div className="grid grid-cols-2 gap-2.5 mt-4">
+                 <div className="bg-slate-50 dark:bg-white/5 p-3 rounded-xl border border-slate-100 dark:border-white/5">
+                   <p className="text-[8px] uppercase font-black text-slate-400 tracking-widest mb-0.5 flex items-center gap-1"><User size={10}/> Age</p>
+                   <p className="text-base font-black text-slate-800 dark:text-white leading-none">{selectedFarm.age} <span className="text-[8px] text-slate-400">YRS</span></p>
+                 </div>
+                 <div className="bg-slate-50 dark:bg-white/5 p-3 rounded-xl border border-slate-100 dark:border-white/5">
+                   <p className="text-[8px] uppercase font-black text-slate-400 tracking-widest mb-0.5 flex items-center gap-1"><Users size={10}/> Successors</p>
+                   <p className={`text-base font-black leading-none ${!selectedFarm.children_farming_involvement ? 'text-rose-500' : 'text-emerald-500'}`}>
+                     {selectedFarm.number_of_children} <span className="text-[8px] text-slate-400">{selectedFarm.children_farming_involvement ? 'Actv' : 'Inactv'}</span>
+                   </p>
+                 </div>
+                 <div className="bg-slate-50 dark:bg-white/5 p-3 rounded-xl border border-slate-100 dark:border-white/5">
+                   <p className="text-[8px] uppercase font-black text-slate-400 tracking-widest mb-0.5 flex items-center gap-1"><Sprout size={10}/> Crop</p>
+                   <p className="text-xs font-black text-slate-800 dark:text-white truncate">{selectedFarm.crop}</p>
+                 </div>
+                 <div className="bg-slate-50 dark:bg-white/5 p-3 rounded-xl border border-slate-100 dark:border-white/5">
+                   <p className="text-[8px] uppercase font-black text-slate-400 tracking-widest mb-0.5 flex items-center gap-1"><MapPin size={10}/> Size</p>
+                   <p className="text-base font-black text-slate-800 dark:text-white leading-none">{selectedFarm.farm_size_hectares} <span className="text-[8px] text-slate-400">HA</span></p>
+                 </div>
+              </div>
+
+              {/* VULNERABILITIES */}
+              <div className="mt-4">
+                <p className="text-[8px] uppercase font-black text-slate-400 tracking-widest mb-2 flex items-center gap-1"><TrendingDown size={10}/> Heuristic Factors</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedFarm.issues.length > 0 ? selectedFarm.issues.map((issue, idx) => (
+                    <span key={idx} className="px-2 py-1 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 rounded-md text-[9px] font-black uppercase tracking-wider border border-rose-200 dark:border-rose-500/20">
+                      {issue}
+                    </span>
+                  )) : (
+                    <span className="text-[10px] font-bold text-emerald-500 italic flex items-center gap-1"><ShieldCheck size={12}/> No major risks</span>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+               <MapPin size={32} className="mb-3" />
+               <p className="text-[9px] font-black uppercase tracking-[0.2em]">Awaiting Selection</p>
+               <p className="text-[10px] font-bold mt-1 max-w-[150px] text-center">Tap a geospatial marker to execute analysis.</p>
+            </div>
           )}
+        </div>
 
-          <MapMarkers data={mapData} />
-        </MapContainer>
       </div>
 
       {/* Global CSS Map Overrides */}
@@ -432,15 +416,11 @@ export default function GeospatialMapping() {
           border-radius: 8px; padding: 4px 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2); 
         }
         .leaflet-tooltip-top:before { border-top-color: ${isDarkMode ? '#041d18' : '#ffffff'} !important; }
-        
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.5); border-radius: 4px; }
-        
-        .leaflet-bottom.leaflet-right { margin-bottom: 2rem !important; margin-right: 0.5rem !important; z-index: 999 !important; }
-        @media (min-width: 640px) {
-            .leaflet-bottom.leaflet-right { margin-bottom: 1rem !important; margin-right: 1rem !important; }
-        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .leaflet-control-zoom a {
             background-color: ${isDarkMode ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)'} !important;
             color: ${isDarkMode ? '#e2e8f0' : '#475569'} !important;

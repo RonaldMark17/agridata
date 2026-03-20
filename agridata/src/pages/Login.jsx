@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Eye, EyeOff, Sprout, Loader2, Lock, Mail, Activity, ArrowRight, ShieldCheck, Smartphone, ShieldAlert } from 'lucide-react';
+import { Eye, EyeOff, Sprout, Loader2, Lock, Mail, Activity, ArrowRight, ShieldCheck, Smartphone, ShieldAlert, ChevronLeft, Clock } from 'lucide-react';
 
 export default function Login() {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
@@ -12,9 +12,9 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isPendingApproval, setIsPendingApproval] = useState(false); // NEW FEATURE STATE
 
   // --- SMART SECURITY LOCKOUT (Persistent Tracking) ---
-  // Initialize from localStorage so it survives page refreshes
   const [attemptsRecord, setAttemptsRecord] = useState(() => {
     try {
       const saved = localStorage.getItem('agridata_auth_attempts');
@@ -29,7 +29,18 @@ export default function Login() {
   const LOCKOUT_DURATION_MS = 30000; // 30 seconds
 
   const navigate = useNavigate();
-  const { login, verifyOtp } = useAuth(); 
+  const { login, verifyOtp, user } = useAuth(); // Added 'user' from context
+
+  // --- ADDED: Auto-redirect if already logged in ---
+  useEffect(() => {
+    if (user) {
+      if (user.role === 'farmer' || user.role === 'mentee') {
+        navigate('/portal');
+      } else {
+        navigate('/dashboard');
+      }
+    }
+  }, [user, navigate]);
 
   // Sync attempts to localStorage whenever they change
   useEffect(() => {
@@ -54,9 +65,9 @@ export default function Login() {
     if (isLocked) return;
 
     setError('');
+    setIsPendingApproval(false); // Reset on new attempt
     setLoading(true);
     
-    // If the lock expired, we treat their current attempt count as 0
     let activeCount = currentRecord.count;
     if (currentRecord.lockedUntil && currentRecord.lockedUntil <= now) {
       activeCount = 0;
@@ -65,7 +76,6 @@ export default function Login() {
     try {
       const response = await login(credentials); 
       
-      // On Success: Clear security record for this user
       setAttemptsRecord(prev => {
         const newRecord = { ...prev };
         delete newRecord[currentUserKey];
@@ -75,19 +85,31 @@ export default function Login() {
       if (response?.otp_required) {
         setStep('otp'); 
       } else if (response?.access_token || response?.user) {
-        navigate('/dashboard'); 
+        // Updated redirect logic to handle roles immediately
+        const role = response.user?.role;
+        if (role === 'farmer' || role === 'mentee') {
+          navigate('/portal');
+        } else {
+          navigate('/dashboard');
+        }
       } else {
         triggerFailedAttempt(activeCount, 'Invalid credentials or server response.');
       }
     } catch (err) {
       console.error(err);
-      triggerFailedAttempt(activeCount, err.response?.data?.error || 'Authentication failed. Please check your credentials.');
+      const msg = err.response?.data?.error || '';
+      
+      // NEW FEATURE: Detect if backend says account is pending
+      if (msg.toLowerCase().includes('pending') || msg.toLowerCase().includes('approval')) {
+        setIsPendingApproval(true);
+      } else {
+        triggerFailedAttempt(activeCount, msg || 'Authentication failed.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper: Manage failed attempts per username
   const triggerFailedAttempt = (currentCount, errorMessage) => {
     const newCount = currentCount + 1;
     const willLock = newCount >= MAX_ATTEMPTS;
@@ -107,7 +129,6 @@ export default function Login() {
     }
   };
 
-  // STEP 2: Submit OTP
   const handleOtpSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -120,7 +141,12 @@ export default function Login() {
       });
       
       if (response?.access_token) {
-        navigate('/dashboard');
+        const role = response.user?.role;
+        if (role === 'farmer' || role === 'mentee') {
+          navigate('/portal');
+        } else {
+          navigate('/dashboard');
+        }
       } else {
         setError('Verification failed. Please try again.');
       }
@@ -139,14 +165,11 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans selection:bg-emerald-100 relative">
-      {/* SaaS Background Grid Pattern */}
       <div className="absolute inset-0 z-0 bg-grid-slate-200/[0.4] bg-[center_top_-1px]" style={{ maskImage: 'linear-gradient(to bottom, black, transparent)' }} />
       
-      {/* LEFT SIDE: Brand Dossier (Enterprise Look) */}
+      {/* LEFT SIDE: Brand Dossier */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 overflow-hidden z-10 shadow-2xl">
         <div className="absolute inset-0 z-0 bg-grid-slate-700/[0.2] bg-[bottom_1px_center]" style={{ maskImage: 'linear-gradient(to top, transparent, black)' }} />
-        
-        {/* Subtle Ambient Glows */}
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[100px]" />
 
@@ -188,7 +211,17 @@ export default function Login() {
       {/* RIGHT SIDE: Dynamic Auth Module */}
       <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-24 xl:px-32 relative z-10">
         
-        {/* Mobile Header (Only visible on small screens) */}
+        {/* ADDED: Back to Landing Page Link */}
+        <div className="w-full max-w-sm mx-auto mb-6">
+          <Link to="/" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-emerald-600 transition-all group">
+            <div className="p-1.5 rounded-lg bg-white border border-slate-200 group-hover:border-emerald-200 shadow-sm transition-all">
+              <ChevronLeft size={14} />
+            </div>
+            <span>Back to Landing Page</span>
+          </Link>
+        </div>
+
+        {/* Mobile Header */}
         <div className="lg:hidden absolute top-8 left-6 flex items-center gap-2">
           <div className="p-2 bg-emerald-600 rounded-lg shadow-sm shrink-0">
             <Sprout size={20} className="text-white" />
@@ -200,151 +233,171 @@ export default function Login() {
         </div>
 
         <div className="w-full max-w-sm mx-auto bg-white p-8 sm:p-10 rounded-2xl shadow-xl border border-slate-200">
-
           <header className="mb-8">
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight mb-2">
-              {step === 'otp' ? 'Security Check' : 'Welcome back'}
+              {isPendingApproval ? 'Access Restricted' : step === 'otp' ? 'Security Check' : 'Welcome back'}
             </h2>
             <p className="text-sm text-slate-500 font-medium">
-              {step === 'otp' 
-                ? 'Enter the 6-digit code sent to your registered email.' 
-                : 'Enter your credentials to access the portal.'}
+              {isPendingApproval 
+                ? 'Identity verification in progress.' 
+                : step === 'otp' ? 'Enter the 6-digit code sent to your registered email.' : 'Enter your credentials to access the portal.'}
             </p>
           </header>
 
-          {/* Dynamic Error / Lockout Banner */}
-          {(error || isLocked) && (
-            <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-2 border ${isLocked ? 'bg-red-50 border-red-200 text-red-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
-              {isLocked ? <ShieldAlert size={18} className="shrink-0 mt-0.5" /> : <Activity size={18} className="shrink-0 mt-0.5" />}
-              <p className="text-xs font-semibold leading-relaxed">
-                {isLocked ? `Security lock active. Please wait ${remainingSeconds} seconds before trying again.` : error}
-              </p>
-            </div>
-          )}
-
-          {/* --- VIEW 1: CREDENTIALS --- */}
-          {step === 'credentials' && (
-            <form onSubmit={handleCredentialSubmit} className="space-y-5 animate-in fade-in slide-in-from-right-8 duration-500">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">Email</label>
-                <div className="relative group">
-                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-red-300' : 'text-slate-400 group-focus-within:text-emerald-600'}`} size={16} />
-                  <input
-                    name="username"
-                    type="text"
-                    required
-                    className={`w-full pl-11 pr-4 py-3 bg-white border rounded-xl text-sm font-medium text-slate-900 transition-all outline-none shadow-sm ${isLocked ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' : 'border-slate-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400'}`}
-                    placeholder="Username or email address"
-                    value={credentials.username}
-                    onChange={handleChange}
-                  />
+          {/* NEW FEATURE: PENDING APPROVAL UI */}
+          {isPendingApproval ? (
+            <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+              <div className="p-6 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col items-center text-center gap-4">
+                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600">
+                  <Clock size={24} className="animate-pulse" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-amber-900">Account Pending Approval</p>
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    Your request has been logged. For security reasons, an administrator must manually verify your credentials before you can access the hub.
+                  </p>
                 </div>
               </div>
-
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <label className="text-xs font-bold text-slate-700">Password</label>
-                  <Link to="/forgot-password" className="text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors">Forgot password?</Link>
+              <button 
+                onClick={() => setIsPendingApproval(false)}
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
+              >
+                Try different account
+              </button>
+            </div>
+          ) : (
+            <>
+              {(error || isLocked) && (
+                <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-2 border ${isLocked ? 'bg-red-50 border-red-200 text-red-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
+                  {isLocked ? <ShieldAlert size={18} className="shrink-0 mt-0.5" /> : <Activity size={18} className="shrink-0 mt-0.5" />}
+                  <p className="text-xs font-semibold leading-relaxed">
+                    {isLocked ? `Security lock active. Please wait ${remainingSeconds} seconds before trying again.` : error}
+                  </p>
                 </div>
-                <div className="relative group">
-                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-slate-300' : 'text-slate-400 group-focus-within:text-emerald-600'}`} size={16} />
-                  <input
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    required
-                    disabled={isLocked}
-                    className="w-full pl-11 pr-11 py-3 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400 transition-all outline-none shadow-sm disabled:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                    placeholder="••••••••"
-                    value={credentials.password}
-                    onChange={handleChange}
-                  />
+              )}
+
+              {step === 'credentials' && (
+                <form onSubmit={handleCredentialSubmit} className="space-y-5 animate-in fade-in slide-in-from-right-8 duration-500">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Email</label>
+                    <div className="relative group">
+                      <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-red-300' : 'text-slate-400 group-focus-within:text-emerald-600'}`} size={16} />
+                      <input
+                        name="username"
+                        type="text"
+                        required
+                        className={`w-full pl-11 pr-4 py-3 bg-white border rounded-xl text-sm font-medium text-slate-900 transition-all outline-none shadow-sm ${isLocked ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' : 'border-slate-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400'}`}
+                        placeholder="Username or email address"
+                        value={credentials.username}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-slate-700">Password</label>
+                      <Link to="/forgot-password" size={16} className="text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors">Forgot password?</Link>
+                    </div>
+                    <div className="relative group">
+                      <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-slate-300' : 'text-slate-400 group-focus-within:text-emerald-600'}`} size={16} />
+                      <input
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        required
+                        disabled={isLocked}
+                        className="w-full pl-11 pr-11 py-3 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400 transition-all outline-none shadow-sm disabled:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                        placeholder="••••••••"
+                        value={credentials.password}
+                        onChange={handleChange}
+                      />
+                      <button
+                        type="button"
+                        disabled={isLocked}
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
                   <button
-                    type="button"
-                    disabled={isLocked}
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    type="submit"
+                    disabled={loading || isLocked}
+                    className={`w-full flex items-center justify-center gap-2 py-3.5 mt-2 text-white rounded-xl font-bold text-sm shadow-md transition-all ${
+                      isLocked 
+                        ? 'bg-red-600 shadow-red-600/20 cursor-not-allowed' 
+                        : 'bg-slate-900 hover:bg-slate-800 hover:shadow-lg active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed'
+                    }`}
                   >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {isLocked ? (
+                      <>Account Locked ({remainingSeconds}s)</>
+                    ) : loading ? (
+                      <Loader2 className="animate-spin" size={16} />
+                    ) : (
+                      <>Log In <ArrowRight size={16} /></>
+                    )}
                   </button>
+                </form>
+              )}
+
+              {step === 'otp' && (
+                <form onSubmit={handleOtpSubmit} className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Verification Code</label>
+                    <div className="relative group">
+                      <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-600 transition-colors" size={18} />
+                      <input
+                        type="text"
+                        required
+                        maxLength={6}
+                        className="w-full pl-12 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400 transition-all outline-none shadow-sm tracking-[0.5em] text-center"
+                        placeholder="000000"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))} 
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || otp.length < 6}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-emerald-500 hover:shadow-lg active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      <Loader2 className="animate-spin" size={16} />
+                    ) : (
+                      <>Verify & Access <ShieldCheck size={16} /></>
+                    )}
+                  </button>
+                  
+                  <div className="pt-2 text-center">
+                    <button 
+                      type="button" 
+                      onClick={() => setStep('credentials')}
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+                    >
+                      Cancel and return to login
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {step === 'credentials' && (
+                <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+                  <p className="text-slate-500 font-medium text-xs">
+                    New to the system? 
+                    <Link to="/register" className="text-emerald-600 font-bold ml-1.5 hover:text-emerald-700 transition-colors">Sign up</Link>
+                  </p>
                 </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading || isLocked}
-                className={`w-full flex items-center justify-center gap-2 py-3.5 mt-2 text-white rounded-xl font-bold text-sm shadow-md transition-all ${
-                  isLocked 
-                    ? 'bg-red-600 shadow-red-600/20 cursor-not-allowed' 
-                    : 'bg-slate-900 hover:bg-slate-800 hover:shadow-lg active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed'
-                }`}
-              >
-                {isLocked ? (
-                  <>Account Locked ({remainingSeconds}s)</>
-                ) : loading ? (
-                  <Loader2 className="animate-spin" size={16} />
-                ) : (
-                  <>Log In <ArrowRight size={16} /></>
-                )}
-              </button>
-            </form>
-          )}
-
-          {/* --- VIEW 2: OTP VERIFICATION --- */}
-          {step === 'otp' && (
-            <form onSubmit={handleOtpSubmit} className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">Verification Code</label>
-                <div className="relative group">
-                  <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-600 transition-colors" size={18} />
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400 transition-all outline-none shadow-sm tracking-[0.5em] text-center"
-                    placeholder="000000"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))} 
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading || otp.length < 6}
-                className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-emerald-500 hover:shadow-lg active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <Loader2 className="animate-spin" size={16} />
-                ) : (
-                  <>Verify & Access <ShieldCheck size={16} /></>
-                )}
-              </button>
-              
-              <div className="pt-2 text-center">
-                <button 
-                  type="button" 
-                  onClick={() => setStep('credentials')}
-                  className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
-                >
-                  Cancel and return to login
-                </button>
-              </div>
-            </form>
-          )}
-
-          {step === 'credentials' && (
-            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-              <p className="text-slate-500 font-medium text-xs">
-                New to the system? 
-                <Link to="/register" className="text-emerald-600 font-bold ml-1.5 hover:text-emerald-700 transition-colors">Sign up</Link>
-              </p>
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* Global CSS Map Overrides for Grid */}
       <style dangerouslySetInnerHTML={{ __html: `
         .bg-grid-slate-200 {
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='%23e2e8f0'%3E%3Cpath d='M0 .5H31.5V32'/%3E%3C/svg%3E");

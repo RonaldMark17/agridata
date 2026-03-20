@@ -7,8 +7,17 @@ import {
   Plus, Loader2, ChevronLeft, AlertCircle, Fingerprint, Globe, Briefcase, GraduationCap, Building2, Hash, FileText
 } from 'lucide-react';
 import FarmerChildren from '../components/FarmerChildren';
+import { db } from '../db';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace('/api', '');
+const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+// 1. Uses VITE_API_URL from your .env file if it exists.
+// 2. If not, and you are working locally, it uses your local backend (8080).
+// 3. If you are on the live site, it uses your hosted domain.
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL || 
+  (isLocal ? 'http://127.0.0.1:8080' : 'https://agridata.ct.ws')
+).replace(/\/api\/?$/, '');
 
 export default function FarmerForm() {
   const { id } = useParams();
@@ -18,30 +27,27 @@ export default function FarmerForm() {
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditMode);
-  
-  // --- NEW: Unsaved Changes Tracker ---
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  
-  // Data Lists
+
   const [barangays, setBarangays] = useState([]);
   const [organizations, setOrganizations] = useState([]);
-  const [availableProducts, setAvailableProducts] = useState([]); 
+  const [availableProducts, setAvailableProducts] = useState([]);
 
   const [error, setError] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const [formData, setFormData] = useState({
-    farmer_code: '', 
+    farmer_code: '',
     first_name: '',
     last_name: '',
     middle_name: '',
-    extension_name: '', 
+    extension_name: '',
     birth_date: '',
     gender: 'Male',
-    civil_status: 'Single', 
+    civil_status: 'Single',
     barangay_id: '',
-    organization_id: '', 
+    organization_id: '',
     address: '',
     contact_number: '',
     education_level: 'High School Graduate',
@@ -60,12 +66,11 @@ export default function FarmerForm() {
 
   const [calculatedAge, setCalculatedAge] = useState(0);
 
-  // --- NEW: Browser Refresh Warning ---
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (hasUnsavedChanges) {
         e.preventDefault();
-        e.returnValue = ''; // Triggers the browser's "Leave site?" warning
+        e.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -94,7 +99,6 @@ export default function FarmerForm() {
     }
   }, [formData.birth_date]);
 
-  // --- AUTO-SYNC CHILDREN METRICS TO DATABASE ---
   useEffect(() => {
     if (isEditMode && formData.children) {
       const calculatedChildrenCount = formData.children.length;
@@ -147,20 +151,34 @@ export default function FarmerForm() {
     try {
       const response = await farmersAPI.getById(id);
       const data = response.data;
+
       const getImageUrl = (path) => {
         if (!path) return null;
-        if (path.startsWith('http')) return path;
-        let cleanPath = path.trim().replace(/^\//, '').replace(/^uploads\//, '').replace(/^static\/uploads\//, '');
-        return `${API_BASE_URL}/static/uploads/${cleanPath}?t=${Date.now()}`;
+        if (path.startsWith('http')) return path.replace(/^http:\/\//i, 'https://');
+
+        const cleanPath = path.replace(/^\/+/, '').replace(/^static\/uploads\//, '');
+        const url = `${API_BASE_URL}/static/uploads/${cleanPath}`;
+        return (window.location.protocol === 'https:' && url.startsWith('http://'))
+          ? url.replace('http://', 'https://')
+          : url;
       };
-      if (data.profile_image) setImagePreview(getImageUrl(data.profile_image));
+
+      if (data.profile_image) {
+        setImagePreview(getImageUrl(data.profile_image));
+      } else {
+        const localImage = await db.farmerImages.get(String(id));
+        if (localImage?.blob) {
+          setImagePreview(URL.createObjectURL(localImage.blob));
+        }
+      }
+
       setFormData({
         ...data,
         barangay_id: data.barangay?.id || data.barangay_id || '',
         organization_id: data.organization?.id || data.organization_id || '',
         products: data.products || [],
         children: data.children || [],
-        profile_image: null
+        profile_image: data.profile_image || null
       });
     } catch (err) { setError('Could not load details.'); }
     finally { setInitialLoading(false); }
@@ -169,7 +187,7 @@ export default function FarmerForm() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    setHasUnsavedChanges(true); // Flag changes
+    setHasUnsavedChanges(true);
   };
 
   const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
@@ -179,9 +197,9 @@ export default function FarmerForm() {
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith('image/')) {
-        processFile(file);
+      processFile(file);
     } else {
-        alert("Please drop a valid image file.");
+      alert("Please drop a valid image file.");
     }
   };
 
@@ -199,15 +217,12 @@ export default function FarmerForm() {
   const predictCategory = (name) => {
     if (!name) return 'Others';
     const lowerName = name.toLowerCase();
-    
     const poultryLivestock = ['goat', 'pig', 'cow', 'chicken', 'duck', 'swine', 'cattle', 'carabao', 'sheep', 'quail', 'turkey', 'pork', 'beef', 'poultry', 'livestock'];
     const fishery = ['fish', 'tilapia', 'bangus', 'shrimp', 'crab', 'seaweed', 'oyster', 'mussel', 'aquaculture'];
     const crops = ['rice', 'corn', 'coconut', 'coffee', 'cacao', 'mango', 'banana', 'tomato', 'onion', 'garlic', 'cabbage', 'lettuce', 'crop', 'vegetable', 'fruit', 'wheat', 'soy', 'root', 'tuber'];
-
     if (poultryLivestock.some(k => lowerName.includes(k))) return 'Poultry';
     if (fishery.some(k => lowerName.includes(k))) return 'Fishery';
     if (crops.some(k => lowerName.includes(k))) return 'Crop';
-    
     return 'Others';
   };
 
@@ -219,14 +234,13 @@ export default function FarmerForm() {
     setHasUnsavedChanges(true);
   };
 
-  // --- OPTIMIZED REMOVE PRODUCT ---
   const removeProduct = (index) => {
     setFormData(prev => {
       const newProducts = [...prev.products];
       newProducts.splice(index, 1);
       return { ...prev, products: newProducts };
     });
-    setHasUnsavedChanges(true); // Flag changes to prevent accidental refresh
+    setHasUnsavedChanges(true);
   };
 
   const handleProductSelect = (index, value) => {
@@ -251,9 +265,8 @@ export default function FarmerForm() {
     setFormData(prev => {
       const newProducts = [...prev.products];
       newProducts[index][field] = value;
-      
       if (field === 'product_name' && newProducts[index]._isOthers) {
-         newProducts[index].category = predictCategory(value);
+        newProducts[index].category = predictCategory(value);
       }
       return { ...prev, products: newProducts };
     });
@@ -266,10 +279,44 @@ export default function FarmerForm() {
     setError('');
 
     if (!formData.first_name || !formData.last_name || !formData.barangay_id) {
-        setError("Please fill in all required fields (Name, Surname, Barangay).");
+      setError("Please fill in all required fields (Name, Surname, Barangay).");
+      setLoading(false);
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    // --- CLOUDINARY UPLOAD LOGIC ---
+    let finalImageUrl = formData.profile_image;
+
+    if (formData.profile_image instanceof File) {
+      try {
+        const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dui4heq6v';
+        const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'static';
+
+        const cloudData = new FormData();
+        cloudData.append('file', formData.profile_image);
+        cloudData.append('upload_preset', uploadPreset);
+
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: 'POST',
+          body: cloudData
+        });
+
+        const cloudJson = await uploadRes.json();
+
+        if (!uploadRes.ok) {
+          throw new Error(cloudJson.error?.message || "Cloudinary rejected the upload.");
+        }
+
+        if (cloudJson.secure_url) {
+          finalImageUrl = cloudJson.secure_url;
+        }
+      } catch (err) {
+        setError(`Cloud Error: ${err.message}`);
         setLoading(false);
-        window.scrollTo(0,0);
+        window.scrollTo(0, 0);
         return;
+      }
     }
 
     try {
@@ -281,29 +328,42 @@ export default function FarmerForm() {
         } else if (key === 'children') {
           // Handled by child component
         } else if (key === 'profile_image') {
-          if (formData.profile_image instanceof File) {
-            data.append('profile_image', formData.profile_image);
+          if (finalImageUrl) {
+            data.append('profile_image', finalImageUrl);
           }
         } else if (key === 'age') {
-            data.append('age', calculatedAge);
+          data.append('age', calculatedAge);
         } else if (formData[key] !== null && formData[key] !== undefined) {
           data.append(key, formData[key]);
         }
       });
 
+      let response;
       if (isEditMode) {
-        await farmersAPI.update(id, data);
+        response = await farmersAPI.update(id, data);
       } else {
-        await farmersAPI.create(data);
+        response = await farmersAPI.create(data);
       }
-      
-      // Successfully saved to database - clear the unsaved warning!
-      setHasUnsavedChanges(false); 
+
+      // --- Save to Frontend Local Storage (IndexedDB) ---
+      const savedFarmerId = isEditMode ? id : response.data.id;
+      if (formData.profile_image instanceof File && savedFarmerId) {
+        try {
+          await db.farmerImages.put({
+            id: String(savedFarmerId),
+            blob: formData.profile_image
+          });
+        } catch (dbErr) {
+          console.error("Local storage failed", dbErr);
+        }
+      }
+
+      setHasUnsavedChanges(false);
       navigate('/farmers');
-      
+
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Submission failed.');
-      window.scrollTo(0,0);
+      window.scrollTo(0, 0);
     } finally {
       setLoading(false);
     }
@@ -313,7 +373,7 @@ export default function FarmerForm() {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center dark:bg-[#020c0a] rounded-[3rem]">
         <Loader2 className="animate-spin text-emerald-600 mb-4" size={40} />
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Accessing Registry...</p>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Loading...</p>
       </div>
     );
   }
@@ -333,13 +393,13 @@ export default function FarmerForm() {
                 <div className="p-1.5 bg-emerald-600 rounded-lg text-white shadow-lg shadow-emerald-200 dark:shadow-none">
                   <Fingerprint size={14} className="sm:w-[16px] sm:h-[16px]" />
                 </div>
-                <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-[0.3em]">Identity Protocol</span>
+                <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-[0.3em]">Profile Info</span>
               </div>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
-              {isEditMode ? 'Update Identity' : 'Onboard Profile'}
+              {isEditMode ? 'Update Farmer' : 'Add New Farmer'}
             </h1>
-            <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium mt-1 sm:mt-2">Specify agricultural credentials and personal specs for institutional mapping.</p>
+            <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium mt-1 sm:mt-2">Enter the farmer's personal and farm details here.</p>
           </div>
         </header>
 
@@ -357,7 +417,7 @@ export default function FarmerForm() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
               <div className="lg:col-span-4 space-y-6 sm:space-y-8">
                 {/* IMAGE UPLOAD WITH DRAG & DROP */}
-                <div 
+                <div
                   className={`bg-white dark:bg-[#0b241f] p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] border shadow-sm flex flex-col items-center text-center relative overflow-hidden group transition-all duration-300
                   ${isDragging ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 border-dashed' : 'border-slate-100 dark:border-white/5'}`}
                   onDragOver={handleDragOver}
@@ -368,7 +428,30 @@ export default function FarmerForm() {
                     <div className="relative group w-32 h-32 sm:w-44 sm:h-44 mb-4 sm:mb-6 mx-auto" onClick={() => fileInputRef.current.click()}>
                       <div className={`w-full h-full rounded-[2.5rem] sm:rounded-[3.5rem] overflow-hidden border-[6px] sm:border-8 border-slate-50 dark:border-[#020c0a] shadow-inner flex items-center justify-center bg-slate-100 dark:bg-[#020c0a] transition-all duration-500 group-hover:scale-105 cursor-pointer ${!imagePreview ? 'border-dashed border-slate-200 dark:border-white/10' : ''}`}>
                         {imagePreview ? (
-                          <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                          <img
+                            src={imagePreview}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                            // FIXED: Only use anonymous mode for Cloudinary URLs. 
+                            // This stops InfinityFree from blocking the image on localhost.
+                            crossOrigin={imagePreview.includes('cloudinary.com') ? "anonymous" : undefined}
+                            onError={async (e) => {
+                              // If live URL fails (CORS or Offline), try the local vault fallback
+                              if (id) {
+                                try {
+                                  const localImage = await db.farmerImages.get(String(id));
+                                  if (localImage?.blob) {
+                                    e.target.src = URL.createObjectURL(localImage.blob);
+                                    return;
+                                  }
+                                } catch (err) {
+                                  console.error("Vault fallback failed", err);
+                                }
+                              }
+                              // If all fails, hide the broken icon
+                              e.target.style.display = 'none';
+                            }}
+                          />
                         ) : (
                           <User size={48} className="sm:w-[64px] sm:h-[64px] text-slate-300 dark:text-slate-700" />
                         )}
@@ -377,15 +460,15 @@ export default function FarmerForm() {
                         <Upload size={24} className="sm:w-[28px] sm:h-[28px]" />
                       </div>
                     </div>
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      className="hidden" 
-                      accept="image/*" 
-                      onChange={handleImageChange} 
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleImageChange}
                     />
-                    <p className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Biometric Capture</p>
-                    <p className="text-[9px] sm:text-[10px] text-slate-300 mt-1 sm:mt-2">Drag image here or click</p>
+                    <p className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Profile Picture</p>
+                    <p className="text-[9px] sm:text-[10px] text-slate-300 mt-1 sm:mt-2">Drag image here or click to upload</p>
                   </div>
                 </div>
               </div>
@@ -393,12 +476,12 @@ export default function FarmerForm() {
               <div className="lg:col-span-8 bg-white dark:bg-[#0b241f] p-6 sm:p-10 md:p-12 rounded-[2rem] sm:rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-6 sm:space-y-10 relative overflow-hidden">
                 <div className="flex items-center gap-3 relative z-10">
                   <div className="p-2 sm:p-3 bg-slate-50 dark:bg-white/5 rounded-xl sm:rounded-2xl text-slate-400 dark:text-slate-500 shadow-inner"><User size={18} className="sm:w-[20px] sm:h-[20px]" /></div>
-                  <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Core Specifications</h3>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Basic Information</h3>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 relative z-10">
                   <div className="space-y-2 sm:space-y-3">
-                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Reference Code</label>
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">ID Code</label>
                     <div className="relative">
                       <Hash size={14} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 sm:w-[16px] sm:h-[16px]" />
                       <input required type="text" name="farmer_code" value={formData.farmer_code ?? ''} onChange={handleChange} readOnly
@@ -406,7 +489,7 @@ export default function FarmerForm() {
                     </div>
                   </div>
                   <div className="space-y-2 sm:space-y-3">
-                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Affiliation</label>
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Organization / Group</label>
                     <div className="relative">
                       <Building2 size={14} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 sm:w-[16px] sm:h-[16px]" />
                       <select required name="organization_id" value={formData.organization_id ?? ''} onChange={handleChange}
@@ -418,16 +501,16 @@ export default function FarmerForm() {
                   </div>
 
                   <div className="space-y-2 sm:space-y-3">
-                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal First Name <span className="text-rose-500">*</span></label>
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">First Name <span className="text-rose-500">*</span></label>
                     <input required type="text" name="first_name" value={formData.first_name ?? ''} onChange={handleChange}
                       className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none" />
                   </div>
                   <div className="space-y-2 sm:space-y-3">
-                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Legal Last Name <span className="text-rose-500">*</span></label>
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Last Name <span className="text-rose-500">*</span></label>
                     <input required type="text" name="last_name" value={formData.last_name ?? ''} onChange={handleChange}
                       className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none" />
                   </div>
-                  
+
                   <div className="space-y-2 sm:space-y-3">
                     <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Middle Name</label>
                     <input type="text" name="middle_name" value={formData.middle_name ?? ''} onChange={handleChange}
@@ -443,9 +526,9 @@ export default function FarmerForm() {
                     <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Birth Date</label>
                     <div className="flex flex-row gap-3 sm:gap-4 items-center">
                       <input type="date" name="birth_date" value={formData.birth_date ?? ''} onChange={handleChange}
-                          className="flex-1 w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none" />
+                        className="flex-1 w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none" />
                       <div className="px-4 sm:px-6 py-3 sm:py-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl sm:rounded-2xl border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-black text-xs sm:text-sm min-w-[70px] sm:min-w-[80px] text-center">
-                          {calculatedAge} Y/O
+                        {calculatedAge} Y/O
                       </div>
                     </div>
                   </div>
@@ -478,11 +561,11 @@ export default function FarmerForm() {
             <div className="bg-white dark:bg-[#0b241f] p-6 sm:p-10 md:p-12 rounded-[2rem] sm:rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-6 sm:space-y-10">
               <div className="flex items-center gap-3">
                 <div className="p-2 sm:p-3 bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-xl sm:rounded-2xl shadow-inner"><Globe size={18} className="sm:w-[20px] sm:h-[20px]" /></div>
-                <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Geographic Protocol</h3>
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Location Details</h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-8">
                 <div className="space-y-2 sm:space-y-3">
-                  <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Assigned Barangay <span className="text-rose-500">*</span></label>
+                  <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Barangay <span className="text-rose-500">*</span></label>
                   <select required name="barangay_id" value={formData.barangay_id ?? ''} onChange={handleChange}
                     className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
                     <option value="">Select Territory...</option>
@@ -490,12 +573,12 @@ export default function FarmerForm() {
                   </select>
                 </div>
                 <div className="space-y-2 sm:space-y-3 sm:col-span-2 md:col-span-2">
-                  <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Terminal Address (Purok/Sitio)</label>
+                  <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Exact Address (Purok/Sitio)</label>
                   <input type="text" name="address" value={formData.address ?? ''} onChange={handleChange}
                     className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-blue-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none transition-all" placeholder="Unit, Street, Complex" />
                 </div>
                 <div className="space-y-2 sm:space-y-3 sm:col-span-2 md:col-span-1">
-                  <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Communication Link</label>
+                  <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Contact Number</label>
                   <div className="relative">
                     <Phone size={14} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 sm:w-[16px] sm:h-[16px]" />
                     <input type="text" name="contact_number" value={formData.contact_number ?? ''} onChange={handleChange}
@@ -510,7 +593,7 @@ export default function FarmerForm() {
               <div className="bg-white dark:bg-[#0b241f] p-6 sm:p-10 md:p-12 rounded-[2rem] sm:rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-6 sm:space-y-10">
                 <div className="flex items-center gap-3">
                   <div className="p-2 sm:p-3 bg-amber-50 dark:bg-amber-500/10 text-amber-500 dark:text-amber-400 rounded-xl sm:rounded-2xl shadow-inner"><Ruler size={18} className="sm:w-[20px] sm:h-[20px]" /></div>
-                  <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Agricultural Metrics</h3>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Farm Details</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div className="space-y-2 sm:space-y-3">
@@ -524,13 +607,13 @@ export default function FarmerForm() {
                       className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
                   </div>
                   <div className="sm:col-span-2 space-y-2 sm:space-y-3">
-                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Land Ownership Model</label>
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Land Ownership Status</label>
                     <select name="land_ownership" value={formData.land_ownership ?? ''} onChange={handleChange}
                       className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-amber-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
-                      <option value="Owner">Global Owner</option>
-                      <option value="Tenant">Tenant Custodian</option>
+                      <option value="Owner">Owner</option>
+                      <option value="Tenant">Tenant</option>
                       <option value="Leaseholder">Leaseholder</option>
-                      <option value="Caretaker">Caretaker Agent</option>
+                      <option value="Caretaker">Caretaker</option>
                     </select>
                   </div>
                 </div>
@@ -539,29 +622,29 @@ export default function FarmerForm() {
               <div className="bg-white dark:bg-[#0b241f] p-6 sm:p-10 md:p-12 rounded-[2rem] sm:rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-sm space-y-6 sm:space-y-10">
                 <div className="flex items-center gap-3">
                   <div className="p-2 sm:p-3 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 rounded-xl sm:rounded-2xl shadow-inner"><DollarSign size={18} className="sm:w-[20px] sm:h-[20px]" /></div>
-                  <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Economic Profile</h3>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Income and Education</h3>
                 </div>
                 <div className="space-y-4 sm:space-y-8">
                   <div className="space-y-2 sm:space-y-3">
-                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Educational Background</label>
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Highest Education</label>
                     <select name="education_level" value={formData.education_level ?? ''} onChange={handleChange}
                       className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none appearance-none transition-all">
-                      <option value="Elementary">Elementary Cycle</option>
-                      <option value="High School Graduate">High School Diploma</option>
+                      <option value="Elementary">Elementary</option>
+                      <option value="High School Graduate">High School Graduate</option>
                       <option value="College Undergraduate">College Undergrad</option>
-                      <option value="College Graduate">Academic Degree</option>
-                      <option value="Vocational">Vocational Cert</option>
+                      <option value="College Graduate">College Graduate</option>
+                      <option value="Vocational">Vocational</option>
                       <option value="None">None</option>
                     </select>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                     <div className="space-y-2 sm:space-y-3">
-                      <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Annual Yield (₱)</label>
+                      <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Yearly Income (₱)</label>
                       <input type="number" name="annual_income" value={formData.annual_income ?? ''} onChange={handleChange}
                         className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
                     </div>
                     <div className="space-y-2 sm:space-y-3">
-                      <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Primary Revenue Source</label>
+                      <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Main Source of Income</label>
                       <input type="text" name="income_source" value={formData.income_source ?? ''} onChange={handleChange}
                         className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-white/5 border-none rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-indigo-500/10 text-xs sm:text-sm font-bold dark:text-white shadow-inner outline-none transition-all" />
                     </div>
@@ -575,10 +658,10 @@ export default function FarmerForm() {
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 sm:gap-6 pb-2 border-b border-slate-50 dark:border-white/5">
                 <div className="flex items-center gap-3">
                   <div className="p-2 sm:p-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl sm:rounded-2xl shadow-inner"><Sprout size={18} className="sm:w-[20px] sm:h-[20px]" /></div>
-                  <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Yield Documentation</h3>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Farm Products / Crops</h3>
                 </div>
                 <button type="button" onClick={addProduct} className="group w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 sm:py-3.5 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] rounded-xl sm:rounded-2xl font-black text-[9px] sm:text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all">
-                  <Plus size={14} className="group-hover:rotate-90 transition-transform" /> Append Commodity
+                  <Plus size={14} className="group-hover:rotate-90 transition-transform" /> Add Product
                 </button>
               </div>
 
@@ -586,76 +669,69 @@ export default function FarmerForm() {
                 {formData.products.length === 0 ? (
                   <div className="p-10 sm:p-20 text-center bg-slate-50 dark:bg-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-white/10">
                     <div className="p-4 sm:p-5 bg-white dark:bg-[#0b241f] rounded-full inline-flex text-slate-200 dark:text-slate-700 mb-4 sm:mb-6 shadow-sm"><FileText size={24} className="sm:w-[32px] sm:h-[32px]" /></div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">No active commodities detected</h4>
-                    <p className="text-[10px] sm:text-xs text-slate-400 dark:text-slate-600 mt-1 sm:mt-2">Initialize yield data by appending a new crop profile.</p>
+                    <h4 className="text-xs sm:text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">No crops or products added yet</h4>
+                    <p className="text-[10px] sm:text-xs text-slate-400 dark:text-slate-600 mt-1 sm:mt-2">Click the button above to add what the farmer grows or raises.</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4 sm:gap-6">
                     {formData.products.map((product, index) => {
                       const isCustomMode = product._isOthers || (product.product_name && !availableProducts.some(ap => ap.name === product.product_name));
-                      
                       return (
                         <div key={index} className="flex flex-col lg:flex-row gap-4 sm:gap-6 items-start lg:items-end p-5 sm:p-8 bg-slate-50 dark:bg-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 transition-all hover:bg-white dark:hover:bg-white/10 hover:shadow-xl group animate-in slide-in-from-right-4">
-                          
                           <div className="flex-1 w-full space-y-2 sm:space-y-3">
-                            <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Commodity Type</label>
-                            
+                            <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Product Type</label>
                             <div className="flex flex-col gap-2">
-                              <select 
+                              <select
                                 value={isCustomMode ? 'Others' : (product.product_name || '')}
                                 onChange={(e) => handleProductSelect(index, e.target.value)}
                                 className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-[#041d18] border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none"
                               >
-                                <option value="" disabled>Select Commodity...</option>
+                                <option value="" disabled>Select Product...</option>
                                 {availableProducts.map(p => (
                                   <option key={p.id} value={p.name}>{p.name}</option>
                                 ))}
                                 <option value="Others">Others (Specify)</option>
                               </select>
-
                               {isCustomMode && (
                                 <div className="flex flex-col gap-1 mt-1 animate-in fade-in zoom-in-95 duration-200">
-                                  <input 
-                                    type="text" 
-                                    placeholder="Specify custom commodity (e.g. Goat, Mango)" 
-                                    value={product.product_name ?? ''} 
+                                  <input
+                                    type="text"
+                                    placeholder="Specify custom product (e.g. Goat, Mango)"
+                                    value={product.product_name ?? ''}
                                     onChange={(e) => handleProductChange(index, 'product_name', e.target.value)}
-                                    className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-slate-50 dark:bg-[#020c0a] border border-emerald-100 dark:border-emerald-500/20 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-inner focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" 
+                                    className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-slate-50 dark:bg-[#020c0a] border border-emerald-100 dark:border-emerald-500/20 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-inner focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none"
                                   />
                                   {product.product_name && (
                                     <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 ml-2 mt-1 transition-all">
-                                      Auto-categorized as: {product.category || 'Others'}
+                                      Automatically marked as: {product.category || 'Others'}
                                     </span>
                                   )}
                                 </div>
                               )}
                             </div>
                           </div>
-
                           <div className="w-full lg:w-40 space-y-2 sm:space-y-3">
                             <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Volume</label>
                             <input type="number" placeholder="0" value={product.production_volume ?? ''} onChange={(e) => handleProductChange(index, 'production_volume', e.target.value)}
                               className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none" />
                           </div>
-                          
                           <div className="w-full lg:w-32 space-y-2 sm:space-y-3">
                             <label className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Unit</label>
                             <select value={product.unit ?? ''} onChange={(e) => handleProductChange(index, 'unit', e.target.value)}
-                              className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-sm focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none">
+                              className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-white dark:bg-white/5 border-none rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold dark:text-white shadow-inner focus:ring-4 focus:ring-emerald-500/10 transition-all outline-none appearance-none">
                               <option value="kg">kg</option>
                               <option value="tons">tons</option>
                               <option value="sacks">sacks</option>
                               <option value="heads">heads</option>
                             </select>
                           </div>
-                          
                           <div className="flex items-center justify-between w-full lg:w-auto gap-4 sm:gap-6 pb-1 sm:pb-2 pt-2 lg:pt-0">
                             <label className="flex items-center gap-2 sm:gap-3 cursor-pointer group/check">
                               <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md sm:rounded-lg border-2 flex items-center justify-center transition-all ${product.is_primary ? 'bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200 dark:shadow-none' : 'border-slate-200 dark:border-white/20 bg-white dark:bg-white/5 group-hover/check:border-emerald-300'}`}>
                                 {product.is_primary && <Plus size={14} className="text-white rotate-45" />}
                               </div>
                               <input type="checkbox" className="hidden" checked={product.is_primary} onChange={(e) => handleProductChange(index, 'is_primary', e.target.checked)} />
-                              <span className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Primary Yield</span>
+                              <span className="text-[9px] sm:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Main Product</span>
                             </label>
                             <button type="button" onClick={() => removeProduct(index)} className="p-2.5 sm:p-3 bg-white dark:bg-[#041d18] border border-rose-100 dark:border-rose-500/20 text-rose-400 hover:bg-rose-500 dark:hover:bg-rose-500 hover:text-white rounded-lg sm:rounded-xl transition-all shadow-sm active:scale-90">
                               <Trash2 size={16} className="sm:w-[18px] sm:h-[18px]" />
@@ -670,7 +746,7 @@ export default function FarmerForm() {
             </div>
           </form>
 
-          {/* SECTION 5: FAMILY & SUCCESSION (Outside main form to prevent nesting) */}
+          {/* SECTION 5: FAMILY & SUCCESSION */}
           {isEditMode && (
             <FarmerChildren
               farmerId={id}
@@ -679,19 +755,16 @@ export default function FarmerForm() {
             />
           )}
 
-          {/* ACTION DECK (Linked to form via ID) */}
+          {/* ACTION DECK */}
           <footer className="flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-6 pt-6 sm:pt-10 border-t border-slate-100 dark:border-white/5">
             <button type="button" onClick={() => navigate('/farmers')} className="w-full sm:w-auto px-8 sm:px-10 py-4 sm:py-5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 font-black text-[9px] sm:text-[10px] uppercase tracking-[0.2em] rounded-xl sm:rounded-2xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95 text-center">
-              Abort Operation
+              Cancel
             </button>
-            
-            {/* The Submit button is here. Remind user they must click this to save deletions! */}
             <button type="submit" form="farmer-profile-form" disabled={loading} className="w-full sm:w-auto px-8 sm:px-12 py-4 sm:py-5 bg-emerald-600 dark:bg-emerald-500 text-white dark:text-[#041d18] font-black text-[9px] sm:text-[10px] uppercase tracking-[0.2em] rounded-xl sm:rounded-2xl shadow-xl sm:shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3 disabled:opacity-50">
               {loading ? <Loader2 size={16} className="sm:w-[18px] sm:h-[18px] animate-spin" /> : <Save size={16} className="sm:w-[18px] sm:h-[18px]" />}
-              <span>{isEditMode ? 'Commit Record Changes' : 'Finalize Identity Enrollment'}</span>
+              <span>{isEditMode ? 'Save Changes' : 'Save New Farmer'}</span>
             </button>
           </footer>
-
         </div>
       </div>
     </div>

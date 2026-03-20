@@ -11,14 +11,80 @@ import traceback
 from sqlalchemy import or_, func, desc, asc
 from flask_mail import Mail, Message
 import random
+import time
+
+from pywebpush import webpush, WebPushException
 
 from config import config
 from models import (
     db, User, Organization, Barangay, AgriculturalProduct, Farmer, 
     FarmerProduct, FarmerChild, FarmerExperience, ResearchProject,
     SurveyQuestionnaire, ActivityLog, Notification, ExperienceComment,
-    TokenBlocklist # <--- ADD THIS HERE
+    TokenBlocklist
 )
+
+# --- ADDED: SAFE ML IMPORTS ---
+try:
+    import joblib
+    from tensorflow.keras.models import load_model
+    from tensorflow.keras.preprocessing.image import img_to_array
+    import numpy as np
+    from PIL import Image
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+
+# Initialize ML Models globally
+CROP_CNN_MODEL = None
+RISK_RF_MODEL = None
+
+if ML_AVAILABLE:
+    try:
+        if os.path.exists('crop_model.h5'):
+            CROP_CNN_MODEL = load_model('crop_model.h5')
+            print("✅ AI Crop Doctor Model Loaded Successfully!")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not load crop_model.h5. Error: {e}")
+        
+    try:
+        if os.path.exists('risk_model.pkl'):
+            RISK_RF_MODEL = joblib.load('risk_model.pkl')
+            print("✅ ML Risk Model Loaded Successfully!")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not load risk_model.pkl. Error: {e}")
+
+# Global OTP storage for password resets
+otp_storage = {}
+
+# --- ADDED: MISSING DATABASE MODELS FOR ELDER PORTAL & PUSH NOTIFS ---
+class SeasonalLedger(db.Model):
+    __tablename__ = 'seasonal_ledgers'
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    farmer_id = db.Column(db.Integer, db.ForeignKey('farmers.id'), nullable=True)
+    farm_size = db.Column(db.Float, default=1.0)
+    capital = db.Column(db.Float, default=0.0)
+    revenue = db.Column(db.Float, default=0.0)
+    profit = db.Column(db.Float, default=0.0)
+    issue_tag = db.Column(db.String(100))
+    risk_prediction = db.Column(db.String(50))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class CropScan(db.Model):
+    __tablename__ = 'crop_scans'
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    image_path = db.Column(db.String(255), nullable=False)
+    ai_diagnosis = db.Column(db.String(100))
+    confidence_score = db.Column(db.Float)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PushSubscription(db.Model):
+    __tablename__ = 'push_subscriptions'
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    subscription_json = db.Column(db.Text, nullable=False)
+
 
 def create_app(config_name='development'):
     app = Flask(__name__, static_folder="../agridata/dist", static_url_path="/")
@@ -33,16 +99,26 @@ def create_app(config_name='development'):
     app.config["JWT_BLACKLIST_ENABLED"] = True
     app.config["JWT_BLACKLIST_TOKEN_CHECKS"] = ["access", "refresh"]
 
-    # Initialize extensions (SQLAlchemy)
+    # Mail configuration
+    app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+    app.config['MAIL_PORT'] = 587
+    app.config['MAIL_USE_TLS'] = True
+    app.config['MAIL_USE_SSL'] = False
+    app.config['MAIL_USERNAME'] = 'markronald265@gmail.com'
+    app.config['MAIL_PASSWORD'] = 'qlfxiqvfyodybpsz'
+    app.config['MAIL_DEFAULT_SENDER'] = 'Agridata'
+
+    # Initialize extensions
     db.init_app(app)
+    mail = Mail(app)
     
-    # Allow specific origin for CORS - Enhanced headers
     CORS(app, 
          resources={r"/api/*": {"origins": "*"}}, # Allowing '*' is easiest for ngrok
          supports_credentials=True,
          # MUST INCLUDE "ngrok-skip-browser-warning" in allow_headers
          allow_headers=["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    
     jwt = JWTManager(app)
 
     # --- NEW: JWT Blocklist Callbacks for Session Management ---
@@ -81,6 +157,12 @@ def create_app(config_name='development'):
         print(f"📁 Verified Upload folder at: {app.config['UPLOAD_FOLDER']}")
     except Exception as e:
         print(f"❌ Error creating upload folder: {e}")
+    
+    VAPID_PUBLIC_KEY = "BMoYQvivahv8gM-gmR0bOv-k0r1uvH8cFxijwpyRos-Y3IgHx7rZ403w0RcML_bAgUsp5_vdUn7zwC5bed9bYQ="
+    VAPID_PRIVATE_KEY = "NBaSZ64oTQRF_qSsriChpwvTdKPc3uIRqcTV-zDC2yu="
+    VAPID_CLAIMS = {
+        "sub": "mailto:markronald265@gmail.com"
+    }
     
     # --- HELPER FUNCTIONS ---
 
@@ -141,7 +223,6 @@ def create_app(config_name='development'):
             db.session.rollback()
             pass
 
-    # ADDED: Notification Helper
     def broadcast_notification(title, message, target_user_id=None):
         """
         Creates a notification record.
@@ -184,6 +265,21 @@ def create_app(config_name='development'):
             # Note: We let the calling function do the commit to ensure transaction integrity
         except Exception as e:
             print(f"Notification Creation Error: {str(e)}")
+
+    def send_web_push(subscription_info, message_body):
+        """Triggers the push message to the browser."""
+        try:
+            webpush(
+                subscription_info=json.loads(subscription_info),
+                data=json.dumps(message_body),
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims=VAPID_CLAIMS
+            )
+            return True
+        except WebPushException as ex:
+            print(f"Web Push Error: {ex}")
+            # If subscription is expired (410 Gone), delete it from your DB
+            return False
     
     def allowed_file(filename):
         return '.' in filename and \
@@ -221,92 +317,10 @@ def create_app(config_name='development'):
                 except Exception as e:
                     print(f"Error deleting file {filename}: {e}")
         return False
+
     # --- ROOT INTERFACE (Status Page) ---
     @app.route('/')
     def index():
-        # return """
-        # <!DOCTYPE html>
-        # <html lang="en">
-        # <head>
-        #     <meta charset="UTF-8">
-        #     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        #     <title>AgriData Core API</title>
-        #     <style>
-        #         body { 
-        #             font-family: system-ui, -apple-system, sans-serif; 
-        #             background-color: #020c0a; 
-        #             color: white; 
-        #             display: flex; 
-        #             align-items: center; 
-        #             justify-content: center; 
-        #             height: 100vh; 
-        #             margin: 0; 
-        #         }
-        #         .container { 
-        #             text-align: center; 
-        #             background-color: #0b241f; 
-        #             padding: 3.5rem; 
-        #             border-radius: 2.5rem; 
-        #             border: 1px solid rgba(255,255,255,0.05); 
-        #             box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-        #             max-width: 400px;
-        #         }
-        #         .status-badge { 
-        #             display: inline-flex; 
-        #             align-items: center; 
-        #             gap: 10px; 
-        #             background: rgba(16, 185, 129, 0.1); 
-        #             color: #10b981; 
-        #             padding: 8px 20px; 
-        #             border-radius: 999px; 
-        #             font-size: 0.75rem; 
-        #             font-weight: 900; 
-        #             letter-spacing: 0.2em; 
-        #             text-transform: uppercase; 
-        #             margin-bottom: 1.5rem; 
-        #             border: 1px solid rgba(16, 185, 129, 0.2); 
-        #         }
-        #         .dot { 
-        #             width: 8px; 
-        #             height: 8px; 
-        #             background-color: #10b981; 
-        #             border-radius: 50%; 
-        #             box-shadow: 0 0 12px #10b981; 
-        #             animation: pulse 2s infinite ease-in-out; 
-        #         }
-        #         h1 { 
-        #             margin: 0 0 1rem 0; 
-        #             font-size: 2.5rem; 
-        #             font-weight: 900;
-        #             letter-spacing: -0.05em; 
-        #             text-transform: uppercase;
-        #         }
-        #         p { 
-        #             color: #94a3b8; 
-        #             margin: 0; 
-        #             font-size: 1rem; 
-        #             line-height: 1.6;
-        #             font-weight: 500;
-        #         }
-        #         @keyframes pulse { 
-        #             0% { opacity: 1; transform: scale(1); } 
-        #             50% { opacity: 0.4; transform: scale(0.8); } 
-        #             100% { opacity: 1; transform: scale(1); } 
-        #         }
-        #     </style>
-        # </head>
-        # <body>
-        #     <div class="container">
-        #         <div class="status-badge">
-        #             <div class="dot"></div> API Online
-        #         </div>
-        #         <h1>AgriData Hub</h1>
-        #         <p>The core infrastructure and database routing services are currently operational.</p>
-        #     </div>
-        # </body>
-        # </html>
-        # """
-        
         return send_from_directory(app.static_folder, "index.html")
     
     # ============ Static File Serving (Images) ============
@@ -327,19 +341,24 @@ def create_app(config_name='development'):
             if User.query.filter_by(email=data['email']).first():
                 return jsonify({'error': 'Email already exists'}), 400
             
+            # --- FIXED: New users now start as 'pending' and inactive ---
             user = User(
                 username=data['username'],
                 email=data['email'],
                 full_name=data['full_name'],
                 role=data.get('role', 'viewer'),
-                organization_id=data.get('organization') 
+                organization_id=data.get('organization'),
+                status='pending',   # Logic for the "Admin Approval" feature
+                is_active=False     # Prevents immediate login
             )
             user.set_password(data['password'])
             
             db.session.add(user)
             db.session.commit()
             log_activity('USER REGISTERED', 'User', user.id, f"New account created: {user.username}")
-            return jsonify({'message': 'User created successfully', 'user': user.to_dict()}), 201
+            
+            # Message updated to reflect the approval process
+            return jsonify({'message': 'Registration successful. Waiting for admin approval.', 'user': user.to_dict()}), 201
         
         except Exception as e:
             db.session.rollback()
@@ -361,25 +380,25 @@ def create_app(config_name='development'):
                 )
             ).first()
 
-            # --- FIX IS HERE: Changed 401 to 400 ---
-            # 400 stops the frontend interceptor from refreshing the page
             if not user or not user.check_password(password):
                 return jsonify({'error': 'Invalid credentials'}), 400
+
+            # --- ADDED: Admin Approval Check ---
+            # This triggers the 'isPendingApproval' UI in your React frontend
+            if hasattr(user, 'status') and user.status == 'pending':
+                return jsonify({'error': 'Account pending approval. Please contact admin.'}), 403
 
             if not user.is_active:
                 return jsonify({'error': 'Account is disabled. Contact admin.'}), 403
 
-            # --- OTP LOGIC START ---
+            # --- OTP LOGIC START (Untouched) ---
             if user.otp_enabled:
-                # Generate 6-digit OTP
                 otp = "".join([str(random.randint(0, 9)) for _ in range(6)])
                 
-                # Update User with Code & Expiry
                 user.otp_code = otp
                 user.otp_expiry = datetime.utcnow() + timedelta(minutes=5)
-                db.session.commit() # Commit code to DB immediately
+                db.session.commit() 
 
-                # --- EMAIL SENDING LOGIC ---
                 try:
                     print(f"📧 Sending OTP to {user.email}...")
                     print(f"[DEBUG] OTP Code: {otp}") 
@@ -409,6 +428,25 @@ def create_app(config_name='development'):
                     'message': 'OTP sent',
                     'otp_required': True
                 }), 200
+            # --- OTP LOGIC END ---
+
+            # Normal Login (No OTP)
+            access_token = create_access_token(identity=str(user.id), expires_delta=timedelta(hours=12))
+            refresh_token = create_refresh_token(identity=str(user.id))
+            
+            log_activity('LOGIN SUCCESS', 'User', user.id, f"User {user.username} logged in")
+            
+            return jsonify({
+                'message': 'Login successful',
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'user': user.to_dict(),
+                'otp_required': False
+            }), 200
+
+        except Exception as e:
+            print(f"❌ LOGIN ERROR: {str(e)}")
+            return jsonify({'error': 'Internal Server Error'}), 500
             # --- OTP LOGIC END ---
 
             # Normal Login (No OTP)
@@ -528,8 +566,6 @@ def create_app(config_name='development'):
         
         if not user:
             return jsonify({'error': 'User not found'}), 404
-
-        # REMOVED the "admin cannot disable 2FA" 403 Forbidden block here
         
         data = request.get_json()
         
@@ -561,18 +597,6 @@ def create_app(config_name='development'):
         if not user:
             return jsonify({'error': 'User not found'}), 404
         return jsonify(user.to_dict()), 200
-    
-    
-    app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-    app.config['MAIL_PORT'] = 587
-    app.config['MAIL_USE_TLS'] = True
-    app.config['MAIL_USE_SSL'] = False
-    app.config['MAIL_USERNAME'] = 'markronald265@gmail.com'
-    app.config['MAIL_PASSWORD'] = 'qlfxiqvfyodybpsz'
-    app.config['MAIL_DEFAULT_SENDER'] = 'Agridata'
-    mail = Mail(app)
-
-    otp_storage = {} 
     
     @app.route('/api/auth/forgot-password', methods=['POST'])
     def request_otp():
@@ -916,27 +940,38 @@ def create_app(config_name='development'):
             if age_val is None:
                 age_val = 0
 
+            # 1. Create and Save the Farmer
             farmer = Farmer(
-                farmer_code=data.get('farmer_code'), first_name=data.get('first_name'), middle_name=get_val('middle_name'),
-                last_name=data.get('last_name'), suffix=get_val('extension_name'), # MAPPED from frontend
-                
+                farmer_code=data.get('farmer_code'), 
+                first_name=data.get('first_name'), 
+                middle_name=get_val('middle_name'),
+                last_name=data.get('last_name'), 
+                suffix=get_val('extension_name'),
                 age=age_val, 
                 gender=data.get('gender', 'Male'),
-                civil_status=data.get('civil_status', 'Single'), # Explicitly added
-
-                profile_image=profile_image, birth_date=birth_date_val, barangay_id=get_val('barangay_id', int),
-                organization_id=get_val('organization_id', int), data_encoder_id=current_user.id, address=data.get('address'),
-                contact_number=data.get('contact_number'), education_level=data.get('education_level', 'Elementary'),
-                annual_income=get_val('annual_income', float), income_source=data.get('income_source'),
+                civil_status=data.get('civil_status', 'Single'),
+                profile_image=profile_image, 
+                birth_date=birth_date_val, 
+                barangay_id=get_val('barangay_id', int),
+                organization_id=get_val('organization_id', int), 
+                data_encoder_id=current_user.id, 
+                address=data.get('address'),
+                contact_number=data.get('contact_number'), 
+                education_level=data.get('education_level', 'Elementary'),
+                annual_income=get_val('annual_income', float), 
+                income_source=data.get('income_source'),
                 number_of_children=get_val('number_of_children', int, 0),
                 children_farming_involvement=data.get('children_farming_involvement') in ['true', True, '1'],
-                primary_occupation=data.get('primary_occupation'), secondary_occupation=data.get('secondary_occupation'),
-                farm_size_hectares=get_val('farm_size_hectares', float, 0), land_ownership=data.get('land_ownership', 'Owner'),
+                primary_occupation=data.get('primary_occupation'), 
+                secondary_occupation=data.get('secondary_occupation'),
+                farm_size_hectares=get_val('farm_size_hectares', float, 0), 
+                land_ownership=data.get('land_ownership', 'Owner'),
                 years_farming=get_val('years_farming', int)
             )
             db.session.add(farmer)
             db.session.commit()
 
+            # 2. Handle Products
             if data.get('products'):
                 try:
                     for p in json.loads(data['products']):
@@ -948,15 +983,34 @@ def create_app(config_name='development'):
                             db.session.commit()
                         db.session.add(FarmerProduct(farmer_id=farmer.id, product_id=prod.id, production_volume=p.get('production_volume', 0), unit=p.get('unit', 'kg'), is_primary=p.get('is_primary', False)))
                     db.session.commit()
-                except: pass
+                except Exception as product_err:
+                    print(f"Product processing error: {product_err}")
+
+            # --- 3. NOTIFICATION LOGIC (NEW) ---
+            try:
+                notification_payload = {
+                    "title": "New Farmer Enrolled!",
+                    "body": f"{farmer.first_name} {farmer.last_name} was added to the registry.",
+                    "url": f"/farmers"
+                }
+                
+                # Fetch all browser subscriptions from your database
+                subscriptions = PushSubscription.query.all()
+                for sub in subscriptions:
+                    # Trigger the send function we built earlier
+                    send_web_push(sub.subscription_json, notification_payload)
+                    
+            except Exception as push_err:
+                print(f"Push Notification Error: {push_err}") 
+                # We use a separate try/except so that if the notification fails, 
+                # the farmer still gets saved successfully.
 
             log_activity('FARMER CREATED', 'Farmer', farmer.id, f"Created: {farmer.first_name} {farmer.last_name}")
             return jsonify({'message': 'Success', 'farmer': farmer.to_dict()}), 201
+
         except Exception as e:
             db.session.rollback()
-            print(f"ERROR: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"CRITICAL ERROR: {e}")
             return jsonify({'error': str(e)}), 400
         
     @app.route('/api/organizations', methods=['POST'])
@@ -1122,7 +1176,6 @@ def create_app(config_name='development'):
         except Exception as e:
             db.session.rollback()
             print(f"❌ UPDATE ERROR: {e}")
-            import traceback
             traceback.print_exc()
             return jsonify({'error': f'Failed to update record: {str(e)}'}), 400
     
@@ -1289,7 +1342,6 @@ def create_app(config_name='development'):
         log_activity('CHILD ADDED', 'Farmer Child', child.id, f"Enrolled lineage for Farmer ID: {farmer_id}")
         return jsonify({'message': 'Child record added successfully', 'child': child.to_dict()}), 201
     
-    # Find this route in app.py and replace it
     @app.route('/api/farmers/<int:farmer_id>/children/<int:child_id>', methods=['PUT'])
     @jwt_required()
     def update_farmer_child(farmer_id, child_id):
@@ -1364,18 +1416,42 @@ def create_app(config_name='development'):
     
     # ============ Farmer Experiences Routes ============
     
+    # ==========================================
+    # --- SECURED: FARMER EXPERIENCES API ---
+    # ==========================================
+
     @app.route('/api/experiences', methods=['GET'])
     @jwt_required()
     def get_experiences():
         # Identify the user from the JWT token
         current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
         
         page = request.args.get('page', 1, type=int)
-        per_page = 20
         
-        pagination = FarmerExperience.query.order_by(
-            FarmerExperience.created_at.desc()
-        ).paginate(page=page, per_page=per_page, error_out=False)
+        # --- CRITICAL FIX: Allow frontend to request up to 500 items ---
+        # This is required so the AI Knowledge Base can read the entire history
+        per_page = request.args.get('per_page', 20, type=int)
+        if per_page > 500:
+            per_page = 500
+        
+        # Base query
+        query = FarmerExperience.query
+
+        # PRIVACY FILTER:
+        # If user is NOT an admin, they should NOT see "Mentees Only" posts
+        # UNLESS they are the one who recorded it (interviewer_id).
+        if user and user.role != 'admin':
+            query = query.filter(
+                or_(
+                    FarmerExperience.visibility == 'Public',
+                    FarmerExperience.interviewer_id == current_user_id
+                )
+            )
+
+        pagination = query.order_by(FarmerExperience.created_at.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
 
         return jsonify({
             'experiences': [
@@ -1394,7 +1470,8 @@ def create_app(config_name='development'):
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
         
-        if current_user.role not in ['admin', 'researcher', 'data_encoder']:
+        # FIXED: Added 'farmer' to the allowed roles list
+        if current_user.role not in ['admin', 'researcher', 'data_encoder', 'farmer']:
             return jsonify({'error': 'Unauthorized'}), 403
         
         data = request.get_json()
@@ -1406,9 +1483,10 @@ def create_app(config_name='development'):
                 title=data['title'],
                 description=data['description'],
                 date_recorded=datetime.strptime(data['date_recorded'], '%Y-%m-%d').date() if data.get('date_recorded') else date.today(),
-                interviewer_id=current_user.id,
+                interviewer_id=current_user.id, # Establishes ownership
                 location=data.get('location'),
                 context=data.get('context'),
+                visibility=data.get('visibility', 'Public'), # Captured from frontend
                 impact_level=data.get('impact_level'),
                 comments_enabled=data.get('comments_enabled', True)
             )
@@ -1438,14 +1516,49 @@ def create_app(config_name='development'):
     @jwt_required()
     def update_experience(id):
         current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
         exp = FarmerExperience.query.get_or_404(id)
+        
+        # --- CRITICAL FIX: SECURITY CHECK ---
+        # Only the original creator (interviewer_id) or an admin can update this post
+        if str(exp.interviewer_id) != str(current_user_id) and user.role != 'admin':
+            return jsonify({'error': 'Access Denied: You can only modify your own posts.'}), 403
+        
         data = request.get_json()
+        try:
+            # Update fields if they are provided in the request
+            if 'title' in data: exp.title = data['title']
+            if 'description' in data: exp.description = data['description']
+            if 'experience_type' in data: exp.experience_type = data['experience_type']
+            if 'visibility' in data: exp.visibility = data['visibility']
+            
+            # This is where the toggle happens, protected by the security check above
+            if 'comments_enabled' in data: exp.comments_enabled = data['comments_enabled']
+            
+            db.session.commit()
+            return jsonify(exp.to_dict(current_user_id=current_user_id)), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
         
-        if 'comments_enabled' in data:
-            exp.comments_enabled = data['comments_enabled']
+    @app.route('/api/experiences/<int:id>', methods=['DELETE'])
+    @jwt_required()
+    def delete_experience(id):
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        exp = FarmerExperience.query.get_or_404(id)
         
-        db.session.commit()
-        return jsonify(exp.to_dict(current_user_id=current_user_id)), 200
+        # SECURITY CHECK: Only owner or admin can delete
+        if str(exp.interviewer_id) != str(current_user_id) and user.role != 'admin':
+            return jsonify({'error': 'Access Denied: You can only delete your own records.'}), 403
+            
+        try:
+            db.session.delete(exp)
+            db.session.commit()
+            return jsonify({'message': 'Record permanently removed from archives.'}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
     
     @app.route('/api/experiences/<int:id>/like', methods=['POST'])
     @jwt_required()
@@ -1987,6 +2100,319 @@ def create_app(config_name='development'):
             'pages': pagination.pages,
             'current_page': page
         }), 200
+        
+        
+    @app.route('/api/notifications/subscribe', methods=['POST'])
+    def subscribe():
+        """Endpoint for the browser to send its unique subscription info."""
+        subscription_data = request.get_json()
+        
+        # ADDED: Save to DB
+        try:
+            sub = PushSubscription(subscription_json=json.dumps(subscription_data))
+            db.session.add(sub)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error saving sub: {e}")
+            
+        return jsonify({"status": "success", "message": "Subscribed to Web Push"}), 201
+
+    @app.route('/api/notifications/trigger-test', methods=['GET'])
+    def trigger_test():
+        # 1. Grab the most recent subscription (your phone)
+        sub = PushSubscription.query.order_by(PushSubscription.id.desc()).first()
+        
+        if not sub:
+            return "No phone found in database. Go to the website and click Allow first!", 404
+
+        # 2. Define what the notification says
+        test_payload = {
+            "title": "Backend Alert!",
+            "body": "This notification came directly from your Python code!",
+            "url": "/dashboard"
+        }
+
+        # 3. Call your function
+        success = send_web_push(sub.subscription_json, test_payload)
+        
+        if success:
+            return "Check your phone! Signal sent.", 200
+        else:
+            return "Push failed. Check backend console for errors.", 500
+        
+        
+    @app.route('/api/analytics/predict-risk', methods=['POST'])
+    def predict_farm_risk():
+        data = request.json
+        age = data.get('age', 0)
+        has_successors = data.get('children_farming_involvement', False)
+        income = data.get('annual_income', 0)
+        
+        risk_score = 0
+        issues = []
+
+        # Heuristic 1: Age
+        if age >= 65:
+            risk_score += 45
+            issues.append("Critical Age Bracket (>65)")
+        elif age >= 55:
+            risk_score += 25
+            issues.append("Aging Farmer")
+
+        # Heuristic 2: Succession
+        if not has_successors:
+            risk_score += 40
+            issues.append("No Successor Identified")
+        else:
+            risk_score -= 15 # Successors mitigate risk
+
+        # Heuristic 3: Economics
+        if income < 50000:
+            risk_score += 15
+            issues.append("Financial Vulnerability")
+
+        risk_score = max(0, min(100, risk_score))
+        
+        risk_level = "Low"
+        if risk_score > 70:
+            risk_level = "High"
+        elif risk_score > 40:
+            risk_level = "Medium"
+
+        return jsonify({
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "identified_issues": issues
+        }), 200
+
+    # ==========================================
+    # --- ADDED: ELDER PORTAL API ROUTES ---
+    # ==========================================
+    
+    # ==========================================
+    # --- SECURED: ELDER PORTAL API ROUTES ---
+    # ==========================================
+    
+    @app.route('/api/elder/pamana', methods=['POST'])
+    @jwt_required()
+    def save_pamana():
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        # ALLOW ADMINS TO TEST IT TOO
+        if current_user.role not in ['farmer', 'admin']:
+            return jsonify({'error': 'Unauthorized: Only Farmers can use this portal.'}), 403
+        data = request.get_json()
+
+        try:
+            new_experience = FarmerExperience(
+                title=f"Local {data.get('category', 'Knowledge')}",
+                description=data.get('transcript'),
+                experience_type=data.get('category'),
+                farmer_id=data.get('farmer_id'),
+                interviewer_id=current_user_id,
+                date_recorded=date.today(),
+                impact_level='Medium',
+                comments_enabled=True
+            )
+            db.session.add(new_experience)
+            db.session.commit()
+            return jsonify({"message": "Knowledge saved successfully!"}), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+
+    @app.route('/api/elder/doktor', methods=['POST'])
+    @jwt_required()
+    def doctor_crop():
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        # SECURITY CHECK: Allow Farmers and Admins
+        if current_user.role not in ['farmer', 'admin']:
+            return jsonify({'error': 'Unauthorized: Only Farmers or Admins can use this portal.'}), 403
+
+        if 'image' not in request.files:
+            return jsonify({"error": "No image uploaded"}), 400
+        
+        image_file = request.files['image']
+        if image_file.filename == '':
+            return jsonify({"error": "Empty file"}), 400
+
+        # 1. SAVE TO DATABASE & FILESYSTEM
+        filename = secure_filename(f"scan_{int(time.time())}_{image_file.filename}")
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True) 
+        upload_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        image_file.save(upload_path)
+
+        # 2. STRICT REAL ML INFERENCE (CNN)
+        # If the model isn't loaded, refuse to guess. No more fake data.
+        if not ML_AVAILABLE or CROP_CNN_MODEL is None:
+            return jsonify({
+                "error": "Real AI Engine Offline. Please install tensorflow and place 'crop_model.h5' in the backend folder."
+            }), 503
+
+        try:
+            # Prepare image exactly how the neural network expects it
+            img = Image.open(upload_path).convert('RGB').resize((224, 224))
+            
+            # CRITICAL FIX: Do NOT divide by 255.0 here. The model's internal Rescaling layer handles it.
+            img_array = img_to_array(img) 
+            img_array = np.expand_dims(img_array, axis=0) # Add batch dimension -> (1, 224, 224, 3)
+
+            # Send the image through the neural network
+            predictions = CROP_CNN_MODEL.predict(img_array)
+            class_idx = np.argmax(predictions[0])
+            confidence = float(predictions[0][class_idx]) * 100
+            
+            # Note: Update these names if your Colab dataset had different class names!
+            CLASS_NAMES = ['Bacterial_spot', 'Early_blight', 'Healthy', 'Late_blight', 'Leaf_Mold', 'Tungro_Virus']
+            
+            # Safely get the predicted class name
+            if class_idx < len(CLASS_NAMES):
+                predicted_class = CLASS_NAMES[class_idx]
+            else:
+                predicted_class = f"Unknown Pathogen (Code {class_idx})"
+
+            # Dynamically generate advice based strictly on the AI's vision
+            if "Healthy" in predicted_class:
+                diagnosis_data = {
+                    "name": "Healthy Plant",
+                    "sci": "No pathogens detected. Maintain optimal NPK fertilizer ratios.",
+                    "trad": "Good harvest ahead. Keep up the regular watering schedule."
+                }
+                risk_level = "Low"
+            elif "Bacterial" in predicted_class:
+                diagnosis_data = {
+                    "name": predicted_class.replace("_", " "),
+                    "sci": "Apply copper-based bactericides. Avoid excessive nitrogen.",
+                    "trad": "Remove affected leaves and burn them away from the field to stop the spread."
+                }
+                risk_level = "High"
+            elif "blight" in predicted_class.lower():
+                diagnosis_data = {
+                    "name": predicted_class.replace("_", " "),
+                    "sci": "Apply broad-spectrum fungicides (e.g., Mancozeb).",
+                    "trad": "Improve air circulation. Do not water leaves from above, only the soil."
+                }
+                risk_level = "Critical"
+            else:
+                diagnosis_data = {
+                    "name": predicted_class.replace("_", " "),
+                    "sci": "Isolate the plant and monitor progression. Apply general pesticide.",
+                    "trad": "Consult your local agricultural extension worker."
+                }
+                risk_level = "Medium"
+                
+        except Exception as e:
+            print(f"ML Processing Error: {e}")
+            return jsonify({"error": f"Failed to analyze image pixels: {str(e)}"}), 500
+
+        # 3. LOG TO DATABASE
+        try:
+            new_scan = CropScan(image_path=upload_path, ai_diagnosis=diagnosis_data["name"], confidence_score=confidence)
+            db.session.add(new_scan)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"Failed to log scan to DB: {e}")
+
+        # 4. RETURN REAL RESULT TO REACT
+        return jsonify({
+            "disease": diagnosis_data["name"],
+            "scientific": diagnosis_data["sci"],
+            "traditional": diagnosis_data["trad"],
+            "risk": risk_level,
+            "confidence": f"{confidence:.1f}%"
+        }), 200
+    @app.route('/api/elder/ledger', methods=['POST'])
+    @jwt_required()
+    def elder_ledger():
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        # --- FIX: ALLOW ADMINS TO TEST THE LEDGER ---
+        if current_user.role not in ['farmer', 'admin']:
+            return jsonify({'error': 'Unauthorized: Only Farmers or Admins can use this portal.'}), 403
+
+        data = request.get_json()
+        farmer_id = data.get('farmer_id')
+        
+        # Security check to ensure a farmer identity is actually attached
+        if not farmer_id:
+            return jsonify({'error': 'Farmer Identity missing. Cannot save to database.'}), 400
+
+        farm_size = float(data.get('size', 1.0))
+        capital = float(data.get('puhunan', 0))
+        revenue = float(data.get('benta', 0))
+        issue = data.get('problema', 'None')
+        profit = revenue - capital
+        roi = (profit / capital) if capital > 0 else 0
+
+        risk_status = "Stable"
+        if ML_AVAILABLE and RISK_RF_MODEL:
+            try:
+                issue_code = 1 if issue != 'None' else 0
+                features = np.array([[profit, roi, farm_size, issue_code]])
+                prediction = RISK_RF_MODEL.predict(features)[0] 
+                if prediction == 1:
+                    risk_status = "Critical Risk"
+            except Exception as e:
+                pass
+        else:
+            if profit < 0 and issue != 'None':
+                risk_status = "Critical Risk"
+
+        # --- CRITICAL FIX: DATABASE SAVE & ERROR HANDLING ---
+        try:
+            ledger = SeasonalLedger(
+                farmer_id=farmer_id,
+                farm_size=farm_size,
+                capital=capital,
+                revenue=revenue,
+                profit=profit,
+                issue_tag=issue,
+                risk_prediction=risk_status
+            )
+            db.session.add(ledger)
+            db.session.commit()
+            
+            # Add an Activity Log so Admins can track the submission!
+            log_activity(
+                'LEDGER RECORDED', 
+                'Seasonal Ledger', 
+                ledger.id, 
+                f"Recorded harvest data. Profit: ₱{profit:,.2f}"
+            )
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Ledger DB Error: {e}")
+            # If it fails, actually tell the frontend so it doesn't fake a success!
+            return jsonify({"error": f"Database save failed: {str(e)}"}), 500
+        
+        # --- SEND PUSH NOTIFICATION FOR CRITICAL LOSSES ---
+        if risk_status == "Critical Risk":
+            try:
+                alert_payload = {
+                    "title": "🚨 AI Alert: Farm Abandonment Risk",
+                    "body": f"A {farm_size} HA farm recorded a loss of ₱{abs(profit):,.2f} due to {issue}. High probability of failure detected.",
+                    "url": "/map"
+                }
+                subs = PushSubscription.query.all()
+                for sub in subs:
+                    send_web_push(sub.subscription_json, alert_payload)
+            except Exception as e:
+                pass
+                
+        return jsonify({
+            "message": "Ledger saved successfully to database", 
+            "profit": profit, 
+            "ml_risk_status": risk_status,
+            "ledger_id": ledger.id
+        }), 201
+
     
     # Initialize DB tables if they don't exist
     with app.app_context():
@@ -1994,10 +2420,6 @@ def create_app(config_name='development'):
 
     return app
 
-
-
 if __name__ == '__main__':
     app = create_app()
     app.run(host='0.0.0.0', port=8080, debug=True)
-    
-    

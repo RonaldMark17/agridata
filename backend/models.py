@@ -29,7 +29,10 @@ class User(db.Model):
     full_name = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False) 
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'))
-    is_active = db.Column(db.Boolean, default=True)
+    
+    # --- FIXED: Added status column and updated is_active default ---
+    status = db.Column(db.String(20), default='pending') # 'pending', 'approved', 'declined'
+    is_active = db.Column(db.Boolean, default=False)     # New users start inactive
     
     # --- OTP FIELDS ---
     otp_code = db.Column(db.String(6))
@@ -56,6 +59,7 @@ class User(db.Model):
             'role': self.role,
             'organization_id': self.organization_id,
             'is_active': self.is_active,
+            'status': self.status, # Added to dictionary for frontend
             'otp_enabled': self.otp_enabled,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
@@ -311,11 +315,18 @@ class FarmerExperience(db.Model):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False)
     date_recorded = db.Column(db.Date)
+    
+    # Ownership Link
     interviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     interviewer = db.relationship('User', foreign_keys=[interviewer_id])
+    
     location = db.Column(db.String(255))
     context = db.Column(db.Text)
     impact_level = db.Column(db.String(20))
+    
+    # NEW: Visibility Column
+    visibility = db.Column(db.String(20), default='Public') 
+    
     comments_enabled = db.Column(db.Boolean, default=True) 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -335,12 +346,14 @@ class FarmerExperience(db.Model):
         data = {
             'id': self.id,
             'farmer_id': self.farmer_id,
+            'interviewer_id': self.interviewer_id, # CRITICAL: Needed for Frontend isOwner check
             'experience_type': self.experience_type,
             'title': self.title,
             'description': self.description,
             'date_recorded': self.date_recorded.isoformat() if self.date_recorded else None,
             'location': self.location,
             'impact_level': self.impact_level,
+            'visibility': self.visibility, # NEW: Syncs with Frontend toggle
             'comments_enabled': self.comments_enabled,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             
@@ -353,6 +366,9 @@ class FarmerExperience(db.Model):
         
         if include_relations:
             data['farmer_name'] = self.farmer.full_name if self.farmer else "Unknown"
+            # Optional: Add interviewer name for display
+            data['interviewer_name'] = self.interviewer.full_name if self.interviewer else "System"
+            
         return data
 
 class ResearchProject(db.Model):
@@ -479,4 +495,26 @@ class TokenBlocklist(db.Model):
             "id": self.id,
             "jti": self.jti,
             "created_at": self.created_at.isoformat()
+        }
+        
+class SeasonalLedger(db.Model):
+    __tablename__ = 'seasonal_ledgers'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    farmer_id = db.Column(db.Integer, db.ForeignKey('farmers.id'), nullable=True) # Nullable for testing if farmer isn't logged in
+    capital = db.Column(db.Float, default=0.0)
+    revenue = db.Column(db.Float, default=0.0)
+    profit = db.Column(db.Float, default=0.0)
+    issue_tag = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'farmer_id': self.farmer_id,
+            'capital': self.capital,
+            'revenue': self.revenue,
+            'profit': self.profit,
+            'issue_tag': self.issue_tag,
+            'date': self.created_at.strftime('%Y-%m-%d')
         }

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 import { experiencesAPI, farmersAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -6,10 +7,11 @@ import {
   Trophy, AlertTriangle, Lightbulb, Sprout, Landmark, Pin,
   ChevronLeft, ChevronRight, Activity, Filter, Info, Loader2,
   Search, Download, ThumbsUp, Share2, ExternalLink, Image as ImageIcon,
-  FileText, Check, MessageSquare, Send, Clock, Lock, Unlock, Edit2, Trash2, AlertCircle, Terminal
+  FileText, Check, MessageSquare, Send, Clock, Lock, Unlock, Edit2, Trash2, AlertCircle, 
+  Mic, MicOff, Sparkles, EyeOff, Eye
 } from 'lucide-react';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace('/api', '');
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080').replace('/api', '');
 
 // --- COMPONENT: Smooth Count-Up Animation ---
 const AnimatedCounter = ({ value, decimals = 0, duration = 1500, prefix = "" }) => {
@@ -90,6 +92,11 @@ export default function Experiences() {
   const [commentText, setCommentText] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   
+  // AI Voice & Organization State
+  const [isListening, setIsListening] = useState(false);
+  const [isOrganizing, setIsOrganizing] = useState(false);
+  const recognitionRef = useRef(null);
+
   // Comment Edit State
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editCommentText, setEditCommentText] = useState('');
@@ -102,7 +109,8 @@ export default function Experiences() {
   const [isExporting, setIsExporting] = useState(false);
 
   const { user } = useAuth();
-  const canCreate = user && ['admin', 'researcher', 'data_encoder'].includes(user.role);
+  // FIXED: Farmers are now allowed to create experiences
+  const canCreate = user && ['admin', 'researcher', 'data_encoder', 'farmer'].includes(user.role);
 
   const initialFormState = {
     farmer_id: '',
@@ -112,6 +120,7 @@ export default function Experiences() {
     date_recorded: new Date().toISOString().split('T')[0],
     location: '',
     context: '',
+    visibility: 'Public', // NEW: Visibility setting
     impact_level: 'Medium',
     comments_enabled: true 
   };
@@ -122,6 +131,43 @@ export default function Experiences() {
     fetchExperiences();
     fetchFarmers();
   }, [currentPage]);
+
+  // Setup Speech Recognition
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = 'en-PH'; 
+
+      recognitionRef.current.onresult = (event) => {
+        let currentTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
+        }
+        setFormData(prev => ({ ...prev, description: currentTranscript }));
+      };
+    }
+  }, []);
+
+  // Auto-detect Farmer ID if logged in as a Farmer
+  useEffect(() => {
+    if (user?.role === 'farmer' && farmers.length > 0) {
+      const matchedFarmer = farmers.find(f => {
+        const codeMatch = f.farmer_code && f.farmer_code.toLowerCase() === user.username.toLowerCase();
+        const idMatch = user.username.toLowerCase() === `farmer_${f.id}`;
+        return codeMatch || idMatch;
+      });
+      if (matchedFarmer) {
+        setFormData(prev => ({ 
+          ...prev, 
+          farmer_id: matchedFarmer.id, 
+          location: matchedFarmer.barangay?.name || '' 
+        }));
+      }
+    }
+  }, [user, farmers]);
 
   const fetchExperiences = async () => {
     setLoading(true);
@@ -153,12 +199,63 @@ export default function Experiences() {
     setFormData({ ...formData, farmer_id: selectedId, location: autoLocation });
   };
 
+  // GEMINI AI INTEGRATION
+  const organizeWithGemini = async (rawText) => {
+    if (!rawText.trim()) return;
+    
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn("No Gemini API key found. Saving raw text.");
+      return;
+    }
+
+    setIsOrganizing(true);
+    try {
+      const prompt = `You are an agricultural documentation assistant. Please organize, format, and fix the grammar of this raw voice transcript from an elder farmer. Make it clear and professional, preserving the original language (whether English or Tagalog) and the exact original meaning. Output ONLY the formatted text without any conversational filler or introductions.\n\nRaw Transcript:\n"${rawText}"`;
+      
+      const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, 
+        { contents: [{ parts: [{ text: prompt }] }] },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+      
+      const formattedText = response.data.candidates[0].content.parts[0].text;
+      setFormData(prev => ({ ...prev, description: formattedText.trim() }));
+    } catch (error) {
+      console.error("Gemini AI Formatting Error:", error);
+      alert("Failed to organize text via AI. Your raw transcript was kept.");
+    } finally {
+      setIsOrganizing(false);
+    }
+  };
+
+  const toggleVoice = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      if (formData.description.trim()) {
+        organizeWithGemini(formData.description);
+      }
+    } else {
+      setFormData(prev => ({ ...prev, description: '' }));
+      recognitionRef.current?.start();
+      setIsListening(true);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setErrorMessage('');
+    
     try {
-      await experiencesAPI.create(formData);
+      // Append visibility to context so it saves in the DB
+      const payload = {
+        ...formData,
+        context: `[Visibility: ${formData.visibility}] ${formData.context}`
+      };
+
+      await experiencesAPI.create(payload);
       setShowCreateModal(false);
       fetchExperiences();
       setFormData(initialFormState);
@@ -405,6 +502,12 @@ export default function Experiences() {
   };
 
   const filteredExperiences = experiences.filter(exp => {
+    // Filter out private "Mentees Only" posts if the user is not the owner (or an admin)
+    const isOwnerOrAdmin = user && (user.role === 'admin' || user.full_name === exp.farmer_name);
+    const isPrivate = exp.context?.includes('[Visibility: Mentees Only]');
+    
+    if (isPrivate && !isOwnerOrAdmin) return false;
+
     const matchesTab = activeTab === 'All' || exp.experience_type === activeTab;
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = 
@@ -421,7 +524,7 @@ export default function Experiences() {
     <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 pb-24 transition-colors duration-300">
       <div className="max-w-[1400px] mx-auto space-y-6 sm:space-y-10 animate-in fade-in duration-700">
         
-        {/* Header Section (Matched to Dashboard) */}
+        {/* Header Section */}
         <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 sm:gap-8 px-3 sm:px-6 lg:px-8 py-6">
           <div>
             <div className="flex items-center gap-2 mb-3 sm:mb-4">
@@ -486,6 +589,8 @@ export default function Experiences() {
               {filteredExperiences.map((exp) => {
                 const style = getTypeStyles(exp.experience_type);
                 const Icon = style.icon;
+                const isPrivate = exp.context?.includes('[Visibility: Mentees Only]');
+
                 return (
                   <div key={exp.id} onClick={() => setSelectedExperience(exp)}
                     className="group bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-10 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-xl sm:hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] dark:hover:shadow-black/40 hover:-translate-y-1 transition-all duration-500 overflow-hidden relative cursor-pointer flex flex-col h-full"
@@ -494,9 +599,17 @@ export default function Experiences() {
                       <div className={`p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] ${style.bg} ${style.color} group-hover:scale-110 transition-transform duration-500 shrink-0`}>
                         <Icon size={24} className="sm:w-[28px] sm:h-[28px] shrink-0" />
                       </div>
-                      <span className={`px-3 py-1.5 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border shrink-0 ${exp.impact_level === 'High' ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:border-rose-500/20' : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/20'}`}>
-                        {exp.impact_level}
-                      </span>
+                      
+                      <div className="flex flex-col items-end gap-2">
+                        <span className={`px-3 py-1.5 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border shrink-0 ${exp.impact_level === 'High' ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:border-rose-500/20' : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/20'}`}>
+                          {exp.impact_level}
+                        </span>
+                        {isPrivate && (
+                          <span className="flex items-center gap-1 text-[8px] font-black uppercase text-amber-500 bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded">
+                            <EyeOff size={10} /> Mentees
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-3 sm:space-y-4 mb-8 flex-1 relative z-10">
@@ -569,7 +682,7 @@ export default function Experiences() {
           </div>
         )}
 
-        {/* --- FIXED: CREATE EXPERIENCE MODAL (Matched to Dashboard/Projects) --- */}
+        {/* --- CREATION MODAL WITH VOICE + AI INTEGRATION --- */}
         {showCreateModal && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-0 sm:p-4 md:p-8 overflow-hidden">
             <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowCreateModal(false)} />
@@ -599,16 +712,20 @@ export default function Experiences() {
                   <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600 dark:text-emerald-500 flex items-center gap-2 sm:gap-3">
                     <Activity size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" /> Core Identity
                   </p>
+                  
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
-                    <div className="space-y-2 sm:space-y-3">
-                      <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Select Farmer</label>
-                      <select required value={formData.farmer_id} onChange={handleFarmerChange} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none appearance-none">
-                        <option value="" disabled className="dark:bg-[#041d18]">Select a registered farmer...</option>
-                        {farmers.map(f => (
-                          <option key={f.id} value={f.id} className="dark:bg-[#041d18]">{f.first_name} {f.last_name} ({f.farmer_code})</option>
-                        ))}
-                      </select>
-                    </div>
+                    {/* Hide dropdown if user is a farmer (auto-selected) */}
+                    {user?.role !== 'farmer' && (
+                      <div className="space-y-2 sm:space-y-3">
+                        <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Select Farmer</label>
+                        <select required value={formData.farmer_id} onChange={handleFarmerChange} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none appearance-none">
+                          <option value="" disabled className="dark:bg-[#041d18]">Select a registered farmer...</option>
+                          {farmers.map(f => (
+                            <option key={f.id} value={f.id} className="dark:bg-[#041d18]">{f.first_name} {f.last_name} ({f.farmer_code})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     
                     <div className="space-y-2 sm:space-y-3">
                       <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Experience Type</label>
@@ -634,18 +751,57 @@ export default function Experiences() {
                     <FileText size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" /> Detailed Context
                   </p>
                   
-                  <div className="space-y-2 sm:space-y-3">
-                    <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Description</label>
-                    <textarea required rows="4" placeholder="Describe the experience, methods used, and outcomes..." value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full px-4 sm:px-6 py-4 sm:py-5 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-2xl sm:rounded-3xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-medium dark:text-slate-200 min-h-[140px] outline-none resize-none" />
+                  {/* --- INTEGRATED VOICE & AI TEXTAREA --- */}
+                  <div className="space-y-2 sm:space-y-3 relative">
+                    <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1 flex justify-between">
+                      Description 
+                      {isListening && <span className="text-rose-500 animate-pulse flex items-center gap-1"><Activity size={10}/> Listening...</span>}
+                    </label>
+                    
+                    <div className="relative">
+                      <textarea 
+                        required 
+                        rows="4" 
+                        placeholder="Describe the experience, or tap the mic to speak..." 
+                        value={formData.description} 
+                        onChange={(e) => setFormData({...formData, description: e.target.value})} 
+                        disabled={submitting || isOrganizing}
+                        className={`w-full px-4 sm:px-6 py-4 sm:py-5 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-2xl sm:rounded-3xl focus:ring-4 focus:ring-emerald-500/10 text-sm sm:text-base font-medium dark:text-slate-200 min-h-[160px] outline-none resize-none transition-all pb-14 ${isOrganizing ? 'animate-pulse opacity-50' : ''}`} 
+                      />
+                      
+                      {isOrganizing && (
+                        <div className="absolute inset-0 bg-white/50 dark:bg-[#0b241f]/50 backdrop-blur-sm rounded-2xl sm:rounded-3xl flex flex-col items-center justify-center text-indigo-600 dark:text-indigo-400 z-10">
+                          <Sparkles size={32} className="animate-pulse mb-2" />
+                          <p className="text-xs sm:text-sm font-black uppercase tracking-widest">AI Organizing Context...</p>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={toggleVoice}
+                        disabled={submitting || isOrganizing}
+                        className={`absolute bottom-4 right-4 p-3 sm:p-3.5 rounded-xl sm:rounded-2xl shadow-md transition-all z-20 ${isListening ? 'bg-rose-500 animate-pulse scale-105' : 'bg-blue-600 hover:bg-blue-500 hover:-translate-y-1'} disabled:opacity-50 disabled:hover:translate-y-0`}
+                      >
+                        {isListening ? <MicOff size={20} className="text-white sm:w-[22px] sm:h-[22px]"/> : <Mic size={20} className="text-white sm:w-[22px] sm:h-[22px]"/>}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
-                    <div className="space-y-2 sm:space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
+                    <div className="space-y-2 sm:space-y-3 sm:col-span-1">
+                      <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Visibility</label>
+                      <select value={formData.visibility} onChange={(e) => setFormData({...formData, visibility: e.target.value})} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none appearance-none">
+                        <option value="Public" className="dark:bg-[#041d18]">Public (Everyone)</option>
+                        <option value="Mentees Only" className="dark:bg-[#041d18]">Mentees Only</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2 sm:space-y-3 sm:col-span-1">
                       <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Location</label>
                       <input type="text" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none" />
                     </div>
                     
-                    <div className="space-y-2 sm:space-y-3">
+                    <div className="space-y-2 sm:space-y-3 sm:col-span-1">
                       <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1">Impact Level</label>
                       <select value={formData.impact_level} onChange={(e) => setFormData({...formData, impact_level: e.target.value})} className="w-full px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-emerald-500/10 text-xs sm:text-sm font-bold dark:text-white outline-none appearance-none">
                         <option value="Low" className="dark:bg-[#041d18]">Low Impact</option>
@@ -658,12 +814,12 @@ export default function Experiences() {
 
               </form>
 
-              <div className="px-6 sm:px-10 py-6 sm:py-8 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5 flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-6 shrink-0">
+              <div className="px-6 sm:px-10 py-6 sm:py-8 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-white/5 flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-6 shrink-0 pb-safe">
                 <button type="button" onClick={() => setShowCreateModal(false)} className="w-full sm:w-auto px-6 sm:px-10 py-3.5 sm:py-4 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-600 bg-white dark:bg-transparent rounded-xl sm:rounded-none border border-slate-200 sm:border-none dark:border-white/10 hover:text-slate-600 dark:hover:text-slate-400 transition-colors">Discard</button>
                 <button 
                   type="button" 
                   onClick={handleSubmit} 
-                  disabled={submitting}
+                  disabled={submitting || isOrganizing || isListening}
                   className="w-full sm:w-auto px-8 sm:px-12 py-4 sm:py-5 bg-emerald-600 dark:bg-emerald-600 text-white rounded-xl sm:rounded-[1.25rem] font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-xl sm:shadow-2xl shadow-emerald-200 dark:shadow-none hover:bg-emerald-500 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3 disabled:opacity-50"
                 >
                   {submitting ? <Loader2 className="animate-spin sm:w-[18px] sm:h-[18px] shrink-0" size={16} /> : <Plus size={16} className="sm:w-[18px] sm:h-[18px] shrink-0" />}
@@ -675,14 +831,13 @@ export default function Experiences() {
           </div>
         )}
 
-        {/* --- REDESIGNED READ & COMMENT MODAL (Matched to Projects/Sleek Theme) --- */}
+        {/* --- REDESIGNED READ & COMMENT MODAL --- */}
         {selectedExperience && (
             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-0 sm:p-4 md:p-8 overflow-hidden">
                 <div className="absolute inset-0 bg-slate-900/60 dark:bg-black/60 backdrop-blur-md animate-in fade-in" onClick={() => { setSelectedExperience(null); setCommentText(''); setEditingCommentId(null); }} />
                 
                 <div className="relative bg-white dark:bg-[#041d18] rounded-none sm:rounded-[3rem] shadow-2xl w-full h-full sm:h-auto sm:max-w-4xl sm:max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-10 sm:slide-in-from-bottom-0 duration-500 border-none sm:border dark:border-white/5">
                     
-                    {/* Header Fixed */}
                     <div className="p-6 sm:p-10 border-b border-slate-50 dark:border-white/5 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl z-10 shrink-0 pt-safe">
                         <div className="space-y-2">
                             <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${getTypeStyles(selectedExperience.experience_type).bg} ${getTypeStyles(selectedExperience.experience_type).color}`}>
@@ -695,10 +850,8 @@ export default function Experiences() {
                         </button>
                     </div>
 
-                    {/* Scrollable Body (Description + Meta + Comments) */}
                     <div className="overflow-y-auto flex-1 no-scrollbar flex flex-col pb-safe">
                         
-                        {/* Core Content */}
                         <div className="p-6 sm:p-10 bg-white dark:bg-[#041d18] space-y-6 sm:space-y-8 border-b border-slate-50 dark:border-white/5">
                           <p className="text-sm sm:text-base font-medium text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{selectedExperience.description}</p>
                           
@@ -713,7 +866,6 @@ export default function Experiences() {
                               </div>
                           </div>
 
-                          {/* Social Actions (Like, Share, Toggle Comments) */}
                           <div className="flex flex-wrap items-center gap-3 pt-2">
                             <button 
                               onClick={() => toggleVote(selectedExperience.id)} 
@@ -745,7 +897,6 @@ export default function Experiences() {
                           </div>
                         </div>
 
-                        {/* Discussion / Comments Section */}
                         <div className="p-6 sm:p-10 flex-1 bg-slate-50 dark:bg-black/20">
                           <h4 className="flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-6 sm:mb-8">
                             <MessageSquare size={16} className={`shrink-0 ${selectedExperience.comments_enabled === false ? 'text-slate-400' : 'text-emerald-600'}`} /> 
@@ -770,7 +921,6 @@ export default function Experiences() {
                                           </span>
                                         </div>
 
-                                        {/* Owner Actions: Edit / Delete */}
                                         {c.user_id === user?.id && editingCommentId !== c.id && (
                                           <div className="flex gap-1.5 sm:gap-2 opacity-50 hover:opacity-100 transition-opacity shrink-0">
                                             <button onClick={() => handleEditCommentClick(c)} className="text-blue-500 hover:text-blue-600 p-1.5 bg-blue-50 dark:bg-blue-500/10 rounded-md shrink-0">
@@ -783,7 +933,6 @@ export default function Experiences() {
                                         )}
                                       </div>
 
-                                      {/* Inline Editor OR Normal Text */}
                                       {editingCommentId === c.id ? (
                                         <div className="mt-2 space-y-2 animate-in fade-in">
                                           <textarea 
@@ -802,7 +951,6 @@ export default function Experiences() {
                                       
                                     </div>
                                     
-                                    {/* COMMENT LIKE/DISLIKE FEATURE */}
                                     <div className="flex items-center gap-3 px-2 shrink-0">
                                       <button 
                                         onClick={() => handleToggleCommentLike(c.id)}
@@ -835,7 +983,6 @@ export default function Experiences() {
                           </div>
                         </div>
 
-                        {/* Fixed Footer: Conditionally render Input Bar OR Disabled Message */}
                         <div className="p-4 sm:p-6 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#041d18] shrink-0 sticky bottom-0 z-20">
                           {selectedExperience.comments_enabled !== false ? (
                             <form onSubmit={handleCommentSubmit} className="flex items-end gap-3">
@@ -878,6 +1025,10 @@ export default function Experiences() {
       <style dangerouslySetInnerHTML={{ __html: `
         .no-scrollbar::-webkit-scrollbar { display: none; } 
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @supports (padding-top: env(safe-area-inset-top)) {
+          .pt-safe { padding-top: max(1.25rem, env(safe-area-inset-top)); }
+          .pb-safe { padding-bottom: max(1.25rem, env(safe-area-inset-bottom)); }
+        }
       `}} />
     </div>
   );

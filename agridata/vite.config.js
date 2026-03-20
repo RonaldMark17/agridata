@@ -14,13 +14,59 @@
 //   }
 // })
 
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+// import { defineConfig } from 'vite'
+// import react from '@vitejs/plugin-react'
+
+// export default defineConfig({
+//   plugins: [react()],
+//   server: {
+//     port: 3000,
+    
+//   }
+// })
+
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate', // Automatically updates the app when you push new code
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      manifest: {
+        name: 'AgriData Systems Hub',
+        short_name: 'AgriData',
+        description: 'Centralized agricultural registry and analytics platform.',
+        theme_color: '#0f172a', // Matches the slate-900 enterprise theme
+        background_color: '#f8fafc', // Matches the slate-50 background
+        display: 'standalone', // Makes it look like a native app (hides browser UI)
+        orientation: 'portrait',
+        icons: [
+          {
+            src: '/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable' // Ensures the icon looks good on Android and iOS shapes
+          }
+        ]
+      }
+    })
+  ],
   server: {
     port: 3000,
-    
   }
-})
+});

@@ -189,7 +189,8 @@ import axios from 'axios';
 // Make sure to append /api so the routes map correctly.
 // const API_URL = 'https://agridata-backend-7cmk.onrender.com/api';
 // const API_URL = 'https://cecile-unchipped-shea.ngrok-free.dev/api';
-const API_URL = 'http://192.168.254.104:8080/api';
+//const API_URL = 'http://192.168.254.104:8080/api' || 'http://127.0.0.1:8080/api' || 'http://172.20.10.11:8080/api';
+const API_URL = 'http://127.0.0.1:8080/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -286,12 +287,14 @@ export const farmersAPI = {
 export const experiencesAPI = {
   getAll: (params) => api.get('/experiences', { params }),
   create: (data) => api.post('/experiences', data),
-  update: (id, data) => api.put(`/experiences/${id}`, data),
+  
   toggleLike: (id) => api.post(`/experiences/${id}/like`),
   addComment: (id, data) => api.post(`/experiences/${id}/comments`, data),
   updateComment: (expId, commentId, data) => api.put(`/experiences/${expId}/comments/${commentId}`, data),
   deleteComment: (expId, commentId) => api.delete(`/experiences/${expId}/comments/${commentId}`),
   toggleCommentLike: (expId, commentId) => api.post(`/experiences/${expId}/comments/${commentId}/like`),
+  update: (id, data) => api.put(`/experiences/${id}`, data), 
+  delete: (id) => api.delete(`/experiences/${id}`),
 };
 
 // Projects API
