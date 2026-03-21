@@ -1,25 +1,87 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { farmersAPI, barangaysAPI } from '../services/api';
+import { productsAPI, farmersAPI, barangaysAPI } from '../services/api'; 
+import { offlineStore } from '../utils/offlineStore';
 import { useAuth } from '../context/AuthContext';
 import { 
   Search, Filter, Download, Plus, ChevronLeft, ChevronRight, 
   Eye, Edit, MapPin, Ruler, Trash2, X, Calendar, Loader2, ArrowUpDown,
   Phone, Briefcase, DollarSign, Globe, LayoutList, LayoutGrid, PieChart, 
-  TrendingUp, Activity, User, Wheat, Baby, GraduationCap, Building, Clock, FileText
+  TrendingUp, Activity, User, Wheat, Baby, GraduationCap, Building, Clock, FileText,
+  WifiOff
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 
 const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-// 1. Uses VITE_API_URL from your .env file if it exists.
-// 2. If not, and you are working locally, it uses your local backend (8080).
-// 3. If you are on the live site, it uses your hosted domain.
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || 
   (isLocal ? 'http://127.0.0.1:8080' : 'https://agridata.ct.ws')
 ).replace(/\/api\/?$/, '');
+
+// --- RETAINED FROM YOUR PASTE (Changed to named export to fix crash) ---
+export function ProductsPage() {
+    const [dataList, setDataList] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    
+    useEffect(() => {
+        const setOnline = () => setIsOnline(true);
+        const setOffline = () => setIsOnline(false);
+        window.addEventListener('online', setOnline);
+        window.addEventListener('offline', setOffline);
+        return () => {
+            window.removeEventListener('online', setOnline);
+            window.removeEventListener('offline', setOffline);
+        };
+    }, []);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            if (!isOnline) throw new Error("Offline"); 
+            const response = await productsAPI.getAll(); 
+            setDataList(response.data);
+            offlineStore.saveData('products', response.data); 
+        } catch (error) {
+            console.warn("Loading from offline cache...");
+            setDataList(offlineStore.getCachedData('products')); 
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchData(); }, [isOnline]);
+
+    const handleSubmit = async (formData) => {
+        if (!isOnline) {
+            offlineStore.addToQueue(formData, 'CREATE', 'products'); 
+            setDataList(prev => [{ ...formData, id: Date.now(), isOfflinePending: true }, ...prev]);
+            alert("Saved offline. Will sync when internet returns.");
+            return;
+        }
+        try {
+            await productsAPI.create(formData); 
+            fetchData();
+        } catch (error) {
+            console.error('Server error, saving offline:', error);
+            offlineStore.addToQueue(formData, 'CREATE', 'products'); 
+            alert("Server issue. Saved offline as backup.");
+        }
+    };
+
+    return (
+        <div>
+            {!isOnline && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-lg flex items-center gap-2 mb-4 text-xs font-bold">
+                    <WifiOff size={16} /> 
+                    Offline Mode: Viewing cached data. Changes will sync automatically later.
+                </div>
+            )}
+        </div>
+    );
+}
 
 // --- REFINED: Cloud-First Avatar with CORS Protection ---
 const FarmerAvatar = ({ farmerId, backendPath, initials, className = "" }) => {
@@ -203,28 +265,67 @@ export default function FarmersList() {
   
   const [viewMode, setViewMode] = useState('list'); 
 
+  // --- OFFLINE STATE ---
+ const [isOnline, setIsOnline] = useState(
+      navigator.onLine && localStorage.getItem('force_offline') !== 'true'
+  );
+
   const navigate = useNavigate();
   
   const { user } = useAuth();
   const canEdit = user && ['admin', 'researcher', 'data_encoder'].includes(user.role);
   const canDelete = user && user.role === 'admin';
 
-  useEffect(() => { fetchBarangays(); }, []);
-  useEffect(() => { fetchFarmers(); }, [currentPage, search, selectedBarangay, sortBy, sortOrder]);
+  // --- TRACK CONNECTION ---
+  useEffect(() => {
+    // 1. Define the smart check that looks at BOTH Wi-Fi and the manual button
+    const checkNetwork = () => {
+        const isPhysicallyOnline = navigator.onLine;
+        const isForcedOffline = localStorage.getItem('force_offline') === 'true';
+        
+        // The app is only "Online" if Wi-Fi is connected AND the user hasn't forced it offline
+        setIsOnline(isPhysicallyOnline && !isForcedOffline);
+    };
+
+    // 2. Run it once immediately just to be safe
+    checkNetwork();
+
+    // 3. Attach the smart check to all network events
+    window.addEventListener('online', checkNetwork);
+    window.addEventListener('offline', checkNetwork);
+    window.addEventListener('network-mode-change', checkNetwork); // Listens to your toggle button
+
+    // 4. Clean up the listeners when the component unmounts
+    return () => {
+      window.removeEventListener('online', checkNetwork);
+      window.removeEventListener('offline', checkNetwork);
+      window.removeEventListener('network-mode-change', checkNetwork);
+    };
+  }, []);
+
+  useEffect(() => { fetchBarangays(); }, [isOnline]); // Fetch when internet status changes
+  useEffect(() => { fetchFarmers(); }, [currentPage, search, selectedBarangay, sortBy, sortOrder, isOnline]);
 
   const totalHectares = farmers.reduce((acc, f) => acc + (f.farm_size_hectares || 0), 0);
   const avgIncome = farmers.length > 0 ? farmers.reduce((acc, f) => acc + (f.annual_income || 0), 0) / farmers.length : 0;
 
   const fetchBarangays = async () => {
     try {
+      if (!isOnline) throw new Error("Offline");
       const response = await barangaysAPI.getAll();
       setBarangays(response.data);
-    } catch (error) { console.error('Error fetching barangays:', error); }
+      offlineStore.saveData('barangays', response.data); // Save for offline mode
+    } catch (error) { 
+      console.warn('Offline Mode: Loading Barangays from cache');
+      setBarangays(offlineStore.getCachedData('barangays') || []);
+    }
   };
 
   const fetchFarmers = async () => {
     setLoading(true);
     try {
+      if (!isOnline) throw new Error("Offline");
+
       const params = { page: currentPage, per_page: 20, sort_by: sortBy, sort_order: sortOrder };
       if (search) params.search = search;
       if (selectedBarangay) params.barangay_id = selectedBarangay;
@@ -234,12 +335,23 @@ export default function FarmersList() {
       if (response.data && response.data.farmers) {
         setFarmers(response.data.farmers);
         setTotalPages(response.data.pages || 1);
+        
+        // Cache data for offline mode if we are on page 1 and have no filters
+        if (currentPage === 1 && !search && !selectedBarangay) {
+            offlineStore.saveData('farmers_list_main', response.data);
+        }
       } else {
         setFarmers([]);
       }
     } catch (error) { 
-      console.error('Error fetching farmers:', error);
-      setFarmers([]); 
+      console.warn('Offline Mode: Loading Farmers from cache');
+      const cachedData = offlineStore.getCachedData('farmers_list_main');
+      if (cachedData && cachedData.farmers) {
+          setFarmers(cachedData.farmers);
+          setTotalPages(cachedData.pages || 1);
+      } else {
+          setFarmers([]); 
+      }
     } finally { 
       setTimeout(() => setLoading(false), 800); 
     }
@@ -253,6 +365,10 @@ export default function FarmersList() {
   };
 
   const handleExport = async () => {
+    if (!isOnline) {
+        alert("Exporting data requires an active internet connection.");
+        return;
+    }
     try {
         setExporting(true);
         const response = await farmersAPI.exportData();
@@ -269,6 +385,17 @@ export default function FarmersList() {
 
   const handleViewDetails = async (id) => {
     try {
+      if (!isOnline) {
+          // If offline, just show the shallow data we already have in the list
+          const offlineFarmer = farmers.find(f => f.id === id);
+          if (offlineFarmer) {
+              setSelectedFarmer(offlineFarmer);
+              setShowViewModal(true);
+          } else {
+              alert("Detailed view unavailable offline.");
+          }
+          return;
+      }
       const response = await farmersAPI.getById(id);
       setSelectedFarmer(response.data);
       setShowViewModal(true);
@@ -277,6 +404,10 @@ export default function FarmersList() {
 
   const handleDelete = async (id, name) => {
     if (!canDelete) return;
+    if (!isOnline) {
+        alert("You cannot delete records while offline.");
+        return;
+    }
     if (window.confirm(`Revoke profile for ${name}?`)) {
       try {
         await farmersAPI.delete(id);
@@ -298,7 +429,17 @@ export default function FarmersList() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 pb-20 transition-colors duration-300">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] font-sans selection:bg-emerald-100 pb-20 transition-colors duration-300 relative">
+      
+      {/* OFFLINE BANNER */}
+      {!isOnline && (
+          <div className="absolute top-0 right-0 z-[50] bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded-full flex items-center gap-2 text-[10px] sm:text-xs font-bold shadow-lg uppercase tracking-widest mt-4 mr-4">
+              <WifiOff size={14} /> 
+              <span className="hidden sm:inline">Offline Mode</span>
+              <span className="sm:hidden">Offline</span>
+          </div>
+      )}
+
       <div className="max-w-[1400px] mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-700">
         
         {/* 1. HEADER */}
@@ -317,7 +458,7 @@ export default function FarmersList() {
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
             <button 
               onClick={handleExport} 
-              disabled={exporting}
+              disabled={exporting || !isOnline}
               className="w-full sm:w-auto flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-3.5 sm:py-4 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-xl sm:rounded-[1.25rem] font-black text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-100 transition-all shadow-sm disabled:opacity-50 shrink-0"
             >
               {exporting ? <Loader2 size={16} className="animate-spin shrink-0" /> : <Download size={16} className="shrink-0"/>}
@@ -459,7 +600,7 @@ export default function FarmersList() {
                                 {farmer.full_name} {farmer.suffix && <span className="text-xs text-slate-400 font-bold ml-1">{farmer.suffix}</span>}
                               </p>
                               <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest mt-1 inline-flex items-center bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-100 dark:border-emerald-500/20">
-                               #{farmer.farmer_code}
+                                #{farmer.farmer_code}
                               </p>
                             </div>
                           </div>

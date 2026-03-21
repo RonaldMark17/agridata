@@ -40,29 +40,32 @@ import Products from './pages/Products';
 import Users from './pages/Users';
 import ActivityLogs from './pages/ActivityLogs';
 
-// PWA Install Prompt
+// Components
 import InstallPrompt from './components/InstallPrompt';
+import NetworkToggle from './components/NetworkToggle'; // <-- 1. IMPORT YOUR TOGGLE BUTTON
 
 // --- UTILITY FUNCTION: Converts VAPID key safely ---
 function urlBase64ToUint8Array(base64String) {
   try {
-    const cleanString = base64String.replace(/[^A-Za-z0-9\+\/\-\_=]/g, '');
-    const padding = '='.repeat((4 - (cleanString.length % 4)) % 4);
-    const base64 = (cleanString + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
 
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
+    const rawData = atob(base64);
+    const buffer = new ArrayBuffer(rawData.length);
+    const outputArray = new Uint8Array(buffer);
 
     for (let i = 0; i < rawData.length; ++i) {
       outputArray[i] = rawData.charCodeAt(i);
     }
+
     return outputArray;
-  } catch (error) {
-    console.error("VAPID Key Conversion Error:", error);
+  } catch (err) {
+    console.error("VAPID conversion failed:", err);
     return null;
   }
 }
-
 // --- PUBLIC ROUTE GUARD ---
 // Redirects logged-in users away from auth pages
 const PublicRoute = ({ children }) => {
@@ -250,9 +253,16 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <AppRoutes />
-        <InstallPrompt />
+        <div className="relative min-h-screen">
+          <ScrollToTop />
+          <AppRoutes />
+          <InstallPrompt />
+          
+          {/* 2. INJECT YOUR TOGGLE BUTTON HERE */}
+          {/* It lives outside the routes so it stays visible on every page */}
+          <NetworkToggle />
+          
+        </div>
       </BrowserRouter>
     </AuthProvider>
   );

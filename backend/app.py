@@ -13,6 +13,8 @@ from flask_mail import Mail, Message
 import random
 import time
 
+import logging
+
 from pywebpush import webpush, WebPushException
 
 from config import config
@@ -1560,44 +1562,95 @@ def create_app(config_name='development'):
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
     
+
+
     @app.route('/api/experiences/<int:id>/like', methods=['POST'])
     @jwt_required()
     def toggle_experience_like(id):
-        current_user_id = get_jwt_identity()
-        experience = FarmerExperience.query.get_or_404(id)
-        user = User.query.get(current_user_id)
+        try:
+            current_user_id = get_jwt_identity()
+            experience = FarmerExperience.query.get_or_404(id)
+            user = User.query.get(current_user_id)
 
-        if user in experience.liked_by:
-            experience.liked_by.remove(user)
-            db.session.commit()
-            
-            # --- LOG THE UNLIKE ACTION ---
-            log_activity(
-                'EXPERIENCE UNLIKED', 
-                'FarmerExperience', 
-                experience.id, 
-                f"User {user.username} removed 'Helpful' status from: {experience.title}"
-            )
-            status = "unliked"
-        else:
-            experience.liked_by.append(user)
-            db.session.commit()
-            
-            # --- LOG THE LIKE ACTION ---
-            log_activity(
-                'EXPERIENCE LIKED', 
-                'FarmerExperience', 
-                experience.id, 
-                f"User {user.username} marked as 'Helpful': {experience.title}"
-            )
-            status = "liked"
+            # 1. FAILSAFE: Check if user actually exists in the DB
+            if not user:
+                return jsonify({"error": "User not found"}), 404
 
-        return jsonify({
-            "status": "success",
-            "action": status,
-            "likes_count": experience.likes_count,
-            "is_liked_by_me": user in experience.liked_by
-        }), 200
+            # 2. Determine User's Name safely for the logger
+            # (Falls back to 'Unknown User' if username doesn't exist)
+            user_display_name = getattr(user, 'username', getattr(user, 'full_name', 'Unknown User'))
+
+            if user in experience.liked_by:
+                # UNLIKE
+                experience.liked_by.remove(user)
+                
+                # If likes_count is a real integer column, decrement it safely
+                if hasattr(experience, 'likes_count') and isinstance(experience.likes_count, int):
+                    experience.likes_count = max(0, experience.likes_count - 1)
+
+                db.session.commit()
+                
+                # --- LOG THE UNLIKE ACTION ---
+                try:
+                    log_activity(
+                        'EXPERIENCE UNLIKED', 
+                        'FarmerExperience', 
+                        experience.id, 
+                        f"User {user_display_name} removed 'Helpful' status from: {experience.title}"
+                    )
+                except Exception as log_err:
+                    logging.warning(f"Failed to log unlike activity: {log_err}")
+
+                status = "unliked"
+                is_liked = False
+
+            else:
+                # LIKE
+                experience.liked_by.append(user)
+                
+                # If likes_count is a real integer column, increment it
+                if hasattr(experience, 'likes_count') and isinstance(experience.likes_count, int):
+                    experience.likes_count += 1
+
+                db.session.commit()
+                
+                # --- LOG THE LIKE ACTION ---
+                try:
+                    log_activity(
+                        'EXPERIENCE LIKED', 
+                        'FarmerExperience', 
+                        experience.id, 
+                        f"User {user_display_name} marked as 'Helpful': {experience.title}"
+                    )
+                except Exception as log_err:
+                    logging.warning(f"Failed to log like activity: {log_err}")
+
+                status = "liked"
+                is_liked = True
+
+            # Calculate final count safely whether it's a relationship array or an integer column
+            final_likes_count = getattr(experience, 'likes_count', len(experience.liked_by))
+
+            return jsonify({
+                "status": "success",
+                "action": status,
+                "likes_count": final_likes_count,
+                "is_liked_by_me": is_liked
+            }), 200
+
+        except Exception as e:
+            # CRITICAL: Rollback the database so it doesn't lock up!
+            db.session.rollback()
+            
+            # Log the EXACT reason it crashed to your terminal
+            logging.error(f"FATAL ERROR in toggle_experience_like: {str(e)}")
+            
+            # Return a clean 500 error to the frontend (Prevents the CORS error!)
+            return jsonify({
+                "status": "error",
+                "error": "Internal Server Error",
+                "details": str(e)
+            }), 500
 
     @app.route('/api/experiences/<int:id>/comments', methods=['POST'])
     @jwt_required()

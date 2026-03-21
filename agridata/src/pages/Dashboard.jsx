@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { dashboardAPI, activityLogsAPI, productsAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { offlineStore } from '../utils/offlineStore';
+import { WifiOff } from 'lucide-react'; 
 import { useAuth } from '../context/AuthContext';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -114,8 +116,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isViewer = user?.role === 'viewer';
-  
-  // ADDED: Check if the user is an admin
   const isAdmin = user?.role === 'admin';
 
   const [stats, setStats] = useState(null);
@@ -132,6 +132,11 @@ export default function Dashboard() {
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [showAllBarangaysModal, setShowAllBarangaysModal] = useState(false);
 
+  // --- OFFLINE ENGINE INTEGRATION ---
+  const [isOnline, setIsOnline] = useState(
+      navigator.onLine && localStorage.getItem('force_offline') !== 'true'
+  );
+
   // REAL-TIME WEATHER STATE
   const [weather, setWeather] = useState({ temp: null, code: 0, loading: true });
 
@@ -143,6 +148,24 @@ export default function Dashboard() {
     isOnline: true,
     lastBackup: new Date().setHours(3, 0, 0, 0) 
   });
+
+  // --- 1. Network Status Listener (Supports Wi-Fi and Manual Button) ---
+  useEffect(() => {
+    const checkNetwork = () => {
+        const isPhysicallyOnline = navigator.onLine;
+        const isForcedOffline = localStorage.getItem('force_offline') === 'true';
+        setIsOnline(isPhysicallyOnline && !isForcedOffline);
+    };
+    checkNetwork();
+    window.addEventListener('online', checkNetwork);
+    window.addEventListener('offline', checkNetwork);
+    window.addEventListener('network-mode-change', checkNetwork);
+    return () => {
+      window.removeEventListener('online', checkNetwork);
+      window.removeEventListener('offline', checkNetwork);
+      window.removeEventListener('network-mode-change', checkNetwork);
+    };
+  }, []);
 
   // --- Theme Detection ---
   useEffect(() => {
@@ -159,13 +182,16 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // --- Live Weather Fetching (San Pablo City) ---
+  // --- Live Weather Fetching (Only if Online) ---
   useEffect(() => {
     const fetchWeather = async () => {
+      if (!isOnline) {
+          setWeather(prev => ({ ...prev, loading: false }));
+          return;
+      }
       try {
         const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=14.0673&longitude=121.3242&current_weather=true');
         const data = await res.json();
-        
         if (data && data.current_weather) {
           setWeather({
             temp: Math.round(data.current_weather.temperature),
@@ -178,21 +204,23 @@ export default function Dashboard() {
         setWeather({ temp: null, code: 0, loading: false });
       }
     };
-    
     fetchWeather();
     const interval = setInterval(fetchWeather, 30 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isOnline]);
 
   // --- Real-time System Health Polling ---
   useEffect(() => {
     const checkSystemHealth = async () => {
+      if (!isOnline) {
+          setSysHealth(prev => ({ ...prev, dbStatus: 'Offline Mode', isOnline: false, latency: 0 }));
+          return;
+      }
       const startTime = performance.now();
       try {
         await dashboardAPI.getStats({ range: 'all' });
         const endTime = performance.now();
         const currentLatency = Math.round(endTime - startTime);
-
         setSysHealth(prev => ({
           ...prev,
           dbStatus: 'Secured',
@@ -201,48 +229,59 @@ export default function Dashboard() {
           serverLoad: Math.floor(Math.random() * 16) + 12 
         }));
       } catch (error) {
-        setSysHealth(prev => ({
-          ...prev,
-          dbStatus: 'Disconnected',
-          latency: 0,
-          isOnline: false,
-          serverLoad: 0
-        }));
+        setSysHealth(prev => ({ ...prev, dbStatus: 'Disconnected', isOnline: false, latency: 0 }));
       }
     };
-
     checkSystemHealth();
     const interval = setInterval(checkSystemHealth, 15000); 
     return () => clearInterval(interval);
-  }, []);
+  }, [isOnline]);
 
-  // --- Data Orchestration ---
+  // --- Data Orchestration with Cache Fallback ---
   const loadDashboardData = async () => {
     try {
       setLoading(true);
+      
+      // If offline, jump straight to the catch block to load cache
+      if (!isOnline) throw new Error("Offline");
+
       const statsRes = await dashboardAPI.getStats({ range: timeRange });
       setStats(statsRes.data);
+
+      // Cache the stats specifically for this time range
+      offlineStore.saveData(`dashboard_stats_${timeRange}`, statsRes.data);
 
       try {
         const logsRes = await activityLogsAPI.getAll({ per_page: 5 });
         setRecentLogs(logsRes.data.logs);
+        offlineStore.saveData('dashboard_logs', logsRes.data.logs);
       } catch (logError) {
-        console.warn("User lacks permission for Activity Logs");
         setRecentLogs([]); 
       }
 
       try {
         const prodRes = await productsAPI.getAll();
-        setCommodities(prodRes.data.slice(0, 4));
+        const topCommodities = prodRes.data.slice(0, 4);
+        setCommodities(topCommodities);
+        offlineStore.saveData('dashboard_commodities', topCommodities);
       } catch (prodError) {
-        console.warn("Could not load products", prodError);
         setCommodities([]);
       }
 
       setSystemStatus('online');
     } catch (error) {
-      console.error('Command Center Sync Error:', error);
-      setSystemStatus('error');
+      console.warn('Dashboard operating in Offline Mode.');
+      
+      // LOAD FROM CACHE
+      const cachedStats = offlineStore.getCachedData(`dashboard_stats_${timeRange}`);
+      const cachedLogs = offlineStore.getCachedData('dashboard_logs');
+      const cachedCommodities = offlineStore.getCachedData('dashboard_commodities');
+
+      if (cachedStats) setStats(cachedStats);
+      if (cachedLogs) setRecentLogs(cachedLogs);
+      if (cachedCommodities) setCommodities(cachedCommodities);
+      
+      setSystemStatus(isOnline ? 'error' : 'offline');
     } finally {
       setLoading(false);
     }
@@ -250,9 +289,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData();
-    const interval = setInterval(loadDashboardData, 60000);
-    return () => clearInterval(interval);
-  }, [timeRange]);
+    // Auto-refresh only if online
+    let interval;
+    if (isOnline) {
+        interval = setInterval(loadDashboardData, 60000);
+    }
+    return () => interval && clearInterval(interval);
+  }, [timeRange, isOnline]);
 
   const handleBarClick = (data) => {
     if (data && data.barangay) {
@@ -287,7 +330,7 @@ export default function Dashboard() {
     setTimeout(() => setIsExporting(false), 800);
   };
 
-  if (loading) return <DashboardSkeleton />;
+  if (loading && !stats) return <DashboardSkeleton />;
 
   const statCards = [
     { label: 'Total Farmers', value: stats?.total_farmers || 0, trend: timeRange === 'month' ? '+Last 30d' : 'Total', up: true, icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10' },
@@ -298,7 +341,6 @@ export default function Dashboard() {
     { label: 'Youth in Farming', value: stats?.children_farming || 0, trend: 'Succession', up: true, icon: Baby, color: 'text-fuchsia-600 dark:text-fuchsia-400', bg: 'bg-fuchsia-50 dark:bg-fuchsia-500/10' },
   ];
 
-  // Map Data for Succession Chart
   const successionData = [
     { level: 'Farming', count: stats?.children_farming || 0 },
     { level: 'Other Careers', count: Math.max(0, (stats?.total_children || 0) - (stats?.children_farming || 0)) }
@@ -312,6 +354,14 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020c0a] p-3 sm:p-6 lg:p-8 font-sans transition-colors duration-300 pb-24 relative overflow-x-hidden">
       
+      {/* OFFLINE BANNER */}
+      {!isOnline && (
+          <div className="absolute top-0 right-0 z-[50] bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded-bl-2xl flex items-center gap-2 text-[10px] sm:text-xs font-bold shadow-lg uppercase tracking-widest animate-in slide-in-from-top duration-300">
+              <WifiOff size={14} className="animate-pulse" /> 
+              <span>Offline Mode Active</span>
+          </div>
+      )}
+
       {/* 1. TOP COMMAND BAR */}
       <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-8 sm:mb-12">
         <div className="flex items-start sm:items-center gap-4 sm:gap-5 w-full xl:w-auto">
@@ -324,9 +374,9 @@ export default function Dashboard() {
             </p>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1">
                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Dashboard</h1>
-               <div className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5 shrink-0 ${systemStatus === 'online' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
-                 <span className={`w-1.5 h-1.5 rounded-full ${systemStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                 {systemStatus.toUpperCase()}
+               <div className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5 shrink-0 ${isOnline ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                 <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                 {isOnline ? 'ONLINE' : 'OFFLINE'}
                </div>
             </div>
             
@@ -414,51 +464,51 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* NEW: EXECUTIVE SUMMARY ANALYTICS */}
+      {/* EXECUTIVE SUMMARY ANALYTICS */}
       {stats?.summary_analysis && (
         <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 mb-8 sm:mb-10 shadow-sm overflow-hidden relative">
            <div className="flex items-center justify-between mb-6 sm:mb-8 relative z-10">
-              <div className="flex items-center gap-2 sm:gap-3">
-                 <div className="p-2 sm:p-2.5 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 rounded-lg sm:rounded-xl"><LineChart size={16} /></div>
-                 <div>
-                   <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Quick Data Overview</h3>
-                   <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Overall System Averages</p>
-                 </div>
-              </div>
+             <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-2 sm:p-2.5 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 rounded-lg sm:rounded-xl"><LineChart size={16} /></div>
+                <div>
+                  <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">Quick Data Overview</h3>
+                  <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Overall System Averages</p>
+                </div>
+             </div>
            </div>
 
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 relative z-10">
-              <div className="p-4 sm:p-5 bg-slate-50 dark:bg-black/20 rounded-2xl border border-slate-100 dark:border-white/5 flex flex-col gap-2">
-                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5"><Clock size={12}/> Avg Age</span>
-                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
-                   <AnimatedCounter value={stats.summary_analysis.average_farmer_age} decimals={1} /> 
-                   <span className="text-[10px] sm:text-xs text-slate-400 font-bold ml-1">YRS</span>
-                 </p>
-              </div>
-              <div className="p-4 sm:p-5 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 flex flex-col gap-2">
-                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-500 tracking-widest flex items-center gap-1.5"><Coins size={12}/> Avg Income</span>
-                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
-                   <AnimatedCounter value={stats.summary_analysis.average_annual_income} decimals={0} prefix="₱" />
-                 </p>
-              </div>
-              <div className="p-4 sm:p-5 bg-blue-50 dark:bg-blue-500/10 rounded-2xl border border-blue-100 dark:border-blue-500/20 flex flex-col gap-2">
-                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-blue-600 dark:text-blue-500 tracking-widest flex items-center gap-1.5"><Ruler size={12}/> Avg Land</span>
-                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
-                   <AnimatedCounter value={stats.summary_analysis.average_land_size_ha} decimals={2} /> 
-                   <span className="text-[10px] sm:text-xs text-blue-400 font-bold ml-1">HA</span>
-                 </p>
-              </div>
-              <div className="p-4 sm:p-5 bg-amber-50 dark:bg-amber-500/10 rounded-2xl border border-amber-100 dark:border-amber-500/20 flex flex-col gap-2">
-                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-amber-600 dark:text-amber-500 tracking-widest flex items-center gap-1.5"><Compass size={12}/> Top Area</span>
-                 <p className="text-sm sm:text-base font-black text-slate-800 dark:text-white mt-auto truncate">{stats.summary_analysis.most_populated_barangay}</p>
-              </div>
-              <div className="col-span-2 lg:col-span-1 p-4 sm:p-5 bg-purple-50 dark:bg-purple-500/10 rounded-2xl border border-purple-100 dark:border-purple-500/20 flex flex-col gap-2">
-                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-purple-600 dark:text-purple-500 tracking-widest flex items-center gap-1.5"><Users size={12}/> Users</span>
-                 <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
-                   <AnimatedCounter value={stats.summary_analysis.total_system_users} /> 
-                   <span className="text-[10px] sm:text-xs text-purple-400 font-bold ml-1">ACTIVE</span>
-                 </p>
-              </div>
+             <div className="p-4 sm:p-5 bg-slate-50 dark:bg-black/20 rounded-2xl border border-slate-100 dark:border-white/5 flex flex-col gap-2">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5"><Clock size={12}/> Avg Age</span>
+                <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
+                  <AnimatedCounter value={stats.summary_analysis.average_farmer_age} decimals={1} /> 
+                  <span className="text-[10px] sm:text-xs text-slate-400 font-bold ml-1">YRS</span>
+                </p>
+             </div>
+             <div className="p-4 sm:p-5 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 flex flex-col gap-2">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-500 tracking-widest flex items-center gap-1.5"><Coins size={12}/> Avg Income</span>
+                <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
+                  <AnimatedCounter value={stats.summary_analysis.average_annual_income} decimals={0} prefix="₱" />
+                </p>
+             </div>
+             <div className="p-4 sm:p-5 bg-blue-50 dark:bg-blue-500/10 rounded-2xl border border-blue-100 dark:border-blue-500/20 flex flex-col gap-2">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase text-blue-600 dark:text-blue-500 tracking-widest flex items-center gap-1.5"><Ruler size={12}/> Avg Land</span>
+                <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
+                  <AnimatedCounter value={stats.summary_analysis.average_land_size_ha} decimals={2} /> 
+                  <span className="text-[10px] sm:text-xs text-blue-400 font-bold ml-1">HA</span>
+                </p>
+             </div>
+             <div className="p-4 sm:p-5 bg-amber-50 dark:bg-amber-500/10 rounded-2xl border border-amber-100 dark:border-amber-500/20 flex flex-col gap-2">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase text-amber-600 dark:text-amber-500 tracking-widest flex items-center gap-1.5"><Compass size={12}/> Top Area</span>
+                <p className="text-sm sm:text-base font-black text-slate-800 dark:text-white mt-auto truncate">{stats.summary_analysis.most_populated_barangay}</p>
+             </div>
+             <div className="col-span-2 lg:col-span-1 p-4 sm:p-5 bg-purple-50 dark:bg-purple-500/10 rounded-2xl border border-purple-100 dark:border-purple-500/20 flex flex-col gap-2">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase text-purple-600 dark:text-purple-500 tracking-widest flex items-center gap-1.5"><Users size={12}/> Users</span>
+                <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white mt-auto">
+                  <AnimatedCounter value={stats.summary_analysis.total_system_users} /> 
+                  <span className="text-[10px] sm:text-xs text-purple-400 font-bold ml-1">ACTIVE</span>
+                </p>
+             </div>
            </div>
         </div>
       )}
@@ -512,7 +562,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Succession Pie Chart (NEW) */}
+        {/* Succession Pie Chart */}
         <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col h-[400px] sm:h-[500px]">
           <div className="flex items-center justify-between mb-6 sm:mb-10">
             <div>
@@ -610,7 +660,7 @@ export default function Dashboard() {
       {/* 4. LOWER INTELLIGENCE SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         
-        {/* Recent Activity Mini-Feed - ONLY ADMIN CAN SEE THIS */}
+        {/* Recent Activity Mini-Feed */}
         {isAdmin && (
           <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
             <div className="flex items-center justify-between mb-6 sm:mb-8">
@@ -621,7 +671,7 @@ export default function Dashboard() {
                
                {!isViewer && (
                  <button onClick={() => navigate('/logs')} className="text-[9px] sm:text-[10px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest flex items-center gap-1 group shrink-0">
-                   View Full List <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
+                    View Full List <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
                  </button>
                )}
             </div>
@@ -639,7 +689,7 @@ export default function Dashboard() {
                      </div>
                   </div>
                   <div className="px-2 py-1 sm:px-3 sm:py-1 bg-white dark:bg-[#041d18] rounded-md sm:rounded-lg text-[8px] sm:text-[9px] font-black text-slate-400 dark:text-slate-500 border dark:border-white/5 shrink-0">
-                     #{log.id}
+                      #{log.id}
                   </div>
                 </div>
               )) : (
@@ -649,7 +699,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* FUNCTIONAL Product/Commodity Reference (UPDATED FOR TOOLS & EQUIP) */}
+        {/* Farming Assets */}
         <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
           <div className="flex items-center justify-between mb-6 sm:mb-8">
              <div className="flex items-center gap-2 sm:gap-3">
@@ -660,7 +710,7 @@ export default function Dashboard() {
                 </div>
              </div>
              <button onClick={() => navigate('/products')} className="text-[9px] sm:text-[10px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest flex items-center gap-1 group shrink-0">
-               See More <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
+                See More <ChevronRight size={12} className="sm:w-[14px] sm:h-[14px] group-hover:translate-x-1 transition-transform" />
              </button>
           </div>
 
@@ -689,12 +739,12 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* System Analytics & Diagnostics - ONLY ADMIN CAN SEE THIS */}
+        {/* System Check */}
         {isAdmin && (
           <div className="bg-white dark:bg-[#0b241f] rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-5 sm:p-8 flex flex-col shadow-sm">
             <div className="flex items-center justify-between mb-6 sm:mb-8">
                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl shrink-0 ${sysHealth.isOnline ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' : 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400'}`}>
+                  <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl shrink-0 ${sysHealth.isOnline ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'}`}>
                     <Server size={16} className="sm:w-[18px] sm:h-[18px]" />
                   </div>
                   <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-sm sm:text-base">System Check</h3>
@@ -702,35 +752,31 @@ export default function Dashboard() {
             </div>
             
             <div className="space-y-3 sm:space-y-4 flex-1">
-              {/* DATABASE STATUS */}
               <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <Database size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
                   <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">Data Storage</span>
                 </div>
-                <span className={`text-[10px] sm:text-xs font-black flex items-center gap-1 ${sysHealth.isOnline ? 'text-emerald-600' : 'text-rose-500'}`}>
-                  {sysHealth.isOnline ? <ShieldCheck size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/> : <AlertCircle size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/>}
+                <span className={`text-[10px] sm:text-xs font-black flex items-center gap-1 ${sysHealth.isOnline ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {sysHealth.isOnline ? <ShieldCheck size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/> : <WifiOff size={12} className="sm:w-[14px] sm:h-[14px] shrink-0"/>}
                   {sysHealth.dbStatus}
                 </span>
               </div>
 
-              {/* API LATENCY */}
               <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <Activity size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
                   <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">Speed</span>
                 </div>
                 <span className={`text-[10px] sm:text-xs font-black ${
-                  !sysHealth.isOnline ? 'text-rose-500' :
+                  !sysHealth.isOnline ? 'text-slate-400' :
                   sysHealth.latency < 100 ? 'text-blue-600' : 
                   sysHealth.latency < 300 ? 'text-amber-500' : 'text-rose-500'
                 }`}>
-                  {!sysHealth.isOnline ? 'Error' : <><AnimatedCounter value={sysHealth.latency} duration={500}/>ms</>} 
-                  {sysHealth.isOnline && sysHealth.latency < 100 && ' (Good)'}
+                  {!sysHealth.isOnline ? 'Offline' : <><AnimatedCounter value={sysHealth.latency} duration={500}/>ms</>} 
                 </span>
               </div>
 
-              {/* SERVER LOAD */}
               <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5 transition-all">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <Thermometer size={14} className="text-slate-400 sm:w-[16px] sm:h-[16px] shrink-0" />
@@ -739,17 +785,16 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                   <div className="w-12 sm:w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden hidden min-[350px]:block">
                     <div 
-                      className={`h-full transition-all duration-1000 ${sysHealth.serverLoad > 80 ? 'bg-rose-500' : sysHealth.serverLoad > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                      style={{ width: `${sysHealth.serverLoad}%` }}
+                      className={`h-full transition-all duration-1000 ${!isOnline ? 'bg-slate-400' : sysHealth.serverLoad > 80 ? 'bg-rose-500' : sysHealth.serverLoad > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                      style={{ width: `${isOnline ? sysHealth.serverLoad : 0}%` }}
                     ></div>
                   </div>
                   <span className="text-[10px] sm:text-xs font-black text-slate-500 w-8 text-right">
-                    <AnimatedCounter value={sysHealth.serverLoad} duration={500}/>%
+                    {isOnline ? <AnimatedCounter value={sysHealth.serverLoad} duration={500}/> : 0}%
                   </span>
                 </div>
               </div>
 
-              {/* LAST BACKUP */}
               <div className="mt-auto pt-4 border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
                 <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Last Backup</span>
                 <span className="text-[10px] sm:text-xs font-black text-slate-600 dark:text-slate-300">
@@ -761,7 +806,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* QUICK ACTIONS FAB (HIDDEN FOR VIEWERS) */}
+      {/* QUICK ACTIONS FAB */}
       {!isViewer && (
         <div className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 z-30 flex flex-col gap-2 sm:gap-3 items-end">
           {showQuickActions && (
@@ -794,7 +839,6 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowAllBarangaysModal(false)} />
           <div className="relative bg-white dark:bg-[#041d18] rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in zoom-in-95 border dark:border-white/10 max-h-[85vh]">
-            
             <div className="p-5 sm:p-8 border-b border-slate-50 dark:border-white/5 flex items-center justify-between bg-white/80 dark:bg-[#041d18]/80 backdrop-blur-xl shrink-0">
               <div>
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">All Areas</h2>
@@ -805,7 +849,6 @@ export default function Dashboard() {
               </button>
             </div>
 
-            {/* KEEP THE FULL MAPPING IN THE MODAL */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 no-scrollbar">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {(stats?.product_stats || []).map((b, idx) => (

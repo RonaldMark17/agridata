@@ -258,7 +258,7 @@ export default function LandingPage() {
             </button>
 
             <a
-              href="https://drive.google.com/drive/folders/18yiIbK2IOGHfdT1aWEp-adI0uVtUtgSh?usp=sharing"
+              href="/agridata.apk"
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
@@ -321,7 +321,7 @@ export default function LandingPage() {
             </Link>
 
             <a
-              href="https://drive.google.com/drive/folders/18yiIbK2IOGHfdT1aWEp-adI0uVtUtgSh?usp=sharing"
+              href="/agridata.apk"
               download="agridata.apk"
               className="w-full sm:w-auto flex-1 sm:flex-none min-w-[200px] px-6 py-4 bg-emerald-50 text-emerald-700 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-widest shadow-sm hover:bg-emerald-100 hover:shadow-md active:translate-y-0 transition-all flex items-center justify-center gap-2 border border-emerald-200"
             >
@@ -557,7 +557,7 @@ export default function LandingPage() {
                 </Link>
 
                 <a
-                  href="https://drive.google.com/drive/folders/18yiIbK2IOGHfdT1aWEp-adI0uVtUtgSh?usp=sharing"
+                  href="/agridata.apk"
                   download="agridata.apk"
                   className="w-full sm:w-auto flex-1 sm:flex-none min-w-[200px] px-6 py-4 bg-emerald-50 text-emerald-700 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-widest shadow-sm hover:bg-emerald-100 hover:shadow-md active:translate-y-0 transition-all flex items-center justify-center gap-2 border border-emerald-200"
                 >

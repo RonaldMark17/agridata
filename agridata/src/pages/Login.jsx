@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Eye, EyeOff, Sprout, Loader2, Lock, Mail, Activity, ArrowRight, ShieldCheck, Smartphone, ShieldAlert, ChevronLeft, Clock } from 'lucide-react';
+import { Eye, EyeOff, Sprout, Loader2, Lock, Mail, Activity, ArrowRight, ShieldCheck, Smartphone, ShieldAlert, ChevronLeft, Clock, WifiOff } from 'lucide-react';
 
 export default function Login() {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
@@ -13,6 +13,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isPendingApproval, setIsPendingApproval] = useState(false); // NEW FEATURE STATE
+
+  // --- OFFLINE STATE ---
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   // --- SMART SECURITY LOCKOUT (Persistent Tracking) ---
   const [attemptsRecord, setAttemptsRecord] = useState(() => {
@@ -31,7 +34,7 @@ export default function Login() {
   const navigate = useNavigate();
   const { login, verifyOtp, user } = useAuth(); // Added 'user' from context
 
-  // --- ADDED: Auto-redirect if already logged in ---
+  // --- ADDED: Auto-redirect if already logged in (Works Offline) ---
   useEffect(() => {
     if (user) {
       if (user.role === 'farmer' || user.role === 'mentee') {
@@ -41,6 +44,20 @@ export default function Login() {
       }
     }
   }, [user, navigate]);
+
+  // --- ADDED: Track Online/Offline Status ---
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Sync attempts to localStorage whenever they change
   useEffect(() => {
@@ -62,6 +79,13 @@ export default function Login() {
   // STEP 1: Submit Username/Password
   const handleCredentialSubmit = async (e) => {
     e.preventDefault();
+
+    // Prevent submission if offline
+    if (!isOnline) {
+      setError("Internet connection required to log in for the first time.");
+      return;
+    }
+
     if (isLocked) return;
 
     setError('');
@@ -97,13 +121,21 @@ export default function Login() {
       }
     } catch (err) {
       console.error(err);
+      
+      // Safety check: Handle network errors (e.g., server offline) cleanly
+      if (err.message && err.message.includes("Internet connection")) {
+         setError(err.message);
+         setLoading(false);
+         return;
+      }
+
       const msg = err.response?.data?.error || '';
       
       // NEW FEATURE: Detect if backend says account is pending
       if (msg.toLowerCase().includes('pending') || msg.toLowerCase().includes('approval')) {
         setIsPendingApproval(true);
       } else {
-        triggerFailedAttempt(activeCount, msg || 'Authentication failed.');
+        triggerFailedAttempt(activeCount, msg || 'Authentication failed. Server unreachable.');
       }
     } finally {
       setLoading(false);
@@ -131,6 +163,11 @@ export default function Login() {
 
   const handleOtpSubmit = async (e) => {
     e.preventDefault();
+    if (!isOnline) {
+      setError("Internet connection required to verify OTP.");
+      return;
+    }
+
     setError('');
     setLoading(true);
     
@@ -244,7 +281,17 @@ export default function Login() {
             </p>
           </header>
 
-          {/* NEW FEATURE: PENDING APPROVAL UI */}
+          {/* OFFLINE ALERT */}
+          {!isOnline && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-2">
+              <WifiOff size={18} className="shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold leading-relaxed">
+                You are currently offline. Please connect to the internet to log in to a new session.
+              </p>
+            </div>
+          )}
+
+          {/* PENDING APPROVAL UI */}
           {isPendingApproval ? (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
               <div className="p-6 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col items-center text-center gap-4">
@@ -267,7 +314,7 @@ export default function Login() {
             </div>
           ) : (
             <>
-              {(error || isLocked) && (
+              {(error || isLocked) && isOnline && (
                 <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-2 border ${isLocked ? 'bg-red-50 border-red-200 text-red-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
                   {isLocked ? <ShieldAlert size={18} className="shrink-0 mt-0.5" /> : <Activity size={18} className="shrink-0 mt-0.5" />}
                   <p className="text-xs font-semibold leading-relaxed">
@@ -286,7 +333,8 @@ export default function Login() {
                         name="username"
                         type="text"
                         required
-                        className={`w-full pl-11 pr-4 py-3 bg-white border rounded-xl text-sm font-medium text-slate-900 transition-all outline-none shadow-sm ${isLocked ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' : 'border-slate-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400'}`}
+                        disabled={!isOnline || isLocked}
+                        className={`w-full pl-11 pr-4 py-3 bg-white border rounded-xl text-sm font-medium text-slate-900 transition-all outline-none shadow-sm disabled:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed ${isLocked ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' : 'border-slate-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400'}`}
                         placeholder="Username or email address"
                         value={credentials.username}
                         onChange={handleChange}
@@ -297,7 +345,7 @@ export default function Login() {
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
                       <label className="text-xs font-bold text-slate-700">Password</label>
-                      <Link to="/forgot-password" size={16} className="text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors">Forgot password?</Link>
+                      <Link to="/forgot-password" size={16} className={`text-xs font-bold transition-colors ${!isOnline ? 'text-slate-400 pointer-events-none' : 'text-emerald-600 hover:text-emerald-700'}`}>Forgot password?</Link>
                     </div>
                     <div className="relative group">
                       <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isLocked ? 'text-slate-300' : 'text-slate-400 group-focus-within:text-emerald-600'}`} size={16} />
@@ -305,7 +353,7 @@ export default function Login() {
                         name="password"
                         type={showPassword ? "text" : "password"}
                         required
-                        disabled={isLocked}
+                        disabled={!isOnline || isLocked}
                         className="w-full pl-11 pr-11 py-3 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400 transition-all outline-none shadow-sm disabled:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
                         placeholder="••••••••"
                         value={credentials.password}
@@ -313,7 +361,7 @@ export default function Login() {
                       />
                       <button
                         type="button"
-                        disabled={isLocked}
+                        disabled={!isOnline || isLocked}
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
@@ -324,11 +372,11 @@ export default function Login() {
 
                   <button
                     type="submit"
-                    disabled={loading || isLocked}
+                    disabled={!isOnline || loading || isLocked}
                     className={`w-full flex items-center justify-center gap-2 py-3.5 mt-2 text-white rounded-xl font-bold text-sm shadow-md transition-all ${
                       isLocked 
                         ? 'bg-red-600 shadow-red-600/20 cursor-not-allowed' 
-                        : 'bg-slate-900 hover:bg-slate-800 hover:shadow-lg active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed'
+                        : 'bg-slate-900 hover:bg-slate-800 hover:shadow-lg active:scale-[0.98] disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed'
                     }`}
                   >
                     {isLocked ? (
@@ -351,8 +399,9 @@ export default function Login() {
                       <input
                         type="text"
                         required
+                        disabled={!isOnline}
                         maxLength={6}
-                        className="w-full pl-12 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400 transition-all outline-none shadow-sm tracking-[0.5em] text-center"
+                        className="w-full pl-12 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-400 transition-all outline-none shadow-sm tracking-[0.5em] text-center disabled:bg-slate-50 disabled:opacity-60"
                         placeholder="000000"
                         value={otp}
                         onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))} 
@@ -363,8 +412,8 @@ export default function Login() {
 
                   <button
                     type="submit"
-                    disabled={loading || otp.length < 6}
-                    className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-emerald-500 hover:shadow-lg active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                    disabled={!isOnline || loading || otp.length < 6}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-emerald-500 hover:shadow-lg active:scale-[0.98] transition-all disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed"
                   >
                     {loading ? (
                       <Loader2 className="animate-spin" size={16} />
@@ -376,8 +425,9 @@ export default function Login() {
                   <div className="pt-2 text-center">
                     <button 
                       type="button" 
+                      disabled={!isOnline}
                       onClick={() => setStep('credentials')}
-                      className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors disabled:opacity-50"
                     >
                       Cancel and return to login
                     </button>
@@ -389,7 +439,7 @@ export default function Login() {
                 <div className="mt-8 pt-6 border-t border-slate-100 text-center">
                   <p className="text-slate-500 font-medium text-xs">
                     New to the system? 
-                    <Link to="/register" className="text-emerald-600 font-bold ml-1.5 hover:text-emerald-700 transition-colors">Sign up</Link>
+                    <Link to="/register" className={`font-bold ml-1.5 transition-colors ${!isOnline ? 'text-slate-400 pointer-events-none' : 'text-emerald-600 hover:text-emerald-700'}`}>Sign up</Link>
                   </p>
                 </div>
               )}

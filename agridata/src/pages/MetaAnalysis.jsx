@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { experiencesAPI, farmersAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { offlineStore } from '../utils/offlineStore';
 import {
     BookOpen, Calendar, MapPin, User, Plus, X,
     Trophy, AlertTriangle, Lightbulb, Sprout, Landmark, Pin,
@@ -11,7 +12,7 @@ import {
     Network, Sparkles, Wallet, ThermometerSun, Bug, Baby, Mic, MicOff, Eye, EyeOff
 } from 'lucide-react';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001').replace('/api', '');
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080').replace('/api', '');
 
 // --- NLP SIMULATION: Themes and Keywords for Meta-Analysis ---
 const THEMES = [
@@ -88,11 +89,36 @@ const ExperienceSkeleton = () => (
     </div>
 );
 
+// 🔥 GLOBAL CONTROL (prevent spam requests)
+let lastCallTime = 0;
+let debounceTimeout = null;
+let isProcessingGemini = false;
+
 export default function Experiences() {
     const [experiences, setExperiences] = useState([]);
     const [farmers, setFarmers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+
+    const [isOnline, setIsOnline] = useState(
+        navigator.onLine && localStorage.getItem('force_offline') !== 'true'
+    );
+
+    useEffect(() => {
+        const checkNetwork = () => {
+            const isPhysicallyOnline = navigator.onLine;
+            const isForcedOffline = localStorage.getItem('force_offline') === 'true';
+            setIsOnline(isPhysicallyOnline && !isForcedOffline);
+        };
+        window.addEventListener('online', checkNetwork);
+        window.addEventListener('offline', checkNetwork);
+        window.addEventListener('network-mode-change', checkNetwork);
+        return () => {
+            window.removeEventListener('online', checkNetwork);
+            window.removeEventListener('offline', checkNetwork);
+            window.removeEventListener('network-mode-change', checkNetwork);
+        };
+    }, []);
 
     // Modals & Interactivity
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -174,7 +200,7 @@ export default function Experiences() {
             recognitionRef.current = new SpeechRecognition();
             recognitionRef.current.continuous = true;
             recognitionRef.current.interimResults = true;
-            recognitionRef.current.lang = 'en-PH';
+            recognitionRef.current.lang = 'fil-PH';
 
             recognitionRef.current.onresult = (event) => {
                 let currentTranscript = '';
@@ -232,11 +258,33 @@ export default function Experiences() {
     const fetchExperiences = async () => {
         setLoading(true);
         try {
+            // Check both physical connection and manual toggle button
+            if (!isOnline) throw new Error("Offline");
+
             const response = await experiencesAPI.getAll({ page: currentPage });
             setExperiences(response.data.experiences);
             setTotalPages(response.data.pages);
+            
+            // BACKUP: Save full data for offline viewing
+            offlineStore.saveData('experiences_list', response.data);
         } catch (error) {
-            console.error('Error fetching experiences:', error);
+            console.warn("Offline Mode: Loading experiences from local cache.");
+            const cachedData = offlineStore.getCachedData('experiences_list');
+            
+            if (cachedData && cachedData.experiences) {
+                let data = cachedData.experiences;
+                // Manual Offline Search Filter
+                if (searchQuery) {
+                    const q = searchQuery.toLowerCase();
+                    data = data.filter(e => 
+                        e.title.toLowerCase().includes(q) || 
+                        e.description.toLowerCase().includes(q) ||
+                        e.farmer_name?.toLowerCase().includes(q)
+                    );
+                }
+                setExperiences(data);
+                setTotalPages(cachedData.pages || 1);
+            }
         } finally {
             setTimeout(() => setLoading(false), 800);
         }
@@ -244,9 +292,17 @@ export default function Experiences() {
 
     const fetchFarmers = async () => {
         try {
+            if (!isOnline) {
+                const cached = offlineStore.getCachedData('farmers_cache');
+                if (cached) setFarmers(cached);
+                return;
+            }
             const response = await farmersAPI.getAll({ per_page: 1000 });
             setFarmers(response.data.farmers);
-        } catch (error) { console.error('Error fetching farmers:', error); }
+            offlineStore.saveData('farmers_cache', response.data.farmers);
+        } catch (error) { 
+            console.error('Error fetching farmers:', error); 
+        }
     };
 
     const handleFarmerChange = (e) => {
@@ -259,43 +315,138 @@ export default function Experiences() {
         setFormData({ ...formData, farmer_id: selectedId, location: autoLocation });
     };
 
-    // GEMINI AI INTEGRATION
-    const organizeWithGemini = async (rawText) => {
-        if (!rawText.trim()) return;
+    // --- FIXED GEMINI FUNCTION (FINAL WITH AI ERROR RESPONSE) ---
+    const organizeWithGemini = async (rawText, retryCount = 0) => {
+        if (!rawText || !rawText.trim()) return;
 
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        if (!apiKey) {
-            console.warn("No Gemini API key found. Saving raw text.");
+        // ✅ prevent spam calls (cooldown 3s)
+        const now = Date.now();
+        if (now - lastCallTime < 3000) {
+            console.warn("Cooldown active...");
             return;
         }
 
-        setIsOrganizing(true);
-        try {
-            const prompt = `You are an agricultural documentation assistant. Please organize, format, and fix the grammar of this raw voice transcript from an elder farmer. Make it clear and professional, preserving the original language (whether English or Tagalog) and the exact original meaning. Output ONLY the formatted text without any conversational filler or introductions.\n\nRaw Transcript:\n"${rawText}"`;
+        if (isProcessingGemini) {
+            console.warn("Already processing...");
+            return;
+        }
 
+        lastCallTime = now;
+        isProcessingGemini = true;
+        setIsOrganizing(true);
+
+        try {
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyA-1V6jOiIJLSdON7Kwggr1359cv4MDNaE";
+
+            const knowledgeContext = Array.isArray(experiences) && experiences.length > 0
+                ? experiences
+                    .map(exp => `[Note by ${exp.farmer_name}]: ${exp.title} - ${exp.description}`)
+                    .join('\n')
+                : "No existing field notes.";
+
+            const basePrompt = `
+            You are an expert Agricultural Ghostwriter and Voice Transcript Interpreter.
+
+            OBJECTIVE:
+            - Convert messy voice-to-text into a clear narrative.
+            - Remove repetition and filler words.
+            - Fix wrong/misheard words.
+            - Keep Tagalog/English/Taglish.
+            - Preserve meaning.
+
+            Return ONLY final paragraph.
+            `;
+
+            let personaPrompt = "";
+
+            if (user?.role === "farmer") {
+                personaPrompt = `Speak like a respectful Filipino farmer using po/opo.\n${knowledgeContext}`;
+            } else if (user?.role === "mentee") {
+                personaPrompt = `Explain clearly and educationally.\n${knowledgeContext}`;
+            } else {
+                personaPrompt = `Professional agricultural writer tone.`;
+            }
+
+            const finalPrompt = `${basePrompt}\n${personaPrompt}\n"${rawText}"`;
+
+            // Using standard v1beta 1.5-flash
             const response = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
-                { contents: [{ parts: [{ text: prompt }] }] },
-                { headers: { 'Content-Type': 'application/json' } }
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+                {
+                    contents: [{ parts: [{ text: finalPrompt }] }],
+                    generationConfig: {
+                        temperature: 0.4,
+                        maxOutputTokens: 512
+                    }
+                },
+                {
+                    headers: { "Content-Type": "application/json" }
+                }
             );
 
-            const formattedText = response.data.candidates[0].content.parts[0].text;
-            setFormData(prev => ({ ...prev, description: formattedText.trim() }));
+            const polishedText = response?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+            if (polishedText) {
+                setFormData(prev => ({
+                    ...prev,
+                    description: polishedText
+                }));
+
+                // Safe check before setting variable that might not be defined
+                if (typeof setWriterSessions !== 'undefined') {
+                    setWriterSessions(prev => [
+                        {
+                            id: Date.now(),
+                            original: rawText,
+                            polished: polishedText,
+                            date: new Date().toISOString()
+                        },
+                        ...prev
+                    ]);
+                }
+            } else {
+                console.warn("No AI response received.");
+            }
+
         } catch (error) {
-            console.error("Gemini AI Formatting Error:", error);
-            alert("Failed to organize text via AI. Your raw transcript was kept.");
+            const status = error?.response?.status;
+
+            // 🔥 AUTO RETRY (fix 429)
+            if (status === 429 && retryCount < 3) {
+                console.warn(`Retrying Gemini... (${retryCount + 1})`);
+                await new Promise(res => setTimeout(res, 2000 * (retryCount + 1)));
+                isProcessingGemini = false;
+                setIsOrganizing(false);
+                return organizeWithGemini(rawText, retryCount + 1);
+            }
+
+            console.error("AI Writer Error:", error?.response?.data || error.message);
+            
+            // --- AI ERROR FALLBACK IN THE TEXT AREA ---
+            setFormData(prev => ({
+                ...prev,
+                description: `"${rawText}"`
+            }));
+
         } finally {
             setIsOrganizing(false);
+            isProcessingGemini = false;
         }
+    };
+
+    // --- DEBOUNCE (VOICE SAFE) ---
+    const debounceOrganize = (text) => {
+        clearTimeout(debounceTimeout);
+        debounceTimeout = setTimeout(() => {
+            organizeWithGemini(text);
+        }, 1500);
     };
 
     const toggleVoice = () => {
         if (isListening) {
             recognitionRef.current?.stop();
             setIsListening(false);
-            if (formData.description.trim()) {
-                organizeWithGemini(formData.description);
-            }
+            if (formData.description.trim()) debounceOrganize(formData.description);
         } else {
             setFormData(prev => ({ ...prev, description: '' }));
             recognitionRef.current?.start();
@@ -303,30 +454,57 @@ export default function Experiences() {
         }
     };
 
+    // --- FIXED OFFLINE HANDLE SUBMIT ---
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        setSubmitting(true);
-        setErrorMessage('');
+    e.preventDefault();
+    setSubmitting(true);
+    setErrorMessage('');
 
+    // Construct the payload immediately
+    const payload = {
+        ...formData,
+        context: `[Visibility: ${formData.visibility}] ${formData.context}`
+    };
+
+    // 1. CHECK OFFLINE STATUS (Handles both Wi-Fi drop AND the "Force Offline" button)
+    if (!isOnline) {
         try {
-            // Append visibility to context so it saves in the DB
-            const payload = {
-                ...formData,
-                context: `[Visibility: ${formData.visibility}] ${formData.context}`
-            };
-
-            await experiencesAPI.create(payload);
+            offlineStore.addToQueue(payload, 'CREATE_EXPERIENCE', 'experiences');
+            alert("Record saved to phone. It will upload automatically when you turn off Offline Mode or reconnect.");
+            
+            // UI Cleanup
             setShowCreateModal(false);
-            fetchExperiences();
             setFormData(initialFormState);
-        } catch (error) {
-            const msg = error.response?.data?.error || 'Failed to save record. Please check inputs.';
-            setErrorMessage(msg);
-            console.error('Error creating experience:', error);
+        } catch (err) {
+            setErrorMessage("Local storage error: Could not save offline.");
         } finally {
             setSubmitting(false);
         }
-    };
+        return;
+    }
+
+    // 2. ONLINE FLOW (Attempting to reach the server)
+    try {
+        await experiencesAPI.create(payload);
+        
+        // Refresh the list and close modal
+        fetchExperiences();
+        setShowCreateModal(false);
+        setFormData(initialFormState);
+        alert("Experience recorded successfully!");
+    } catch (error) {
+        // 3. FALLBACK: Server is down or timed out even though Wi-Fi is "on"
+        console.error('Server unreachable, switching to offline queue:', error);
+        
+        offlineStore.addToQueue(payload, 'CREATE_EXPERIENCE', 'experiences');
+        alert("Server issue detected. We've safely backed up this record to your phone to prevent data loss.");
+        
+        setShowCreateModal(false);
+        setFormData(initialFormState);
+    } finally {
+        setSubmitting(false);
+    }
+};
 
     const handleToggleComments = async () => {
         if (!selectedExperience) return;
@@ -487,32 +665,59 @@ export default function Experiences() {
         }
     };
 
-    const handleToggleCommentLike = async (commentId) => {
-        const updatedComments = selectedExperience.comments.map(c => {
-            if (c.id === commentId) {
-                const currentlyLiked = c.is_liked_by_me;
-                return {
-                    ...c,
-                    is_liked_by_me: !currentlyLiked,
-                    likes_count: currentlyLiked ? Math.max(0, (c.likes_count || 1) - 1) : (c.likes_count || 0) + 1
-                };
+    // --- BUG FIX: OPTIMISTIC TOGGLE VOTE WITH OFFLINE SUPPORT ---
+    const toggleVote = async (id, e) => {
+        if (e) e.stopPropagation();
+
+        const index = experiences.findIndex(exp => exp.id === id);
+        if (index === -1) return;
+
+        const exp = experiences[index];
+        const currentlyLiked = exp.is_liked_by_me;
+
+        // 1. Optimistic Update (Immediate UI response)
+        const updatedExperiences = [...experiences];
+        updatedExperiences[index] = {
+            ...exp,
+            is_liked_by_me: !currentlyLiked,
+            likes_count: currentlyLiked ? Math.max(0, exp.likes_count - 1) : exp.likes_count + 1
+        };
+        setExperiences(updatedExperiences);
+
+        // Update the Modal if it is open
+        if (selectedExperience?.id === id) {
+            setSelectedExperience({
+                ...selectedExperience,
+                is_liked_by_me: !currentlyLiked,
+                likes_count: currentlyLiked ? Math.max(0, exp.likes_count - 1) : exp.likes_count + 1
+            });
+        }
+
+        // 2. Offline Check
+        if (!isOnline) {
+            // Queue the like action for when they come back online
+            try {
+                offlineStore.addToQueue({ id, action: 'toggleLike' }, 'TOGGLE_LIKE', 'experiences');
+            } catch (err) {
+                console.warn("Could not save like to offline queue");
             }
-            return c;
-        });
+            return; // Exit early, the UI is already updated
+        }
 
-        const updatedExperience = { ...selectedExperience, comments: updatedComments };
-        setSelectedExperience(updatedExperience);
-        setExperiences(prev => prev.map(exp => exp.id === updatedExperience.id ? updatedExperience : exp));
-
+        // 3. Online Server Sync
         try {
-            if (experiencesAPI.toggleCommentLike) {
-                await experiencesAPI.toggleCommentLike(selectedExperience.id, commentId);
-            }
+            await experiencesAPI.toggleLike(id);
         } catch (error) {
-            console.error("Failed to toggle comment like:", error);
+            // Rollback UI if the server explicitly rejects it
+            console.error("Failed to sync like with server");
+            setExperiences(experiences); // Reset to previous state
+            if (selectedExperience?.id === id) {
+                setSelectedExperience(exp); // Reset modal
+            }
         }
     };
 
+    // --- RESTORED EXPORT FUNCTION ---
     const handleExport = () => {
         setIsExporting(true);
         const headers = ["Title", "Type", "Farmer", "Location", "Impact", "Date", "Likes", "Comments"];
@@ -528,39 +733,6 @@ export default function Experiences() {
         link.click();
         document.body.removeChild(link);
         setTimeout(() => setIsExporting(false), 1000);
-    };
-
-    const toggleVote = async (id, e) => {
-        if (e) e.stopPropagation();
-
-        const index = experiences.findIndex(exp => exp.id === id);
-        if (index === -1) return;
-
-        const exp = experiences[index];
-        const currentlyLiked = exp.is_liked_by_me;
-
-        const updatedExperiences = [...experiences];
-        updatedExperiences[index] = {
-            ...exp,
-            is_liked_by_me: !currentlyLiked,
-            likes_count: currentlyLiked ? Math.max(0, exp.likes_count - 1) : exp.likes_count + 1
-        };
-        setExperiences(updatedExperiences);
-
-        if (selectedExperience?.id === id) {
-            setSelectedExperience({
-                ...selectedExperience,
-                is_liked_by_me: !currentlyLiked,
-                likes_count: currentlyLiked ? Math.max(0, exp.likes_count - 1) : exp.likes_count + 1
-            });
-        }
-
-        try {
-            await experiencesAPI.toggleLike(id);
-        } catch (error) {
-            setExperiences(experiences);
-            console.error("Failed to sync like with server");
-        }
     };
 
     const handleShare = async (exp) => {
@@ -684,7 +856,6 @@ export default function Experiences() {
                 <div className="min-h-[500px] px-3 sm:px-6 lg:px-8">
 
                     {/* --- VIEW: AI META-ANALYSIS --- */}
-                    {/* --- VIEW: AI META-ANALYSIS --- */}
                     {activeTab === 'AI Meta-Analysis' ? (
                         <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500">
                             {/* AI SUMMARY BANNER - UPGRADED REALISM */}
@@ -747,13 +918,13 @@ export default function Experiences() {
                                                         <p className="text-[10px] sm:text-xs font-black uppercase text-slate-500 dark:text-slate-400 mb-2 tracking-widest line-clamp-1">{log.title}</p>
                                                         <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-relaxed line-clamp-2">"{log.description}"</p>
                                                         <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-200/60 dark:border-white/10">
-                                                            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1"><User size={10}/> {log.farmer_name || 'Anonymous'}</p>
-                                                            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1"><Calendar size={10}/> {formatDate(log.date_recorded)}</p>
+                                                            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1"><User size={10} /> {log.farmer_name || 'Anonymous'}</p>
+                                                            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1"><Calendar size={10} /> {formatDate(log.date_recorded)}</p>
                                                         </div>
                                                     </div>
                                                 ))
                                             ) : (
-                                                <div className="text-center p-6 border-2 border-dashed border-slate-200/60 dark:border-white/10 rounded-2xl h-full flex items-center justify-center bg-white/40 dark:bg-transparent">
+                                                <div className="text-center p-6 border-2 border-dashed border-slate-200/60 dark:border-white/10 rounded-2xl h-full flex items-center justify-center">
                                                     <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest">No semantic matches found.</p>
                                                 </div>
                                             )}
@@ -863,10 +1034,12 @@ export default function Experiences() {
                                                         </button>
                                                     ) : (
                                                         /* STATIC VIEW-ONLY LABEL FOR OTHER USERS */
-                                                        <span className="flex items-center gap-1 text-[8px] font-black uppercase text-slate-400 px-2 py-1">
-                                                            {isMenteesOnly ? <EyeOff size={10} /> : <Eye size={10} />}
-                                                            {exp.visibility}
-                                                        </span>
+                                                        selectedExperience?.comments_enabled === false && (
+                                                            <span className="flex items-center gap-1 text-[8px] font-black uppercase text-slate-400 px-2 py-1">
+                                                                {isMenteesOnly ? <EyeOff size={10} /> : <Eye size={10} />}
+                                                                {exp.visibility}
+                                                            </span>
+                                                        )
                                                     )}
                                                 </div>
                                             </div>
@@ -919,7 +1092,8 @@ export default function Experiences() {
                                     );
                                 })}
                             </div>
-                        ))}
+                        )
+                    )}
                 </div>
 
                 {/* Global Pagination */}
@@ -1128,7 +1302,7 @@ export default function Experiences() {
                                     {/* Social Actions */}
                                     <div className="flex flex-wrap items-center gap-3 pt-2">
                                         <button
-                                            onClick={() => toggleVote(selectedExperience.id)}
+                                            onClick={(e) => toggleVote(selectedExperience.id, e)}
                                             className={`flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl sm:rounded-[1.25rem] font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all shadow-sm shrink-0 ${selectedExperience.is_liked_by_me ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'}`}
                                         >
                                             <ThumbsUp size={14} className={`shrink-0 ${selectedExperience.is_liked_by_me ? 'fill-current sm:w-[16px] sm:h-[16px]' : 'sm:w-[16px] sm:h-[16px]'}`} />
@@ -1221,7 +1395,7 @@ export default function Experiences() {
 
                                                         <div className="flex items-center gap-3 px-2 shrink-0">
                                                             <button
-                                                                onClick={() => handleToggleCommentLike(c.id)}
+                                                                onClick={(e) => handleToggleCommentLike(c.id, e)}
                                                                 className={`flex items-center gap-1.5 text-[10px] font-bold transition-colors shrink-0 ${c.is_liked_by_me ? 'text-blue-500' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
                                                             >
                                                                 <ThumbsUp size={12} className={`shrink-0 ${c.is_liked_by_me ? 'fill-current' : ''}`} />
@@ -1269,7 +1443,7 @@ export default function Experiences() {
                                             </div>
                                             <button
                                                 type="submit"
-                                                disabled={!commentText.trim()}
+                                                disabled={!commentText.trim() || !isOnline}
                                                 className="px-6 sm:px-8 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/30 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 shrink-0 h-[44px] sm:h-[52px]"
                                             >
                                                 <span className="hidden sm:inline">Post</span>

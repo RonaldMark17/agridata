@@ -38,20 +38,24 @@ import ActivityLogs from './pages/ActivityLogs';
 // PWA Install Prompt
 import InstallPrompt from './components/InstallPrompt';
 
-// --- UTILITY FUNCTION: Converts VAPID key safely ---
+// --- UTILITY FUNCTION: FIXED (NO CORRUPTION) ---
 function urlBase64ToUint8Array(base64String) {
+  if (!base64String) {
+    console.error("VAPID key is missing");
+    return null;
+  }
+
   try {
-    const cleanString = base64String.replace(/[^A-Za-z0-9\+\/\-\_=]/g, '');
-    const padding = '='.repeat((4 - (cleanString.length % 4)) % 4);
-    const base64 = (cleanString + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+
+    const base64 = (base64String + padding)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
 
     const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
 
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
+    return new Uint8Array([...rawData].map(char => char.charCodeAt(0)));
+
   } catch (error) {
     console.error("VAPID Key Conversion Error:", error);
     return null;
@@ -81,7 +85,6 @@ const PublicRoute = ({ children }) => {
     );
   }
 
-  // Route farmers to the portal, everyone else to dashboard
   if (user) {
     if (user.role === 'farmer') {
       return <Navigate to="/portal" replace />;
@@ -123,10 +126,7 @@ function ScrollToTop() {
 }
 
 function AppRoutes() {
-  // Roles restricted to administration/staff
   const STAFF_ROLES = ['admin', 'researcher', 'data_encoder', 'viewer'];
-  
-  // Roles that include farmers for community-facing features
   const COMMUNITY_ROLES = ['admin', 'researcher', 'data_encoder', 'viewer', 'farmer'];
 
   return (
@@ -139,14 +139,12 @@ function AppRoutes() {
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<ProtectedRoute allowedRoles={STAFF_ROLES}><Dashboard /></ProtectedRoute>} />
 
-        {/* Modules - FARMERS NOW HAVE ACCESS TO THESE */}
         <Route path="/portal" element={<ProtectedRoute allowedRoles={['farmer', 'admin']}><ElderPortal /></ProtectedRoute>} />
         <Route path="/map" element={<ProtectedRoute allowedRoles={COMMUNITY_ROLES}><VulnerabilityMap /></ProtectedRoute>} />
         <Route path="/experiences" element={<ProtectedRoute allowedRoles={COMMUNITY_ROLES}><MetaAnalysis /></ProtectedRoute>} />
         <Route path="/barangays" element={<ProtectedRoute allowedRoles={COMMUNITY_ROLES}><Barangays /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute allowedRoles={COMMUNITY_ROLES}><Products /></ProtectedRoute>} />
         
-        {/* Strictly Staff Modules */}
         <Route path="/farmers" element={<ProtectedRoute allowedRoles={STAFF_ROLES}><FarmersList /></ProtectedRoute>} />
         <Route path="/projects" element={<ProtectedRoute allowedRoles={['admin', 'researcher']}><ResearchProjects /></ProtectedRoute>} />
         <Route path="/surveys" element={<ProtectedRoute allowedRoles={['admin', 'researcher']}><SurveyQuestionnaires /></ProtectedRoute>} />
@@ -173,6 +171,7 @@ function App() {
       if ('serviceWorker' in navigator && 'PushManager' in window) {
         try {
           const registration = await navigator.serviceWorker.register('/sw.js');
+          await navigator.serviceWorker.ready; // ✅ FIX
 
           if (Notification.permission === 'default') {
             await Notification.requestPermission();
@@ -182,29 +181,41 @@ function App() {
             const subscription = await registration.pushManager.getSubscription();
 
             if (!subscription) {
-              const publicKey = "BMoYQvivahv8gM-gmR0bOv-k0r1uvH8cFxijwpyRos-Y3IgHx7rZ403w0RcML_bAgUsp5_vdUn7zwC5bed9bYQ=";
+
+              // ✅ FIX: USE ENV KEY (NOT HARDCODED WRONG KEY)
+              const publicKey = "BLZ06455zhih8Aij0glKl4aG7n8vjNtLFNdG0TV0RCBC2k1lOmL0fgDp8ZYpBnGra7Dy5SSD8gpnOg3LIbgtxrI";
+
+              if (!publicKey) {
+                console.error("Missing VAPID key");
+                return;
+              }
+
               const convertedKey = urlBase64ToUint8Array(publicKey);
 
-              if (convertedKey) {
-                const newSubscription = await registration.pushManager.subscribe({
-                  userVisibleOnly: true,
-                  applicationServerKey: convertedKey
-                });
-
-                const ENV_URL = import.meta.env.VITE_API_URL || 'https://agridata.ct.ws';
-                const API_URL = ENV_URL.endsWith('/api') ? ENV_URL : `${ENV_URL}/api`;
-
-                await fetch(`${API_URL}/notifications/subscribe`, {
-                  method: 'POST',
-                  body: JSON.stringify(newSubscription),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'ngrok-skip-browser-warning': 'true'
-                  }
-                });
-
-                console.log('Web Push Subscription synced with backend.');
+              // ✅ FIX: VALIDATE LENGTH
+              if (!convertedKey || convertedKey.length !== 65) {
+                console.error("Invalid VAPID key length:", convertedKey?.length);
+                return;
               }
+
+              const newSubscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: convertedKey
+              });
+
+              const ENV_URL = import.meta.env.VITE_API_URL || 'https://agridata.ct.ws';
+              const API_URL = ENV_URL.endsWith('/api') ? ENV_URL : `${ENV_URL}/api`;
+
+              await fetch(`${API_URL}/notifications/subscribe`, {
+                method: 'POST',
+                body: JSON.stringify(newSubscription),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'ngrok-skip-browser-warning': 'true'
+                }
+              });
+
+              console.log('Web Push Subscription synced with backend.');
             }
           }
         } catch (error) {

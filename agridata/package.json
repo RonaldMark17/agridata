@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.2.0",
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.32",

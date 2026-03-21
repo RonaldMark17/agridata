@@ -51,13 +51,16 @@ export const AuthProvider = ({ children }) => {
           }
 
           // 2. Server-side Verification (Background Sync)
-          // Since we already set the User in the useState initializer, 
-          // the app stays logged in while this request happens.
-          const response = await authAPI.getCurrentUser();
-          
-          // Update with the latest data from the Database
-          setUser(response.data);
-          localStorage.setItem('user', JSON.stringify(response.data));
+          // OFFLINE FIX: Only attempt server verification if the device has internet
+          if (navigator.onLine) {
+            const response = await authAPI.getCurrentUser();
+            
+            // Update with the latest data from the Database
+            setUser(response.data);
+            localStorage.setItem('user', JSON.stringify(response.data));
+          } else {
+            console.log("App is offline. Using securely cached user session.");
+          }
           
         } catch (error) {
           console.error("Session verification failed:", error);
@@ -76,6 +79,11 @@ export const AuthProvider = ({ children }) => {
   }, [handleCleanup]);
 
   const login = async (credentials) => {
+    // OFFLINE FIX: Prevent crash if trying to log in without internet
+    if (!navigator.onLine) {
+        throw new Error("Internet connection is required to log in for the first time.");
+    }
+
     const response = await authAPI.login(credentials);
     
     if (response.data.otp_required) {
@@ -93,6 +101,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const verifyOtp = async (data) => {
+    if (!navigator.onLine) {
+        throw new Error("Internet connection required to verify OTP.");
+    }
+
     const response = await authAPI.verifyOtp(data);
     const { access_token, refresh_token, user: userData } = response.data;
 
@@ -106,8 +118,11 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      // Invalidate token on the server/blocklist
-      await authAPI.logout();
+      // OFFLINE FIX: Only tell the server to invalidate the token if we have internet.
+      // Otherwise, we just clear the local storage and log out locally.
+      if (navigator.onLine) {
+        await authAPI.logout();
+      }
     } catch (error) {
       console.warn("Server logout failed, clearing local storage only.");
     } finally {
